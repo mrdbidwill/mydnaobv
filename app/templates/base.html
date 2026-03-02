@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ title if title else "myDNAobv" }}</title>
+    <style>
+      :root {
+        --bg: #f6f2e7;
+        --ink: #1c1b16;
+        --muted: #5d5645;
+        --accent: #2b6e5a;
+        --accent-2: #d4a373;
+        --card: #fffaf0;
+        --border: #e4d8c6;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Source Serif 4", "Iowan Old Style", "Palatino", serif;
+        background: radial-gradient(circle at 10% 20%, #fffaf0, #f6f2e7 50%, #efe6d5 100%);
+        color: var(--ink);
+      }
+      header {
+        padding: 24px 20px 8px 20px;
+        border-bottom: 1px solid var(--border);
+        background: rgba(255, 250, 240, 0.8);
+        backdrop-filter: blur(4px);
+        position: sticky;
+        top: 0;
+      }
+      main {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 24px 20px 60px 20px;
+      }
+      .brand {
+        font-size: 22px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+      }
+      .subtitle {
+        color: var(--muted);
+        margin-top: 6px;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        padding: 18px;
+        border-radius: 12px;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.04);
+      }
+      .grid {
+        display: grid;
+        gap: 16px;
+      }
+      .btn {
+        display: inline-block;
+        border: none;
+        background: var(--accent);
+        color: #fff;
+        padding: 10px 16px;
+        border-radius: 8px;
+        text-decoration: none;
+        font-weight: 600;
+      }
+      .btn.secondary {
+        background: #f0e2cd;
+        color: var(--ink);
+      }
+      .input {
+        width: 100%;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        font-size: 16px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th, td {
+        text-align: left;
+        padding: 10px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: top;
+      }
+      th {
+        font-size: 14px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .muted { color: var(--muted); }
+      .empty {
+        padding: 20px;
+        border: 1px dashed var(--border);
+        border-radius: 10px;
+        background: #fff;
+      }
+      .row { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
+      @media (max-width: 720px) {
+        .row { grid-template-columns: 1fr; }
+        header { position: static; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="brand">myDNAobv</div>
+      <div class="subtitle">DNA-confirmed fungal observations for a specific place</div>
+    </header>
+    <main>
+      {% block content %}{% endblock %}
+    </main>
+  </body>
+</html>

@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="grid">
+    <div class="card">
+      {% if list %}
+        <h2>{{ list.title }}</h2>
+        {% if list.description %}
+          <p class="muted">{{ list.description }}</p>
+        {% endif %}
+        {% if sync_error %}
+          <p style="color: #b42318;">{{ sync_error }}</p>
+        {% endif %}
+        {% if error %}
+          <p style="color: #b42318;">{{ error }}</p>
+        {% endif %}
+        <div class="row">
+          <div>
+            <strong>iNaturalist user ID</strong>
+            <div class="muted">{{ list.inat_user_id }}</div>
+          </div>
+          <div>
+            <strong>Last sync</strong>
+            <div class="muted">{{ list.last_sync_at if list.last_sync_at else "Not synced yet" }}</div>
+          </div>
+        </div>
+        <div class="row" style="margin-top: 8px;">
+          <div>
+            <strong>DNA field ID</strong>
+            <div class="muted">{{ list.inat_dna_field_id if list.inat_dna_field_id else "Not set" }}</div>
+          </div>
+          <div>
+            <strong>Taxon filter</strong>
+            <div class="muted">{{ list.taxon_filter if list.taxon_filter else "None" }}</div>
+          </div>
+        </div>
+        <div style="margin-top: 16px;">
+          <a class="btn" href="/lists/{{ list.id }}?refresh=true">Refresh now</a>
+          <a class="btn secondary" href="/">Back to lists</a>
+        </div>
+      {% else %}
+        <h2>List not found</h2>
+        <p class="muted">Return to the main page and try again.</p>
+        <a class="btn" href="/">Back to lists</a>
+      {% endif %}
+    </div>
+
+    {% if observations and observations|length > 0 %}
+      <div class="card">
+        <h3>DNA-confirmed observations</h3>
+        <p class="muted">Showing up to {{ cache_ttl_hours }}-hour cached results. Sync is capped at {{ max_observations }} observations to respect iNaturalist resources. Use the taxon filter to narrow results if needed.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Species Guess</th>
+              <th>Scientific Name</th>
+              <th>Common Name</th>
+              <th>Link</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for obs in observations %}
+              <tr>
+                <td>{{ obs.user_name if obs.user_name else "" }}</td>
+                <td>{{ obs.species_guess if obs.species_guess else "" }}</td>
+                <td>{{ obs.scientific_name if obs.scientific_name else "" }}</td>
+                <td>{{ obs.common_name if obs.common_name else "" }}</td>
+                <td><a href="{{ obs.inat_url }}" target="_blank" rel="noreferrer">iNaturalist</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <div style="margin-top: 12px;">
+          {% if page > 1 %}
+            <a class="btn secondary" href="/lists/{{ list.id }}?page={{ page - 1 }}">Previous</a>
+          {% endif %}
+          {% if page < pages %}
+            <a class="btn secondary" href="/lists/{{ list.id }}?page={{ page + 1 }}">Next</a>
+          {% endif %}
+          <span class="muted" style="margin-left: 8px;">Page {{ page }} of {{ pages }}</span>
+        </div>
+      </div>
+    {% else %}
+      <div class="empty">
+        <strong>No observations cached yet.</strong>
+        <p class="muted">This will populate after the iNaturalist sync is implemented and run.</p>
+      </div>
+    {% endif %}
+
+    {% if list %}
+      <div class="card">
+        <h3>Edit list</h3>
+        <p class="muted"><strong>Naming tip:</strong> Use <em>County-State — Short Descriptor</em> for the title and a clear one-sentence description.</p>
+        <form method="post" action="/lists/{{ list.id }}/edit" class="grid">
+          <label>
+            List title
+            <input class="input" type="text" name="title" value="{{ list.title }}" required />
+          </label>
+          <label>
+            Description
+            <input class="input" type="text" name="description" value="{{ list.description if list.description else '' }}" />
+          </label>
+          <label>
+            iNaturalist user ID
+            <input class="input" type="text" name="inat_user_id" value="{{ list.inat_user_id }}" required />
+          </label>
+          <label>
+            iNaturalist username (optional)
+            <input class="input" type="text" name="inat_username" value="{{ list.inat_username if list.inat_username else '' }}" />
+          </label>
+          <label>
+            DNA field ID
+            <input class="input" type="text" name="dna_field_id" value="{{ list.inat_dna_field_id if list.inat_dna_field_id else '' }}" />
+          </label>
+          <label>
+            Taxon filter (genus, optional)
+            <input class="input" type="text" name="taxon_filter" value="{{ list.taxon_filter if list.taxon_filter else '' }}" />
+          </label>
+          <button class="btn" type="submit">Save changes</button>
+        </form>
+      </div>
+    {% endif %}
+  </div>
+{% endblock %}

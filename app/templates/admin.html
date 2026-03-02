@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="grid">
+    <div class="card">
+      <h2>Admin</h2>
+      <p class="muted">Manage lists and trigger syncs. Sync is capped at {{ max_observations }} observations to respect iNaturalist resources.</p>
+    </div>
+
+    <div class="card">
+      <h3>Saved lists</h3>
+      {% if lists and lists|length > 0 %}
+        <table>
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>User ID</th>
+              <th>DNA Field</th>
+              <th>Taxon</th>
+              <th>Last Sync</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for list in lists %}
+              <tr>
+                <td>
+                  <a href="/lists/{{ list.id }}">{{ list.title }}</a>
+                  {% if list.description %}
+                    <div class="muted">{{ list.description }}</div>
+                  {% endif %}
+                </td>
+                <td>{{ list.inat_user_id }}</td>
+                <td>{{ list.inat_dna_field_id if list.inat_dna_field_id else "" }}</td>
+                <td>{{ list.taxon_filter if list.taxon_filter else "" }}</td>
+                <td>{{ list.last_sync_at if list.last_sync_at else "Not synced" }}</td>
+                <td>
+                  <form method="post" action="/admin/lists/{{ list.id }}/sync" style="display:inline;">
+                    <button class="btn" type="submit">Sync</button>
+                  </form>
+                  <form method="post" action="/admin/lists/{{ list.id }}/delete" style="display:inline;" onsubmit="return confirm('Delete this list and all cached observations?');">
+                    <button class="btn secondary" type="submit">Delete</button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <div class="empty">
+          <strong>No lists found.</strong>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

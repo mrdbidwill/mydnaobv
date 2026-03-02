@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="grid">
+    <div class="card">
+      <h2>Create a saved list</h2>
+      <p class="muted">Store a shareable list tied to an iNaturalist user ID.</p>
+      <p class="muted"><strong>Naming tip:</strong> Use <em>County-State — Short Descriptor</em> for the title and a clear one-sentence description. Example: <em>Baldwin County-AL — DNA-confirmed fungi</em>.</p>
+      {% if error %}
+        <p style="color: #b42318;">{{ error }}</p>
+      {% endif %}
+      <form method="post" action="/lists/create" class="grid">
+        <label>
+          List title (save as)
+          <input class="input" type="text" name="title" placeholder="Museum DNA-confirmed mushrooms" required />
+        </label>
+        <label>
+          Description
+          <input class="input" type="text" name="description" placeholder="DNA-confirmed observations for the museum" />
+        </label>
+        <label>
+          iNaturalist user ID
+          <input class="input" type="text" name="inat_user_id" value="3924138" required />
+        </label>
+        <label>
+          iNaturalist username (optional)
+          <input class="input" type="text" name="inat_username" placeholder="optional" />
+        </label>
+        <label>
+          DNA field ID
+          <input class="input" type="text" name="dna_field_id" value="{{ dna_field_id }}" placeholder="Observation field ID" />
+        </label>
+        <label>
+          Taxon filter (genus, optional)
+          <input class="input" type="text" name="taxon_filter" placeholder="e.g., Russula" />
+        </label>
+        <button class="btn" type="submit">Save list</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Saved lists</h2>
+      {% if lists and lists|length > 0 %}
+        <table>
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>User ID</th>
+              <th>Last sync</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for list in lists %}
+              <tr>
+                <td>
+                  <a href="/lists/{{ list.id }}">{{ list.title }}</a>
+                  {% if list.description %}
+                    <div class="muted">{{ list.description }}</div>
+                  {% endif %}
+                </td>
+                <td>{{ list.inat_user_id }}</td>
+                <td>{{ list.last_sync_at if list.last_sync_at else "Not synced" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <div style="margin-top: 12px;">
+          {% if page > 1 %}
+            <a class="btn secondary" href="/?page={{ page - 1 }}">Previous</a>
+          {% endif %}
+          {% if page < pages %}
+            <a class="btn secondary" href="/?page={{ page + 1 }}">Next</a>
+          {% endif %}
+          <span class="muted" style="margin-left: 8px;">Page {{ page }} of {{ pages }}</span>
+        </div>
+      {% else %}
+        <div class="empty">
+          <strong>No lists saved yet.</strong>
+          <p class="muted">Create the first list using the form above.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
