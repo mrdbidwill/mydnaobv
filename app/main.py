@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from fastapi import FastAPI, Request, Form, Depends, Query, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.responses import RedirectResponse
@@ -21,6 +21,19 @@ security = HTTPBasic()
 
 PAGE_SIZE = 10
 OBS_PAGE_SIZE = 15
+
+
+def utc_now_naive() -> datetime:
+    # DB columns are timestamp without timezone; persist UTC clock time as naive.
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
+def as_utc(dt: datetime | None) -> datetime | None:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
 
 
 @app.get("/")
@@ -132,11 +145,8 @@ def list_page(
         )
 
     ttl = timedelta(hours=settings.cache_ttl_hours)
-    needs_sync = (
-        refresh
-        or not obs_list.last_sync_at
-        or (datetime.utcnow() - obs_list.last_sync_at) > ttl
-    )
+    last_sync_at_utc = as_utc(obs_list.last_sync_at)
+    needs_sync = refresh or not last_sync_at_utc or (datetime.now(UTC) - last_sync_at_utc) > ttl
 
     sync_error = None
     if needs_sync and obs_list.inat_dna_field_id:
@@ -171,7 +181,7 @@ def list_page(
                     list_id=obs_list.id,
                 )
                 db.add(record)
-            obs_list.last_sync_at = datetime.utcnow()
+            obs_list.last_sync_at = utc_now_naive()
             db.commit()
         except Exception as exc:
             db.rollback()

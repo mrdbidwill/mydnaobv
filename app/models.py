@@ -1,8 +1,12 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Optional
 from sqlalchemy import String, Integer, DateTime, ForeignKey, UniqueConstraint, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db import Base
+
+
+def utc_now_naive() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class ObservationList(Base):
@@ -15,7 +19,7 @@ class ObservationList(Base):
     inat_username: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     inat_dna_field_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     taxon_filter: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
     last_sync_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     observations: Mapped[list["Observation"]] = relationship(back_populates="list")
