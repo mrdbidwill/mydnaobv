@@ -26,7 +26,14 @@
         <div class="row" style="margin-top: 8px;">
           <div>
             <strong>DNA field ID</strong>
-            <div class="muted">{{ list.inat_dna_field_id if list.inat_dna_field_id else "Not set" }}</div>
+            <div class="muted">
+              {% if list.inat_dna_field_id %}
+                {{ list.inat_dna_field_id }} —
+                <a href="https://www.inaturalist.org/observation_fields/{{ list.inat_dna_field_id }}" target="_blank" rel="noreferrer">View field</a>
+              {% else %}
+                Not set
+              {% endif %}
+            </div>
           </div>
           <div>
             <strong>Taxon filter</strong>

@@ -30,7 +30,13 @@
                   {% endif %}
                 </td>
                 <td>{{ list.inat_user_id }}</td>
-                <td>{{ list.inat_dna_field_id if list.inat_dna_field_id else "" }}</td>
+                <td>
+                  {% if list.inat_dna_field_id %}
+                    <a href="https://www.inaturalist.org/observation_fields/{{ list.inat_dna_field_id }}" target="_blank" rel="noreferrer">
+                      {{ list.inat_dna_field_id }}
+                    </a>
+                  {% endif %}
+                </td>
                 <td>{{ list.taxon_filter if list.taxon_filter else "" }}</td>
                 <td>{{ list.last_sync_at if list.last_sync_at else "Not synced" }}</td>
                 <td>
