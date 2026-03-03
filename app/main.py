@@ -132,7 +132,11 @@ def list_page(
         )
 
     ttl = timedelta(hours=settings.cache_ttl_hours)
-    needs_sync = refresh or not obs_list.last_sync_at or (datetime.utcnow() - obs_list.last_sync_at) > ttl
+    needs_sync = (
+        refresh
+        or not obs_list.last_sync_at
+        or (datetime.utcnow() - obs_list.last_sync_at) > ttl
+    )
 
     sync_error = None
     if needs_sync and obs_list.inat_dna_field_id:

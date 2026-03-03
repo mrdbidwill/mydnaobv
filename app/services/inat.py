@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Iterable
+from typing import Iterable, Optional
 import httpx
 from app.core.config import settings
 from app import models
@@ -9,14 +9,14 @@ class InatObservation:
     def __init__(
         self,
         inat_id: int,
-        taxon_name: str | None,
-        species_guess: str | None,
-        scientific_name: str | None,
-        common_name: str | None,
-        user_name: str | None,
-        observed_at: datetime | None,
+        taxon_name: Optional[str],
+        species_guess: Optional[str],
+        scientific_name: Optional[str],
+        common_name: Optional[str],
+        user_name: Optional[str],
+        observed_at: Optional[datetime],
         inat_url: str,
-        dna_field_value: str | None,
+        dna_field_value: Optional[str],
     ):
         self.inat_id = inat_id
         self.taxon_name = taxon_name
@@ -29,7 +29,7 @@ class InatObservation:
         self.dna_field_value = dna_field_value
 
 
-def _extract_field_value(obs: dict, field_id: str) -> str | None:
+def _extract_field_value(obs: dict, field_id: str) -> Optional[str]:
     candidates = (
         obs.get("ofvs"),
         obs.get("observation_field_values"),
@@ -54,7 +54,7 @@ def _extract_field_value(obs: dict, field_id: str) -> str | None:
     return None
 
 
-def _parse_observed_at(obs: dict) -> datetime | None:
+def _parse_observed_at(obs: dict) -> Optional[datetime]:
     for key in ("time_observed_at", "observed_on", "observed_on_string"):
         raw = obs.get(key)
         if not raw:
@@ -66,7 +66,7 @@ def _parse_observed_at(obs: dict) -> datetime | None:
     return None
 
 
-def _fetch_observation_detail(client: httpx.Client, base: str, obs_id: int) -> dict | None:
+def _fetch_observation_detail(client: httpx.Client, base: str, obs_id: int) -> Optional[dict]:
     try:
         resp = client.get(f"{base}/observations/{obs_id}")
         resp.raise_for_status()
@@ -106,7 +106,9 @@ def fetch_observations_for_list(obs_list: models.ObservationList) -> Iterable[In
     max_items = max(1, settings.max_observations)
     found = 0
 
-    def matches_taxon(taxon_name: str | None, species_guess: str | None, scientific_name: str | None) -> bool:
+    def matches_taxon(
+        taxon_name: Optional[str], species_guess: Optional[str], scientific_name: Optional[str]
+    ) -> bool:
         if not obs_list.taxon_filter:
             return True
         needle = obs_list.taxon_filter.strip().lower()

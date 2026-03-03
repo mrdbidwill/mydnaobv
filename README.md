@@ -9,7 +9,7 @@ A lightweight, maintainable FastAPI app that displays iNaturalist observations f
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ```
 
 2. Configure environment:
@@ -28,6 +28,12 @@ alembic upgrade head
 
 ```bash
 uvicorn app.main:app --reload
+```
+
+5. Run tests:
+
+```bash
+pytest -q
 ```
 
 ## Development notes
