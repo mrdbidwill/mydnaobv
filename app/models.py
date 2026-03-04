@@ -23,7 +23,7 @@ class ObservationList(Base):
     last_sync_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     observations: Mapped[list["Observation"]] = relationship(back_populates="list")
-    export_jobs: Mapped[list["ExportJob"]] = relationship(back_populates="list")
+    export_jobs: Mapped[list["ExportJob"]] = relationship("ExportJob", back_populates="list")
 
 
 class Observation(Base):
@@ -49,7 +49,7 @@ class Observation(Base):
     list_id: Mapped[int] = mapped_column(ForeignKey("observation_lists.id"), index=True)
 
     list: Mapped[ObservationList] = relationship(back_populates="observations")
-    export_items: Mapped[list["ExportItem"]] = relationship(back_populates="observation")
+    export_items: Mapped[list["ExportItem"]] = relationship("ExportItem", back_populates="observation")
 
 
 class ExportJob(Base):
@@ -81,9 +81,9 @@ class ExportJob(Base):
     next_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
     last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
-    list: Mapped[ObservationList] = relationship(back_populates="export_jobs")
-    items: Mapped[list["ExportItem"]] = relationship(back_populates="job")
-    artifacts: Mapped[list["ExportArtifact"]] = relationship(back_populates="job")
+    list: Mapped[ObservationList] = relationship("ObservationList", back_populates="export_jobs")
+    items: Mapped[list["ExportItem"]] = relationship("ExportItem", back_populates="job")
+    artifacts: Mapped[list["ExportArtifact"]] = relationship("ExportArtifact", back_populates="job")
 
 
 class ExportItem(Base):
@@ -112,8 +112,8 @@ class ExportItem(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
 
-    job: Mapped[ExportJob] = relationship(back_populates="items")
-    observation: Mapped[Optional[Observation]] = relationship(back_populates="export_items")
+    job: Mapped[ExportJob] = relationship("ExportJob", back_populates="items")
+    observation: Mapped[Optional[Observation]] = relationship("Observation", back_populates="export_items")
 
 
 class ExportArtifact(Base):
@@ -127,4 +127,4 @@ class ExportArtifact(Base):
     size_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
 
-    job: Mapped[ExportJob] = relationship(back_populates="artifacts")
+    job: Mapped[ExportJob] = relationship("ExportJob", back_populates="artifacts")
