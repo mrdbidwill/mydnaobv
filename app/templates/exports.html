@@ -22,6 +22,7 @@
             <tr>
               <th>List</th>
               <th>Observation User</th>
+              <th>Place</th>
               <th>Last Sync</th>
               <th>Queue</th>
             </tr>
@@ -35,7 +36,12 @@
                     <div class="muted">{{ list.description }}</div>
                   {% endif %}
                 </td>
-                <td>{{ list.inat_user_id }}</td>
+                <td>
+                  {% if list.inat_user_id %}ID {{ list.inat_user_id }}{% endif %}
+                  {% if list.inat_user_id and list.inat_username %}<br>{% endif %}
+                  {% if list.inat_username %}{{ list.inat_username }}{% endif %}
+                </td>
+                <td>{{ list.place_query if list.place_query else "" }}</td>
                 <td>{{ list.last_sync_at if list.last_sync_at else "Not synced" }}</td>
                 <td>
                   <form method="post" action="/exports/lists/{{ list.id }}/queue">
@@ -46,7 +52,7 @@
               {% set jobs = jobs_by_list.get(list.id, []) %}
               {% if jobs and jobs|length > 0 %}
                 <tr>
-                  <td colspan="4">
+                  <td colspan="5">
                     <table>
                       <thead>
                         <tr>

@@ -1,6 +1,6 @@
 # myDNAobv
 
-A lightweight, maintainable FastAPI app that displays iNaturalist observations filtered by the “DNA Barcode ITS” observation field. The app stores named, shareable lists keyed by an iNaturalist **numeric user ID**.
+A lightweight, maintainable FastAPI app that displays iNaturalist observations filtered by the “DNA Barcode ITS” observation field. Lists can be keyed by iNaturalist numeric user ID, username, and optional county/address filter.
 
 ## Quick start
 
@@ -101,7 +101,9 @@ Suggested cron entries (KVM 1):
 
 ## Development notes
 
-- The iNaturalist sync logic in `app/services/inat.py` filters results using the observation field ID (default `18776`) and also sends the field name filter (default `DNA Barcode ITS`) to the API when possible.
+- The iNaturalist sync logic in `app/services/inat.py` supports either user ID or username, and verifies username/ID consistency when both are provided.
+- County/address filters are resolved through iNaturalist places lookup and applied as `place_id` to keep list sizes manageable.
+- The sync logic filters results using the observation field ID (default `18776`) and also sends the field name filter (default `DNA Barcode ITS`) to the API when possible.
 - iNaturalist sync now caches primary photo URL/license/attribution to support compliant offline exports.
 - Pages are server-rendered (Jinja2) for simplicity and durability.
 - The app uses PostgreSQL via SQLAlchemy 2.0.

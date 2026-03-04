@@ -6,8 +6,9 @@ from pydantic import BaseModel
 class ObservationListCreate(BaseModel):
     title: str
     description: Optional[str] = None
-    inat_user_id: int
+    inat_user_id: Optional[int] = None
     inat_username: Optional[str] = None
+    place_query: Optional[str] = None
     inat_dna_field_id: Optional[str] = None
 
 

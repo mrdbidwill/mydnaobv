@@ -15,8 +15,13 @@
         {% endif %}
         <div class="row">
           <div>
-            <strong>iNaturalist user ID</strong>
-            <div class="muted">{{ list.inat_user_id }}</div>
+            <strong>iNaturalist user filter</strong>
+            <div class="muted">
+              {% if list.inat_user_id %}ID {{ list.inat_user_id }}{% endif %}
+              {% if list.inat_user_id and list.inat_username %}<br>{% endif %}
+              {% if list.inat_username %}{{ list.inat_username }}{% endif %}
+              {% if not list.inat_user_id and not list.inat_username %}Not set{% endif %}
+            </div>
           </div>
           <div>
             <strong>Last sync</strong>
@@ -38,6 +43,10 @@
           <div>
             <strong>Taxon filter</strong>
             <div class="muted">{{ list.taxon_filter if list.taxon_filter else "None" }}</div>
+          </div>
+          <div>
+            <strong>County/address filter</strong>
+            <div class="muted">{{ list.place_query if list.place_query else "None" }}</div>
           </div>
         </div>
         <div style="margin-top: 16px;">
@@ -101,6 +110,7 @@
       <div class="card">
         <h3>Edit list</h3>
         <p class="muted"><strong>Naming tip:</strong> Use <em>County-State — Short Descriptor</em> for the title and a clear one-sentence description.</p>
+        <p class="muted"><strong>Download rule:</strong> Only photos with reusable iNaturalist licenses (CC0, CC BY, CC BY-SA, CC BY-NC, CC BY-NC-SA) can be included in downloadable PDFs. Photos marked <em>all rights reserved</em> are excluded.</p>
         <form method="post" action="/lists/{{ list.id }}/edit" class="grid">
           <label>
             List title
@@ -111,12 +121,16 @@
             <input class="input" type="text" name="description" value="{{ list.description if list.description else '' }}" />
           </label>
           <label>
-            iNaturalist user ID
-            <input class="input" type="text" name="inat_user_id" value="{{ list.inat_user_id }}" required />
+            iNaturalist user ID (optional)
+            <input class="input" type="text" name="inat_user_id" value="{{ list.inat_user_id if list.inat_user_id else '' }}" />
           </label>
           <label>
             iNaturalist username (optional)
-            <input class="input" type="text" name="inat_username" value="{{ list.inat_username if list.inat_username else '' }}" />
+            <input class="input" type="text" name="inat_username" value="{{ list.inat_username if list.inat_username else '' }}" placeholder="e.g., cabracrazy" />
+          </label>
+          <label>
+            County/address filter (optional)
+            <input class="input" type="text" name="place_query" value="{{ list.place_query if list.place_query else '' }}" placeholder="e.g., Baldwin County, Alabama" />
           </label>
           <label>
             DNA field ID

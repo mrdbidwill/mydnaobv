@@ -3,8 +3,9 @@
   <div class="grid">
     <div class="card">
       <h2>Create a saved list</h2>
-      <p class="muted">Store a shareable list tied to an iNaturalist user ID.</p>
+      <p class="muted">Store a shareable list tied to an iNaturalist user ID or iNaturalist username.</p>
       <p class="muted"><strong>Naming tip:</strong> Use <em>County-State — Short Descriptor</em> for the title and a clear one-sentence description. Example: <em>Baldwin County-AL — DNA-confirmed fungi</em>.</p>
+      <p class="muted"><strong>Download rule:</strong> Only photos with reusable iNaturalist licenses (CC0, CC BY, CC BY-SA, CC BY-NC, CC BY-NC-SA) can be included in downloadable PDFs. Photos marked <em>all rights reserved</em> are excluded.</p>
       {% if error %}
         <p style="color: #b42318;">{{ error }}</p>
       {% endif %}
@@ -18,12 +19,16 @@
           <input class="input" type="text" name="description" placeholder="What is this list about?" />
         </label>
         <label>
-          iNaturalist user ID
-          <input class="input" type="text" name="inat_user_id" value="3924138" required />
+          iNaturalist user ID (optional)
+          <input class="input" type="text" name="inat_user_id" value="3924138" />
         </label>
         <label>
           iNaturalist username (optional)
-          <input class="input" type="text" name="inat_username" placeholder="optional" />
+          <input class="input" type="text" name="inat_username" placeholder="e.g., cabracrazy" />
+        </label>
+        <label>
+          County/address filter (optional)
+          <input class="input" type="text" name="place_query" placeholder="e.g., Baldwin County, Alabama" />
         </label>
         <label>
           DNA field ID
@@ -45,7 +50,7 @@
           <thead>
             <tr>
               <th>Title</th>
-              <th>User ID</th>
+              <th>User Filter</th>
               <th>Last sync</th>
             </tr>
           </thead>
@@ -57,8 +62,15 @@
                   {% if list.description %}
                     <div class="muted">{{ list.description }}</div>
                   {% endif %}
+                  {% if list.place_query %}
+                    <div class="muted">Place: {{ list.place_query }}</div>
+                  {% endif %}
                 </td>
-                <td>{{ list.inat_user_id }}</td>
+                <td>
+                  {% if list.inat_user_id %}ID {{ list.inat_user_id }}{% endif %}
+                  {% if list.inat_user_id and list.inat_username %}<br>{% endif %}
+                  {% if list.inat_username %}{{ list.inat_username }}{% endif %}
+                </td>
                 <td>{{ list.last_sync_at if list.last_sync_at else "Not synced" }}</td>
               </tr>
             {% endfor %}

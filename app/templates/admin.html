@@ -14,7 +14,8 @@
           <thead>
             <tr>
               <th>Title</th>
-              <th>User ID</th>
+              <th>User Filter</th>
+              <th>Place</th>
               <th>DNA Field</th>
               <th>Taxon</th>
               <th>Last Sync</th>
@@ -30,7 +31,12 @@
                     <div class="muted">{{ list.description }}</div>
                   {% endif %}
                 </td>
-                <td>{{ list.inat_user_id }}</td>
+                <td>
+                  {% if list.inat_user_id %}ID {{ list.inat_user_id }}{% endif %}
+                  {% if list.inat_user_id and list.inat_username %}<br>{% endif %}
+                  {% if list.inat_username %}{{ list.inat_username }}{% endif %}
+                </td>
+                <td>{{ list.place_query if list.place_query else "" }}</td>
                 <td>
                   {% if list.inat_dna_field_id %}
                     <a href="https://www.inaturalist.org/observation_fields/{{ list.inat_dna_field_id }}" target="_blank" rel="noreferrer">

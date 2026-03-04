@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Iterable, Optional
+from typing import Any, Iterable, Optional
 import httpx
 from app.core.config import settings
 from app import models
@@ -112,12 +112,99 @@ def _extract_primary_photo(obs: dict) -> tuple[Optional[str], Optional[str], Opt
     )
 
 
+def _fetch_user_detail_by_id(client: httpx.Client, base: str, user_id: int) -> Optional[dict]:
+    try:
+        resp = client.get(f"{base}/users/{user_id}")
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception:
+        return None
+    results = data.get("results") or []
+    if results and isinstance(results[0], dict):
+        return results[0]
+    return None
+
+
+def _find_user_by_login(client: httpx.Client, base: str, login: str) -> Optional[dict]:
+    normalized = (login or "").strip().lower()
+    if not normalized:
+        return None
+
+    try:
+        resp = client.get(f"{base}/users/autocomplete", params={"q": login, "per_page": 30})
+        resp.raise_for_status()
+        data = resp.json()
+        for row in data.get("results") or []:
+            if not isinstance(row, dict):
+                continue
+            candidate = str(row.get("login") or "").strip().lower()
+            if candidate == normalized:
+                return row
+    except Exception:
+        pass
+
+    try:
+        resp = client.get(f"{base}/users/{login}")
+        resp.raise_for_status()
+        data = resp.json()
+        results = data.get("results") or []
+        if results and isinstance(results[0], dict):
+            row = results[0]
+            candidate = str(row.get("login") or "").strip().lower()
+            if candidate == normalized:
+                return row
+    except Exception:
+        return None
+
+    return None
+
+
+def _resolve_place_id(client: httpx.Client, base: str, query: str) -> tuple[Optional[int], Optional[str]]:
+    place_query = (query or "").strip()
+    if not place_query:
+        return None, None
+
+    try:
+        resp = client.get(f"{base}/places/autocomplete", params={"q": place_query, "per_page": 20})
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception:
+        return None, None
+
+    query_tokens = [token.strip().lower() for token in place_query.replace(",", " ").split() if token.strip()]
+    best_score = -1
+    best_row: Optional[dict[str, Any]] = None
+
+    for row in data.get("results") or []:
+        if not isinstance(row, dict):
+            continue
+        label = str(row.get("display_name") or row.get("name") or "").strip()
+        if not label:
+            continue
+        label_lower = label.lower()
+        score = sum(1 for token in query_tokens if token in label_lower)
+        if "county" in query_tokens and "county" in label_lower:
+            score += 2
+        if score > best_score:
+            best_score = score
+            best_row = row
+
+    if not best_row:
+        return None, None
+
+    place_id = best_row.get("id")
+    if place_id is None:
+        return None, None
+    return int(place_id), str(best_row.get("display_name") or best_row.get("name") or "")
+
+
 def fetch_observations_for_list(obs_list: models.ObservationList) -> Iterable[InatObservation]:
     """
     Placeholder for iNaturalist API integration.
 
     Intended filters:
-    - user_id (numeric)
+    - user_id or user login
+    - county/address (resolved to place_id)
     - observation field: DNA Barcode ITS
     - taxon: Fungi (default: 47170)
 
@@ -152,20 +239,86 @@ def fetch_observations_for_list(obs_list: models.ObservationList) -> Iterable[In
         return False
 
     with httpx.Client(timeout=timeout, headers=headers) as client:
+        normalized_username = (obs_list.inat_username or "").strip()
+        resolved_user_id: Optional[int] = obs_list.inat_user_id
+
+        if resolved_user_id is None and not normalized_username:
+            raise ValueError("Provide an iNaturalist user ID or username.")
+
+        if resolved_user_id is not None:
+            detail = _fetch_user_detail_by_id(client, base, int(resolved_user_id))
+            if detail:
+                canonical_login = str(detail.get("login") or "").strip()
+                canonical_id = detail.get("id")
+                if canonical_id is not None:
+                    resolved_user_id = int(canonical_id)
+                    obs_list.inat_user_id = resolved_user_id
+                if canonical_login:
+                    if normalized_username and canonical_login.lower() != normalized_username.lower():
+                        raise ValueError(
+                            "Provided iNaturalist user ID and username do not match iNaturalist records."
+                        )
+                    obs_list.inat_username = canonical_login
+                    normalized_username = canonical_login
+            elif normalized_username:
+                # If ID lookup is unavailable, still validate username against iNaturalist.
+                user_row = _find_user_by_login(client, base, normalized_username)
+                if not user_row:
+                    raise ValueError("Could not verify iNaturalist username.")
+                row_id = user_row.get("id")
+                row_login = str(user_row.get("login") or "").strip()
+                if row_id is not None and int(row_id) != int(resolved_user_id):
+                    raise ValueError(
+                        "Provided iNaturalist user ID and username do not match iNaturalist records."
+                    )
+                if row_login:
+                    obs_list.inat_username = row_login
+                    normalized_username = row_login
+        else:
+            user_row = _find_user_by_login(client, base, normalized_username)
+            if not user_row:
+                raise ValueError("Could not find iNaturalist username.")
+            row_id = user_row.get("id")
+            row_login = str(user_row.get("login") or "").strip()
+            if row_id is not None:
+                resolved_user_id = int(row_id)
+                obs_list.inat_user_id = resolved_user_id
+            if row_login:
+                obs_list.inat_username = row_login
+                normalized_username = row_login
+
+        resolved_place_id: Optional[int] = obs_list.inat_place_id
+        place_query = (obs_list.place_query or "").strip()
+        if place_query:
+            place_id, place_name = _resolve_place_id(client, base, place_query)
+            if place_id is None:
+                raise ValueError(
+                    "Could not resolve county/address filter. Try a clearer place such as 'Baldwin County, Alabama'."
+                )
+            resolved_place_id = int(place_id)
+            obs_list.inat_place_id = resolved_place_id
+            if place_name:
+                obs_list.place_query = place_query
+
         while page <= max_pages:
             params = {
-                "user_id": obs_list.inat_user_id,
                 "taxon_id": settings.inat_taxon_id,
                 "per_page": per_page,
                 "page": page,
                 "order_by": "observed_on",
                 "order": "desc",
             }
+            if resolved_user_id is not None:
+                params["user_id"] = resolved_user_id
+            elif normalized_username:
+                params["user_login"] = normalized_username
             if settings.inat_dna_field_name:
                 # iNaturalist search URL syntax supports field filters.
                 params[f"field:{settings.inat_dna_field_name}"] = ""
             if obs_list.taxon_filter:
                 params["taxon_name"] = obs_list.taxon_filter.strip()
+            if resolved_place_id is not None:
+                params["place_id"] = resolved_place_id
 
             response = client.get(url, params=params)
             response.raise_for_status()

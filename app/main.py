@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from typing import Optional
 from fastapi import FastAPI, Request, Form, Depends, Query, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.responses import FileResponse, RedirectResponse
@@ -42,6 +43,28 @@ def as_utc(dt: datetime | None) -> datetime | None:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=UTC)
     return dt.astimezone(UTC)
+
+
+def parse_user_filters(inat_user_id_raw: str, inat_username_raw: str) -> tuple[Optional[int], Optional[str], Optional[str]]:
+    user_id_text = (inat_user_id_raw or "").strip()
+    username = (inat_username_raw or "").strip() or None
+    user_id_int: Optional[int] = None
+
+    if user_id_text:
+        try:
+            user_id_int = int(user_id_text)
+            if user_id_int <= 0:
+                raise ValueError
+        except ValueError:
+            return None, None, "Please provide a valid numeric iNaturalist user ID."
+
+    if username and " " in username:
+        return None, None, "iNaturalist username cannot contain spaces."
+
+    if user_id_int is None and not username:
+        return None, None, "Provide either an iNaturalist user ID or iNaturalist username."
+
+    return user_id_int, username, None
 
 
 def require_admin(credentials: HTTPBasicCredentials = Depends(security)):
@@ -113,10 +136,11 @@ def create_list(
     request: Request,
     title: str = Form(...),
     description: str = Form(default=""),
-    inat_user_id: str = Form(...),
+    inat_user_id: str = Form(default=""),
     inat_username: str = Form(default=""),
     dna_field_id: str = Form(default=""),
     taxon_filter: str = Form(default=""),
+    place_query: str = Form(default=""),
     db: Session = Depends(get_db),
 ):
     title = title.strip()
@@ -135,17 +159,14 @@ def create_list(
             status_code=400,
         )
 
-    try:
-        user_id_int = int(inat_user_id)
-        if user_id_int <= 0:
-            raise ValueError
-    except ValueError:
+    user_id_int, username, user_error = parse_user_filters(inat_user_id, inat_username)
+    if user_error:
         return templates.TemplateResponse(
             "index.html",
             {
                 "request": request,
                 "app_name": settings.app_name,
-                "error": "Please provide a valid numeric iNaturalist user ID.",
+                "error": user_error,
                 "lists": [],
                 "page": 1,
                 "pages": 1,
@@ -158,7 +179,9 @@ def create_list(
         title=title,
         description=description.strip() or None,
         inat_user_id=user_id_int,
-        inat_username=inat_username.strip() or None,
+        inat_username=username,
+        inat_place_id=None,
+        place_query=place_query.strip() or None,
         inat_dna_field_id=dna_field_id.strip() or settings.inat_dna_field_id,
         taxon_filter=taxon_filter.strip() or None,
     )
@@ -470,10 +493,11 @@ def edit_list(
     list_id: int,
     title: str = Form(...),
     description: str = Form(default=""),
-    inat_user_id: str = Form(...),
+    inat_user_id: str = Form(default=""),
     inat_username: str = Form(default=""),
     dna_field_id: str = Form(default=""),
     taxon_filter: str = Form(default=""),
+    place_query: str = Form(default=""),
     db: Session = Depends(get_db),
 ):
     obs_list = db.query(models.ObservationList).filter_by(id=list_id).first()
@@ -502,18 +526,15 @@ def edit_list(
             status_code=400,
         )
 
-    try:
-        user_id_int = int(inat_user_id)
-        if user_id_int <= 0:
-            raise ValueError
-    except ValueError:
+    user_id_int, username, user_error = parse_user_filters(inat_user_id, inat_username)
+    if user_error:
         return templates.TemplateResponse(
             "list.html",
             {
                 "request": request,
                 "list": obs_list,
                 "observations": [],
-                "error": "Please provide a valid numeric iNaturalist user ID.",
+                "error": user_error,
             },
             status_code=400,
         )
@@ -521,7 +542,11 @@ def edit_list(
     obs_list.title = title
     obs_list.description = description.strip() or None
     obs_list.inat_user_id = user_id_int
-    obs_list.inat_username = inat_username.strip() or None
+    obs_list.inat_username = username
+    new_place_query = place_query.strip() or None
+    if obs_list.place_query != new_place_query:
+        obs_list.inat_place_id = None
+    obs_list.place_query = new_place_query
     obs_list.inat_dna_field_id = dna_field_id.strip() or settings.inat_dna_field_id
     obs_list.taxon_filter = taxon_filter.strip() or None
     db.commit()
