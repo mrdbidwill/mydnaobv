@@ -17,6 +17,9 @@ class InatObservation:
         observed_at: Optional[datetime],
         inat_url: str,
         dna_field_value: Optional[str],
+        photo_url: Optional[str],
+        photo_license_code: Optional[str],
+        photo_attribution: Optional[str],
     ):
         self.inat_id = inat_id
         self.taxon_name = taxon_name
@@ -27,6 +30,9 @@ class InatObservation:
         self.observed_at = observed_at
         self.inat_url = inat_url
         self.dna_field_value = dna_field_value
+        self.photo_url = photo_url
+        self.photo_license_code = photo_license_code
+        self.photo_attribution = photo_attribution
 
 
 def _extract_field_value(obs: dict, field_id: str) -> Optional[str]:
@@ -78,6 +84,32 @@ def _fetch_observation_detail(client: httpx.Client, base: str, obs_id: int) -> O
     if results and isinstance(results[0], dict):
         return results[0]
     return None
+
+
+def _extract_primary_photo(obs: dict) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    photos = obs.get("photos")
+    if not isinstance(photos, list) or not photos:
+        return None, None, None
+    photo = photos[0]
+    if not isinstance(photo, dict):
+        return None, None, None
+
+    url = (
+        photo.get("large_url")
+        or photo.get("medium_url")
+        or photo.get("url")
+        or (photo.get("sizes") or {}).get("large")
+        or (photo.get("sizes") or {}).get("medium")
+    )
+    if isinstance(url, str):
+        url = url.replace("square.", "large.")
+    license_code = photo.get("license_code")
+    attribution = photo.get("attribution")
+    return (
+        str(url) if url else None,
+        str(license_code) if license_code else None,
+        str(attribution) if attribution else None,
+    )
 
 
 def fetch_observations_for_list(obs_list: models.ObservationList) -> Iterable[InatObservation]:
@@ -167,6 +199,11 @@ def fetch_observations_for_list(obs_list: models.ObservationList) -> Iterable[In
                 user_name = user.get("name") or user.get("login")
                 inat_url = obs.get("uri") or obs.get("url") or f"https://www.inaturalist.org/observations/{inat_id}"
                 observed_at = _parse_observed_at(obs)
+                photo_url, photo_license_code, photo_attribution = _extract_primary_photo(obs)
+                if photo_url is None:
+                    detail = _fetch_observation_detail(client, base, int(inat_id))
+                    if detail:
+                        photo_url, photo_license_code, photo_attribution = _extract_primary_photo(detail)
 
                 if not matches_taxon(taxon_name, species_guess, scientific_name):
                     continue
@@ -181,6 +218,9 @@ def fetch_observations_for_list(obs_list: models.ObservationList) -> Iterable[In
                     observed_at=observed_at,
                     inat_url=inat_url,
                     dna_field_value=field_value,
+                    photo_url=photo_url,
+                    photo_license_code=photo_license_code,
+                    photo_attribution=photo_attribution,
                 )
                 found += 1
                 if found >= max_items:

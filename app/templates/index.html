@@ -11,11 +11,11 @@
       <form method="post" action="/lists/create" class="grid">
         <label>
           List title (save as)
-          <input class="input" type="text" name="title" placeholder="Museum DNA-confirmed mushrooms" required />
+          <input class="input" type="text" name="title" placeholder="County-State-NameIt" required />
         </label>
         <label>
           Description
-          <input class="input" type="text" name="description" placeholder="DNA-confirmed observations for the museum" />
+          <input class="input" type="text" name="description" placeholder="What is this list about?" />
         </label>
         <label>
           iNaturalist user ID
@@ -35,6 +35,7 @@
         </label>
         <button class="btn" type="submit">Save list</button>
       </form>
+      <p class="muted" style="margin-top: 10px;">Authorized staff can open the <a href="/exports">Export Center</a> for queued offline PDF jobs.</p>
     </div>
 
     <div class="card">

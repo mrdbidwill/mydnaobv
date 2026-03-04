@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="grid">
+    <div class="card">
+      <h2>Export Center</h2>
+      <p class="muted">Queue and download offline PDF exports. This page is restricted to authorized users.</p>
+      <p class="muted">Jobs run in background batches from smallest to largest to protect VPS resources and iNaturalist limits.</p>
+      <div style="margin-top: 12px;">
+        <a class="btn secondary" href="/">Back to lists</a>
+        <a class="btn secondary" href="/admin">Admin</a>
+      </div>
+      {% if error %}
+        <p style="color: #b42318; margin-top: 10px;">{{ error }}</p>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <h3>Lists available for export</h3>
+      {% if lists and lists|length > 0 %}
+        <table>
+          <thead>
+            <tr>
+              <th>List</th>
+              <th>Observation User</th>
+              <th>Last Sync</th>
+              <th>Queue</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for list in lists %}
+              <tr>
+                <td>
+                  <a href="/lists/{{ list.id }}">{{ list.title }}</a>
+                  {% if list.description %}
+                    <div class="muted">{{ list.description }}</div>
+                  {% endif %}
+                </td>
+                <td>{{ list.inat_user_id }}</td>
+                <td>{{ list.last_sync_at if list.last_sync_at else "Not synced" }}</td>
+                <td>
+                  <form method="post" action="/exports/lists/{{ list.id }}/queue">
+                    <button class="btn" type="submit">Queue export</button>
+                  </form>
+                </td>
+              </tr>
+              {% set jobs = jobs_by_list.get(list.id, []) %}
+              {% if jobs and jobs|length > 0 %}
+                <tr>
+                  <td colspan="4">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Job</th>
+                          <th>Status</th>
+                          <th>Bucket</th>
+                          <th>Progress</th>
+                          <th>Downloads</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for job in jobs %}
+                          <tr>
+                            <td>#{{ job.id }}<br><span class="muted">{{ job.created_at }}</span></td>
+                            <td>{{ job.status }}<br><span class="muted">{{ job.phase }}</span></td>
+                            <td>{{ job.size_bucket if job.size_bucket else "pending" }}</td>
+                            <td>{{ job.rendered_items }} rendered / {{ job.total_items }} total</td>
+                            <td>{{ (job.bytes_downloaded / 1024 / 1024) | round(1) }} MB</td>
+                          </tr>
+                          {% set artifacts = artifacts_by_job.get(job.id, []) %}
+                          {% if artifacts and artifacts|length > 0 %}
+                            <tr>
+                              <td colspan="5">
+                                {% for artifact in artifacts %}
+                                  <a class="btn secondary" href="/exports/jobs/{{ job.id }}/artifacts/{{ artifact.id }}/download" style="margin-right: 8px; margin-bottom: 8px;">
+                                    Download {{ artifact.kind }}{% if artifact.part_number %} {{ artifact.part_number }}{% endif %}
+                                  </a>
+                                {% endfor %}
+                              </td>
+                            </tr>
+                          {% endif %}
+                          {% if job.message %}
+                            <tr>
+                              <td colspan="5"><span class="muted">{{ job.message }}</span></td>
+                            </tr>
+                          {% endif %}
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                  </td>
+                </tr>
+              {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
+
+        <div style="margin-top: 12px;">
+          {% if page > 1 %}
+            <a class="btn secondary" href="/exports?page={{ page - 1 }}">Previous</a>
+          {% endif %}
+          {% if page < pages %}
+            <a class="btn secondary" href="/exports?page={{ page + 1 }}">Next</a>
+          {% endif %}
+          <span class="muted" style="margin-left: 8px;">Page {{ page }} of {{ pages }}</span>
+        </div>
+      {% else %}
+        <div class="empty">
+          <strong>No lists available.</strong>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

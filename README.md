@@ -36,9 +36,73 @@ uvicorn app.main:app --reload
 pytest -q
 ```
 
+## Queued PDF exports (KVM 1 profile)
+
+This project now supports a modular, queue-based PDF export pipeline for offline use.
+
+- Exports never run inline with the web request.
+- A worker processes one job at a time in short slices (`--once`).
+- Jobs are prioritized smallest to largest (`XS`, `S`, `M`, `L`).
+- Large jobs are limited to an overnight window.
+- If merge pressure is high, output degrades gracefully to split PDFs + ZIP.
+- Public list creation and browsing remain unchanged.
+- Heavy export controls live on a separate authenticated page: `/exports`.
+- Export access supports:
+  - `EXPORT_OPERATORS_JSON` (preferred, multiple operator accounts), or
+  - `EXPORT_USERNAME` / `EXPORT_PASSWORD` (single account), or
+  - admin credentials fallback if neither is configured.
+
+Example multi-operator config:
+
+```env
+EXPORT_OPERATORS_JSON=[{"username":"ams_alice","password":"strong-pass-1"},{"username":"ams_bob","password":"strong-pass-2"}]
+```
+
+### Rights and license policy
+
+- By default, only these photo licenses are exportable: `cc0`, `cc-by`, `cc-by-sa`, `cc-by-nc`, `cc-by-nc-sa`.
+- Missing or restricted licenses are skipped unless explicitly allowed by configuration.
+- Attribution and source link are printed on each PDF page.
+
+### Required migration
+
+Run migrations before using exports:
+
+```bash
+alembic upgrade head
+```
+
+### Worker and cron
+
+Enable exports in `.env`:
+
+```bash
+ENABLE_PDF_EXPORTS=true
+```
+
+Run once manually:
+
+```bash
+python3 -m app.exports.worker --once
+```
+
+Cleanup expired artifacts:
+
+```bash
+python3 -m app.exports.worker --cleanup
+```
+
+Suggested cron entries (KVM 1):
+
+```cron
+*/5 * * * * flock -n /var/lock/mydnaobv_export.lock timeout 45s nice -n 15 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
+17 3 * * * /usr/bin/python3 -m app.exports.worker --cleanup
+```
+
 ## Development notes
 
 - The iNaturalist sync logic in `app/services/inat.py` filters results using the observation field ID (default `18776`) and also sends the field name filter (default `DNA Barcode ITS`) to the API when possible.
+- iNaturalist sync now caches primary photo URL/license/attribution to support compliant offline exports.
 - Pages are server-rendered (Jinja2) for simplicity and durability.
 - The app uses PostgreSQL via SQLAlchemy 2.0.
 - The homepage includes pagination for saved lists.
