@@ -41,6 +41,9 @@
         <button class="btn" type="submit">Save list</button>
       </form>
       <p class="muted" style="margin-top: 10px;">Authorized staff can open the <a href="/exports">Export Center</a> for queued offline PDF jobs.</p>
+      {% if public_downloads_enabled %}
+        <p class="muted">Members can use the public <a href="/downloads">Downloads page</a> for latest finished files.</p>
+      {% endif %}
     </div>
 
     <div class="card">

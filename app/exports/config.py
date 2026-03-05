@@ -33,6 +33,10 @@ class ExportConfig:
     zip_only_part_threshold: int
     allowed_licenses_csv: str
     allow_unlicensed: bool
+    publish_enabled: bool
+    publish_dir: str | None
+    publish_base_url: str | None
+    public_downloads_enabled: bool
 
     def classify_bucket(self, item_count: int) -> str:
         if item_count <= self.xs_max_items:
@@ -108,6 +112,10 @@ export_config = ExportConfig(
     zip_only_part_threshold=settings.export_zip_only_part_threshold,
     allowed_licenses_csv=settings.export_allowed_licenses,
     allow_unlicensed=settings.export_allow_unlicensed,
+    publish_enabled=settings.export_publish_enabled,
+    publish_dir=settings.export_publish_dir,
+    publish_base_url=settings.export_publish_base_url,
+    public_downloads_enabled=settings.export_public_downloads_enabled,
 )
 
 

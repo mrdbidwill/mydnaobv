@@ -47,6 +47,7 @@ This project now supports a modular, queue-based PDF export pipeline for offline
 - If merge pressure is high, output degrades gracefully to split PDFs + ZIP.
 - Public list creation and browsing remain unchanged.
 - Heavy export controls live on a separate authenticated page: `/exports`.
+- Optional publish mode copies finished files to external/static storage and exposes a public member page: `/downloads`.
 - Optional mode: include multiple photos per observation with conservative KVM1 caps.
 - Export access supports:
   - `EXPORT_OPERATORS_JSON` (preferred, multiple operator accounts), or
@@ -66,6 +67,15 @@ EXPORT_INCLUDE_ALL_PHOTOS=true
 EXPORT_MAX_PHOTOS_PER_OBSERVATION=3
 EXPORT_DOWNLOAD_CHUNK_SIZE=4
 EXPORT_PART_SIZE=60
+```
+
+Example published member downloads mode:
+
+```env
+EXPORT_PUBLISH_ENABLED=true
+EXPORT_PUBLISH_DIR=/var/www/mydnaobv-downloads
+EXPORT_PUBLISH_BASE_URL=https://downloads.example.org/mydnaobv
+EXPORT_PUBLIC_DOWNLOADS_ENABLED=true
 ```
 
 ### Rights and license policy
@@ -116,6 +126,9 @@ Suggested cron entries (KVM 1):
 - The sync logic filters results using the observation field ID (default `18776`) and also sends the field name filter (default `DNA Barcode ITS`) to the API when possible.
 - All photo metadata for each synced observation is cached in `observation_photos`; export mode can use primary photo only or multiple photos.
 - iNaturalist sync now caches primary photo URL/license/attribution to support compliant offline exports.
+- Published downloads are written to `EXPORT_PUBLISH_DIR` as:
+  - `list_<list_id>/latest/<file>`
+  - `list_<list_id>/job_<job_id>/<file>`
 - Pages are server-rendered (Jinja2) for simplicity and durability.
 - The app uses PostgreSQL via SQLAlchemy 2.0.
 - The homepage includes pagination for saved lists.

@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="grid">
+    <div class="card">
+      <h2>Member Downloads</h2>
+      <p class="muted">Latest finished exports are published here for one-click download.</p>
+      <p class="muted">Only images with reusable iNaturalist licenses are included.</p>
+      <a class="btn secondary" href="/">Back to lists</a>
+    </div>
+
+    <div class="card">
+      <h3>Available exports</h3>
+      {% set ns = namespace(has_any=false) %}
+      {% for list in lists %}
+        {% set latest_job = latest_job_by_list.get(list.id) %}
+        {% if latest_job %}
+          {% set ns.has_any = true %}
+          <div style="padding: 12px 0; border-bottom: 1px solid var(--border);">
+            <strong>{{ list.title }}</strong>
+            {% if list.description %}
+              <div class="muted">{{ list.description }}</div>
+            {% endif %}
+            <div class="muted" style="margin-top: 4px;">
+              Latest export job #{{ latest_job.id }}{% if latest_job.finished_at %} ({{ latest_job.finished_at }}){% endif %}
+            </div>
+            <div style="margin-top: 8px;">
+              {% for artifact in artifacts_by_list.get(list.id, []) %}
+                {% if published_latest_urls.get(artifact.id) %}
+                  <a class="btn secondary" href="{{ published_latest_urls.get(artifact.id) }}" target="_blank" rel="noreferrer" style="margin-right: 8px; margin-bottom: 8px;">
+                    Download {{ artifact.kind }}{% if artifact.part_number %} {{ artifact.part_number }}{% endif %}
+                  </a>
+                {% endif %}
+              {% endfor %}
+            </div>
+          </div>
+        {% endif %}
+      {% endfor %}
+      {% if not ns.has_any %}
+        <div class="empty">
+          <strong>No published downloads yet.</strong>
+          <p class="muted">Exports will appear after a queued job finishes and publishes.</p>
+        </div>
+      {% endif %}
+
+      <div style="margin-top: 12px;">
+        {% if page > 1 %}
+          <a class="btn secondary" href="/downloads?page={{ page - 1 }}">Previous</a>
+        {% endif %}
+        {% if page < pages %}
+          <a class="btn secondary" href="/downloads?page={{ page + 1 }}">Next</a>
+        {% endif %}
+        <span class="muted" style="margin-left: 8px;">Page {{ page }} of {{ pages }}</span>
+      </div>
+    </div>
+  </div>
+{% endblock %}

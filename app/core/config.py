@@ -57,6 +57,10 @@ class Settings(BaseSettings):
         alias="EXPORT_ALLOWED_LICENSES",
     )
     export_allow_unlicensed: bool = Field(default=False, alias="EXPORT_ALLOW_UNLICENSED")
+    export_publish_enabled: bool = Field(default=False, alias="EXPORT_PUBLISH_ENABLED")
+    export_publish_dir: Optional[str] = Field(default=None, alias="EXPORT_PUBLISH_DIR")
+    export_publish_base_url: Optional[str] = Field(default=None, alias="EXPORT_PUBLISH_BASE_URL")
+    export_public_downloads_enabled: bool = Field(default=False, alias="EXPORT_PUBLIC_DOWNLOADS_ENABLED")
 
     def export_operator_credentials(self) -> list[tuple[str, str]]:
         """

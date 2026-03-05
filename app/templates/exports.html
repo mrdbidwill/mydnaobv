@@ -5,6 +5,11 @@
       <h2>Export Center</h2>
       <p class="muted">Queue and download offline PDF exports. This page is restricted to authorized users.</p>
       <p class="muted">Jobs run in background batches from smallest to largest to protect VPS resources and iNaturalist limits.</p>
+      {% if publish_enabled %}
+        <p class="muted"><strong>Publishing:</strong> Finished files are copied to external/static storage for member downloads.</p>
+      {% else %}
+        <p class="muted"><strong>Publishing:</strong> Disabled (downloads are only from this protected page).</p>
+      {% endif %}
       {% if export_include_all_photos %}
         <p class="muted"><strong>Photo mode:</strong> Include all photos (up to {{ export_max_photos_per_observation }} per observation).</p>
       {% else %}
@@ -85,6 +90,16 @@
                                   <a class="btn secondary" href="/exports/jobs/{{ job.id }}/artifacts/{{ artifact.id }}/download" style="margin-right: 8px; margin-bottom: 8px;">
                                     Download {{ artifact.kind }}{% if artifact.part_number %} {{ artifact.part_number }}{% endif %}
                                   </a>
+                                  {% if published_latest_urls.get(artifact.id) %}
+                                    <a class="btn secondary" href="{{ published_latest_urls.get(artifact.id) }}" target="_blank" rel="noreferrer" style="margin-right: 8px; margin-bottom: 8px;">
+                                      Public latest {{ artifact.kind }}{% if artifact.part_number %} {{ artifact.part_number }}{% endif %}
+                                    </a>
+                                  {% endif %}
+                                  {% if published_job_urls.get(artifact.id) %}
+                                    <a class="btn secondary" href="{{ published_job_urls.get(artifact.id) }}" target="_blank" rel="noreferrer" style="margin-right: 8px; margin-bottom: 8px;">
+                                      Published job file
+                                    </a>
+                                  {% endif %}
                                 {% endfor %}
                               </td>
                             </tr>

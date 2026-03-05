@@ -55,6 +55,9 @@
           {% if pdf_exports_enabled %}
             <a class="btn secondary" href="/exports">Export Center (authorized)</a>
           {% endif %}
+          {% if public_downloads_enabled %}
+            <a class="btn secondary" href="/downloads">Member downloads</a>
+          {% endif %}
         </div>
       {% else %}
         <h2>List not found</h2>

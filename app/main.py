@@ -18,6 +18,7 @@ from app.exports.service import (
     list_artifacts_for_job,
     list_jobs_for_list,
 )
+from app.exports.publish import latest_artifact_exists, published_job_url, published_latest_url
 from app.services.inat import fetch_observations_for_list
 
 
@@ -30,6 +31,7 @@ security = HTTPBasic()
 PAGE_SIZE = 10
 OBS_PAGE_SIZE = 15
 EXPORT_PAGE_SIZE = 12
+DOWNLOAD_PAGE_SIZE = 20
 
 
 def utc_now_naive() -> datetime:
@@ -127,6 +129,7 @@ def index(request: Request, page: int = Query(default=1, ge=1), db: Session = De
             "page": page,
             "pages": pages,
             "dna_field_id": settings.inat_dna_field_id or "",
+            "public_downloads_enabled": settings.export_public_downloads_enabled,
         },
     )
 
@@ -307,6 +310,7 @@ def list_page(
             "pages": obs_pages,
             "max_observations": settings.max_observations,
             "pdf_exports_enabled": settings.enable_pdf_exports,
+            "public_downloads_enabled": settings.export_public_downloads_enabled,
         },
     )
 
@@ -331,6 +335,9 @@ def exports_center(
                 "error": "PDF exports are currently disabled by configuration.",
                 "export_include_all_photos": settings.export_include_all_photos,
                 "export_max_photos_per_observation": settings.export_max_photos_per_observation,
+                "publish_enabled": settings.export_publish_enabled,
+                "published_job_urls": {},
+                "published_latest_urls": {},
             },
             status_code=503,
         )
@@ -347,11 +354,21 @@ def exports_center(
 
     jobs_by_list: dict[int, list[models.ExportJob]] = {}
     artifacts_by_job: dict[int, list[models.ExportArtifact]] = {}
+    published_job_urls: dict[int, str] = {}
+    published_latest_urls: dict[int, str] = {}
     for obs_list in lists:
         jobs = list_jobs_for_list(db, obs_list.id, limit=6)
         jobs_by_list[obs_list.id] = jobs
         for job in jobs:
             artifacts_by_job[job.id] = list_artifacts_for_job(db, job.id)
+            for artifact in artifacts_by_job[job.id]:
+                if latest_artifact_exists(obs_list.id, artifact):
+                    latest_url = published_latest_url(obs_list.id, artifact)
+                    if latest_url:
+                        published_latest_urls[artifact.id] = latest_url
+                job_url = published_job_url(obs_list.id, job.id, artifact)
+                if job_url:
+                    published_job_urls[artifact.id] = job_url
 
     return templates.TemplateResponse(
         "exports.html",
@@ -365,6 +382,67 @@ def exports_center(
             "error": None,
             "export_include_all_photos": settings.export_include_all_photos,
             "export_max_photos_per_observation": settings.export_max_photos_per_observation,
+            "publish_enabled": settings.export_publish_enabled,
+            "published_job_urls": published_job_urls,
+            "published_latest_urls": published_latest_urls,
+        },
+    )
+
+
+@app.get("/downloads")
+def public_downloads(
+    request: Request,
+    page: int = Query(default=1, ge=1),
+    db: Session = Depends(get_db),
+):
+    if not settings.export_public_downloads_enabled:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    total = db.query(func.count(models.ObservationList.id)).scalar() or 0
+    lists = (
+        db.query(models.ObservationList)
+        .order_by(models.ObservationList.created_at.desc())
+        .offset((page - 1) * DOWNLOAD_PAGE_SIZE)
+        .limit(DOWNLOAD_PAGE_SIZE)
+        .all()
+    )
+    pages = max(1, (total + DOWNLOAD_PAGE_SIZE - 1) // DOWNLOAD_PAGE_SIZE)
+
+    latest_job_by_list: dict[int, models.ExportJob] = {}
+    artifacts_by_list: dict[int, list[models.ExportArtifact]] = {}
+    published_latest_urls: dict[int, str] = {}
+
+    for obs_list in lists:
+        latest_job = (
+            db.query(models.ExportJob)
+            .filter(
+                models.ExportJob.list_id == obs_list.id,
+                models.ExportJob.status.in_(("ready", "partial_ready")),
+            )
+            .order_by(models.ExportJob.finished_at.desc().nullslast(), models.ExportJob.id.desc())
+            .first()
+        )
+        if not latest_job:
+            continue
+        latest_job_by_list[obs_list.id] = latest_job
+        artifacts = list_artifacts_for_job(db, latest_job.id)
+        artifacts_by_list[obs_list.id] = artifacts
+        for artifact in artifacts:
+            if latest_artifact_exists(obs_list.id, artifact):
+                latest_url = published_latest_url(obs_list.id, artifact)
+                if latest_url:
+                    published_latest_urls[artifact.id] = latest_url
+
+    return templates.TemplateResponse(
+        "downloads.html",
+        {
+            "request": request,
+            "lists": lists,
+            "latest_job_by_list": latest_job_by_list,
+            "artifacts_by_list": artifacts_by_list,
+            "published_latest_urls": published_latest_urls,
+            "page": page,
+            "pages": pages,
         },
     )
 

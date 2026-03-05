@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app import models
 from app.exports.config import export_config
+from app.exports.publish import cleanup_published_job, publish_job_artifacts
 from app.exports.pdf_writer import render_part_pdf
 from app.exports.policy import evaluate_license, normalize_license_code
 
@@ -137,6 +138,7 @@ def cleanup_expired_exports(db: Session) -> int:
         folder = _job_dir(job.id)
         if folder.exists():
             shutil.rmtree(folder, ignore_errors=True)
+        cleanup_published_job(job.list_id, job.id)
         removed += 1
     if removed:
         db.commit()
@@ -494,6 +496,14 @@ def _phase_finalize(db: Session, job: models.ExportJob) -> bool:
 
     _upsert_artifact(db, job.id, "zip", _relative_to_storage(zip_path), None)
 
+    db.flush()
+    artifacts = (
+        db.query(models.ExportArtifact)
+        .filter(models.ExportArtifact.job_id == job.id)
+        .order_by(models.ExportArtifact.id.asc())
+        .all()
+    )
+
     job.phase = "done"
     job.status = "ready" if merged_created else "partial_ready"
     job.finished_at = utc_now_naive()
@@ -502,6 +512,9 @@ def _phase_finalize(db: Session, job: models.ExportJob) -> bool:
         if merged_created
         else "Export complete: ZIP with split PDF parts ready."
     )
+    publish_warning = publish_job_artifacts(job, artifacts, _storage_root())
+    if publish_warning:
+        job.message = f"{job.message} Publish note: {publish_warning}"
     job.next_run_at = None
     return True
 
