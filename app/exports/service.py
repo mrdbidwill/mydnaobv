@@ -10,7 +10,7 @@ import zipfile
 import httpx
 from pypdf import PdfReader, PdfWriter
 from sqlalchemy import case, func
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from app import models
 from app.exports.config import export_config
@@ -282,15 +282,32 @@ def _phase_plan(db: Session, job: models.ExportJob) -> bool:
 
     observations = (
         db.query(models.Observation)
-        .options(selectinload(models.Observation.photos))
         .filter(models.Observation.list_id == job.list_id)
         .order_by(models.Observation.observed_at.desc().nullslast(), models.Observation.id.asc())
         .all()
     )
+    observation_ids = [obs.id for obs in observations]
+    photos_by_observation: dict[int, list[models.ObservationPhoto]] = {}
+    if observation_ids:
+        photo_rows = (
+            db.query(models.ObservationPhoto)
+            .filter(models.ObservationPhoto.observation_id.in_(observation_ids))
+            .order_by(
+                models.ObservationPhoto.observation_id.asc(),
+                models.ObservationPhoto.photo_index.asc(),
+                models.ObservationPhoto.id.asc(),
+            )
+            .all()
+        )
+        for photo in photo_rows:
+            photos_by_observation.setdefault(photo.observation_id, []).append(photo)
 
     sequence = 1
     for obs in observations:
-        candidates = _photo_candidates_for_observation(obs)
+        candidates = _photo_candidates_for_observation(
+            obs,
+            photos=photos_by_observation.get(obs.id, []),
+        )
         if not candidates:
             db.add(
                 models.ExportItem(
@@ -637,10 +654,15 @@ def _effective_download_chunk_size() -> int:
     return chunk_size
 
 
-def _photo_candidates_for_observation(obs: models.Observation) -> list[dict[str, str | None]]:
+def _photo_candidates_for_observation(
+    obs: models.Observation,
+    photos: list[models.ObservationPhoto] | None = None,
+) -> list[dict[str, str | None]]:
+    photo_rows = _coerce_photo_collection(photos if photos is not None else getattr(obs, "photos", None))
+
     if export_config.include_all_photos:
         max_per_obs = max(1, min(export_config.max_photos_per_observation, 8))
-        ordered = sorted(obs.photos, key=lambda p: (p.photo_index, p.id))
+        ordered = sorted(photo_rows, key=lambda p: (p.photo_index, p.id))
         selected = ordered[:max_per_obs]
         if selected:
             return [
@@ -664,8 +686,8 @@ def _photo_candidates_for_observation(obs: models.Observation) -> list[dict[str,
         ]
 
     # Fallback to first cached photo entry if primary is missing.
-    if obs.photos:
-        first = sorted(obs.photos, key=lambda p: (p.photo_index, p.id))[0]
+    if photo_rows:
+        first = sorted(photo_rows, key=lambda p: (p.photo_index, p.id))[0]
         if first.photo_url:
             return [
                 {
@@ -675,6 +697,17 @@ def _photo_candidates_for_observation(obs: models.Observation) -> list[dict[str,
                 }
             ]
     return []
+
+
+def _coerce_photo_collection(raw: object) -> list[models.ObservationPhoto]:
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        return [photo for photo in raw if photo is not None]
+    try:
+        return [photo for photo in list(raw) if photo is not None]
+    except TypeError:
+        return [raw] if raw is not None else []
 
 
 def _storage_root() -> Path:
