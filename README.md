@@ -45,6 +45,7 @@ This project now supports a modular, queue-based PDF export pipeline for offline
 - Jobs are prioritized smallest to largest (`XS`, `S`, `M`, `L`).
 - Large jobs are limited to an overnight window.
 - If merge pressure is high, output degrades gracefully to split PDFs + ZIP.
+- Queue requests use a stale detector: no new job is created when list data has not changed since the latest completed export.
 - Public list creation and browsing remain unchanged.
 - Heavy export controls live on a separate authenticated page: `/exports`.
 - Optional publish mode copies finished files to external/static storage and exposes a public member page: `/downloads`.

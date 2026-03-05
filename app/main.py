@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from typing import Optional
+from urllib.parse import quote
 from fastapi import FastAPI, Request, Form, Depends, Query, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.responses import FileResponse, RedirectResponse
@@ -13,10 +14,11 @@ from app.db import get_db
 from app import models
 from app.exports.service import (
     artifact_abspath,
-    enqueue_export_job,
+    enqueue_export_job_for_list,
     get_artifact_for_job,
     list_artifacts_for_job,
     list_jobs_for_list,
+    latest_completed_job_for_list,
 )
 from app.exports.publish import latest_artifact_exists, published_job_url, published_latest_url
 from app.services.inat import fetch_observations_for_list
@@ -200,6 +202,7 @@ def list_page(
     request: Request,
     list_id: int,
     refresh: bool = False,
+    export_notice: Optional[str] = Query(default=None),
     page: int = Query(default=1, ge=1),
     db: Session = Depends(get_db),
 ):
@@ -311,6 +314,7 @@ def list_page(
             "max_observations": settings.max_observations,
             "pdf_exports_enabled": settings.enable_pdf_exports,
             "public_downloads_enabled": settings.export_public_downloads_enabled,
+            "export_notice": export_notice,
         },
     )
 
@@ -318,6 +322,7 @@ def list_page(
 @app.get("/exports")
 def exports_center(
     request: Request,
+    notice: Optional[str] = Query(default=None),
     page: int = Query(default=1, ge=1),
     db: Session = Depends(get_db),
     _: bool = Depends(require_export_access),
@@ -338,6 +343,7 @@ def exports_center(
                 "publish_enabled": settings.export_publish_enabled,
                 "published_job_urls": {},
                 "published_latest_urls": {},
+                "notice": notice,
             },
             status_code=503,
         )
@@ -385,6 +391,7 @@ def exports_center(
             "publish_enabled": settings.export_publish_enabled,
             "published_job_urls": published_job_urls,
             "published_latest_urls": published_latest_urls,
+            "notice": notice,
         },
     )
 
@@ -413,15 +420,7 @@ def public_downloads(
     published_latest_urls: dict[int, str] = {}
 
     for obs_list in lists:
-        latest_job = (
-            db.query(models.ExportJob)
-            .filter(
-                models.ExportJob.list_id == obs_list.id,
-                models.ExportJob.status.in_(("ready", "partial_ready")),
-            )
-            .order_by(models.ExportJob.finished_at.desc().nullslast(), models.ExportJob.id.desc())
-            .first()
-        )
+        latest_job = latest_completed_job_for_list(db, obs_list.id)
         if not latest_job:
             continue
         latest_job_by_list[obs_list.id] = latest_job
@@ -460,8 +459,13 @@ def exports_queue_list(
     if not obs_list:
         return RedirectResponse(url="/exports", status_code=303)
 
-    enqueue_export_job(db, list_id=list_id, requested_by="exports-center")
-    return RedirectResponse(url="/exports", status_code=303)
+    _, _, message = enqueue_export_job_for_list(
+        db,
+        obs_list=obs_list,
+        requested_by="exports-center",
+        only_if_stale=True,
+    )
+    return RedirectResponse(url=f"/exports?notice={quote(message)}", status_code=303)
 
 
 @app.post("/lists/{list_id}/exports/create")
@@ -477,8 +481,13 @@ def create_list_export(
     if not obs_list:
         return RedirectResponse(url="/", status_code=303)
 
-    enqueue_export_job(db, list_id=list_id, requested_by="web")
-    return RedirectResponse(url=f"/lists/{list_id}", status_code=303)
+    _, _, message = enqueue_export_job_for_list(
+        db,
+        obs_list=obs_list,
+        requested_by="web",
+        only_if_stale=True,
+    )
+    return RedirectResponse(url=f"/lists/{list_id}?export_notice={quote(message)}", status_code=303)
 
 
 @app.get("/lists/{list_id}/exports/{job_id}/artifacts/{artifact_id}/download")

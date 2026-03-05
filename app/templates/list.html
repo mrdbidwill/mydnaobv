@@ -13,6 +13,9 @@
         {% if error %}
           <p style="color: #b42318;">{{ error }}</p>
         {% endif %}
+        {% if export_notice %}
+          <p style="color: #1f6f43;">{{ export_notice }}</p>
+        {% endif %}
         <div class="row">
           <div>
             <strong>iNaturalist user filter</strong>

@@ -26,6 +26,14 @@ def utc_now_naive() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+def normalize_naive_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(UTC).replace(tzinfo=None)
+
+
 def enqueue_export_job(db: Session, list_id: int, requested_by: str | None = None) -> models.ExportJob:
     existing = (
         db.query(models.ExportJob)
@@ -48,6 +56,76 @@ def enqueue_export_job(db: Session, list_id: int, requested_by: str | None = Non
     db.commit()
     db.refresh(job)
     return job
+
+
+def latest_completed_job_for_list(db: Session, list_id: int) -> models.ExportJob | None:
+    return (
+        db.query(models.ExportJob)
+        .filter(
+            models.ExportJob.list_id == list_id,
+            models.ExportJob.status.in_(("ready", "partial_ready")),
+        )
+        .order_by(models.ExportJob.finished_at.desc().nullslast(), models.ExportJob.id.desc())
+        .first()
+    )
+
+
+def is_list_export_stale(
+    obs_list: models.ObservationList,
+    latest_job: models.ExportJob | None,
+) -> tuple[bool, str]:
+    if latest_job is None:
+        return True, "No completed export exists yet."
+
+    list_last_sync = normalize_naive_utc(obs_list.last_sync_at)
+    if list_last_sync is None:
+        return True, "List has not been synced yet since the last export."
+
+    last_export_at = normalize_naive_utc(latest_job.finished_at) or normalize_naive_utc(latest_job.created_at)
+    if last_export_at is None:
+        return True, "Latest export has no completion timestamp; treat as stale."
+
+    if list_last_sync > last_export_at:
+        return (
+            True,
+            f"List data changed after the latest export ({list_last_sync} > {last_export_at}).",
+        )
+    return False, f"Latest export is up to date (last sync {list_last_sync}, export {last_export_at})."
+
+
+def enqueue_export_job_for_list(
+    db: Session,
+    obs_list: models.ObservationList,
+    requested_by: str | None = None,
+    only_if_stale: bool = True,
+) -> tuple[models.ExportJob, bool, str]:
+    active = (
+        db.query(models.ExportJob)
+        .filter(models.ExportJob.list_id == obs_list.id, models.ExportJob.status.in_(ACTIVE_JOB_STATUSES))
+        .order_by(models.ExportJob.created_at.asc())
+        .first()
+    )
+    if active:
+        return active, False, f"Export job #{active.id} is already active ({active.status}/{active.phase})."
+
+    latest = latest_completed_job_for_list(db, obs_list.id)
+    if only_if_stale:
+        stale, stale_reason = is_list_export_stale(obs_list, latest)
+        if not stale and latest:
+            return latest, False, f"No new job queued. {stale_reason}"
+
+    job = models.ExportJob(
+        list_id=obs_list.id,
+        requested_by=requested_by,
+        status="queued",
+        phase="plan",
+        part_size=max(10, export_config.part_size),
+        next_run_at=utc_now_naive(),
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    return job, True, f"Queued export job #{job.id}."
 
 
 def list_jobs_for_list(db: Session, list_id: int, limit: int = 10) -> list[models.ExportJob]:
