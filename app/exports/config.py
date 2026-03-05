@@ -15,6 +15,8 @@ class ExportConfig:
     part_size: int
     download_chunk_size: int
     download_byte_budget_mb: int
+    include_all_photos: bool
+    max_photos_per_observation: int
     request_interval_seconds: float
     max_api_requests_per_day: int
     max_media_mb_per_hour: int
@@ -88,6 +90,8 @@ export_config = ExportConfig(
     part_size=settings.export_part_size,
     download_chunk_size=settings.export_download_chunk_size,
     download_byte_budget_mb=settings.export_download_byte_budget_mb,
+    include_all_photos=settings.export_include_all_photos,
+    max_photos_per_observation=settings.export_max_photos_per_observation,
     request_interval_seconds=settings.export_request_interval_seconds,
     max_api_requests_per_day=settings.export_max_api_requests_per_day,
     max_media_mb_per_hour=settings.export_max_media_mb_per_hour,

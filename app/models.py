@@ -51,7 +51,31 @@ class Observation(Base):
     list_id: Mapped[int] = mapped_column(ForeignKey("observation_lists.id"), index=True)
 
     list: Mapped[ObservationList] = relationship(back_populates="observations")
+    photos: Mapped[list["ObservationPhoto"]] = relationship(
+        "ObservationPhoto",
+        back_populates="observation",
+        uselist=True,
+    )
     export_items: Mapped[list["ExportItem"]] = relationship("ExportItem", back_populates="observation")
+
+
+class ObservationPhoto(Base):
+    __tablename__ = "observation_photos"
+    __table_args__ = (
+        UniqueConstraint("observation_id", "photo_index", name="uq_observation_photo_index"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    observation_id: Mapped[int] = mapped_column(ForeignKey("observations.id"), index=True)
+    inat_photo_id: Mapped[Optional[int]] = mapped_column(Integer, index=True, nullable=True)
+    photo_index: Mapped[int] = mapped_column(Integer, default=1)
+    photo_url: Mapped[str] = mapped_column(String(1024))
+    photo_license_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    photo_attribution: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
+
+    observation: Mapped[Observation] = relationship("Observation", back_populates="photos")
 
 
 class ExportJob(Base):

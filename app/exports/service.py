@@ -10,7 +10,7 @@ import zipfile
 import httpx
 from pypdf import PdfReader, PdfWriter
 from sqlalchemy import case, func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app import models
 from app.exports.config import export_config
@@ -202,6 +202,7 @@ def _phase_plan(db: Session, job: models.ExportJob) -> bool:
 
     observations = (
         db.query(models.Observation)
+        .options(selectinload(models.Observation.photos))
         .filter(models.Observation.list_id == job.list_id)
         .order_by(models.Observation.observed_at.desc().nullslast(), models.Observation.id.asc())
         .all()
@@ -209,32 +210,53 @@ def _phase_plan(db: Session, job: models.ExportJob) -> bool:
 
     sequence = 1
     for obs in observations:
-        decision = evaluate_license(obs.photo_license_code)
-        item_status = "pending"
-        skip_reason = None
-        if not obs.photo_url:
-            item_status = "skipped"
-            skip_reason = "no_image_url"
-        elif not decision.allowed:
-            item_status = "skipped"
-            skip_reason = f"license:{decision.reason}"
+        candidates = _photo_candidates_for_observation(obs)
+        if not candidates:
+            db.add(
+                models.ExportItem(
+                    job_id=job.id,
+                    observation_id=obs.id,
+                    sequence=sequence,
+                    inat_observation_id=obs.inat_observation_id,
+                    item_title=obs.scientific_name or obs.species_guess or obs.taxon_name,
+                    observed_at=obs.observed_at,
+                    inat_url=obs.inat_url,
+                    image_url=None,
+                    image_license_code=None,
+                    image_attribution=None,
+                    status="skipped",
+                    skip_reason="no_image_url",
+                )
+            )
+            sequence += 1
+            continue
 
-        item = models.ExportItem(
-            job_id=job.id,
-            observation_id=obs.id,
-            sequence=sequence,
-            inat_observation_id=obs.inat_observation_id,
-            item_title=obs.scientific_name or obs.species_guess or obs.taxon_name,
-            observed_at=obs.observed_at,
-            inat_url=obs.inat_url,
-            image_url=obs.photo_url,
-            image_license_code=normalize_license_code(obs.photo_license_code),
-            image_attribution=obs.photo_attribution,
-            status=item_status,
-            skip_reason=skip_reason,
-        )
-        db.add(item)
-        sequence += 1
+        total_candidates = len(candidates)
+        for idx, candidate in enumerate(candidates, start=1):
+            decision = evaluate_license(candidate["license_code"])
+            item_status = "pending" if decision.allowed else "skipped"
+            skip_reason = None if decision.allowed else f"license:{decision.reason}"
+            title = obs.scientific_name or obs.species_guess or obs.taxon_name
+            if export_config.include_all_photos and total_candidates > 1:
+                title = f"{title or f'Observation {obs.inat_observation_id}'} (photo {idx}/{total_candidates})"
+
+            db.add(
+                models.ExportItem(
+                    job_id=job.id,
+                    observation_id=obs.id,
+                    sequence=sequence,
+                    inat_observation_id=obs.inat_observation_id,
+                    item_title=title,
+                    observed_at=obs.observed_at,
+                    inat_url=obs.inat_url,
+                    image_url=candidate["url"],
+                    image_license_code=normalize_license_code(candidate["license_code"]),
+                    image_attribution=candidate["attribution"],
+                    status=item_status,
+                    skip_reason=skip_reason,
+                )
+            )
+            sequence += 1
 
     db.flush()
     job.total_items = max(0, sequence - 1)
@@ -270,7 +292,7 @@ def _phase_download(db: Session, job: models.ExportJob, deadline: float) -> bool
         db.query(models.ExportItem)
         .filter(models.ExportItem.job_id == job.id, models.ExportItem.status == "pending")
         .order_by(models.ExportItem.sequence.asc())
-        .limit(max(1, export_config.download_chunk_size))
+        .limit(_effective_download_chunk_size())
         .all()
     )
     if not pending:
@@ -278,7 +300,10 @@ def _phase_download(db: Session, job: models.ExportJob, deadline: float) -> bool
         return True
 
     progressed = False
-    run_byte_budget = max(1, export_config.download_byte_budget_mb) * 1024 * 1024
+    run_byte_budget_mb = max(1, export_config.download_byte_budget_mb)
+    if export_config.include_all_photos:
+        run_byte_budget_mb = min(run_byte_budget_mb, 40)
+    run_byte_budget = run_byte_budget_mb * 1024 * 1024
     run_bytes = 0
 
     images_dir = _job_dir(job.id) / "images"
@@ -509,7 +534,56 @@ def _schedule_next_run(job: models.ExportJob, now: datetime) -> None:
 
 def _recommended_part_size() -> int:
     # KVM 1 defaults: keep parts conservative to avoid merge pressure.
+    if export_config.include_all_photos:
+        return max(30, min(export_config.part_size, 75))
     return max(50, min(export_config.part_size, 150))
+
+
+def _effective_download_chunk_size() -> int:
+    chunk_size = max(1, export_config.download_chunk_size)
+    if export_config.include_all_photos:
+        return min(chunk_size, 4)
+    return chunk_size
+
+
+def _photo_candidates_for_observation(obs: models.Observation) -> list[dict[str, str | None]]:
+    if export_config.include_all_photos:
+        max_per_obs = max(1, min(export_config.max_photos_per_observation, 8))
+        ordered = sorted(obs.photos, key=lambda p: (p.photo_index, p.id))
+        selected = ordered[:max_per_obs]
+        if selected:
+            return [
+                {
+                    "url": photo.photo_url,
+                    "license_code": photo.photo_license_code,
+                    "attribution": photo.photo_attribution,
+                }
+                for photo in selected
+                if photo.photo_url
+            ]
+
+    # Default behavior: export one primary image per observation.
+    if obs.photo_url:
+        return [
+            {
+                "url": obs.photo_url,
+                "license_code": obs.photo_license_code,
+                "attribution": obs.photo_attribution,
+            }
+        ]
+
+    # Fallback to first cached photo entry if primary is missing.
+    if obs.photos:
+        first = sorted(obs.photos, key=lambda p: (p.photo_index, p.id))[0]
+        if first.photo_url:
+            return [
+                {
+                    "url": first.photo_url,
+                    "license_code": first.photo_license_code,
+                    "attribution": first.photo_attribution,
+                }
+            ]
+    return []
 
 
 def _storage_root() -> Path:
@@ -625,6 +699,11 @@ def _upsert_artifact(
 
 
 def _build_readme_text(job: models.ExportJob) -> str:
+    mode_line = (
+        f"- Export mode: include all photos (max {max(1, min(export_config.max_photos_per_observation, 8))} per observation).\n"
+        if export_config.include_all_photos
+        else "- Export mode: one primary photo per observation.\n"
+    )
     return (
         "Mushroom Observation PDF Export\n"
         "\n"
@@ -637,6 +716,7 @@ def _build_readme_text(job: models.ExportJob) -> str:
         "\n"
         "Why there are multiple files:\n"
         "- Large exports are split into smaller PDFs to keep the server stable.\n"
+        + mode_line +
         "\n"
         "License and attribution notice:\n"
         "- Images are included only when their licenses are allowed by this project policy.\n"

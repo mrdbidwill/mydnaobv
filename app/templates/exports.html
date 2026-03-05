@@ -5,6 +5,11 @@
       <h2>Export Center</h2>
       <p class="muted">Queue and download offline PDF exports. This page is restricted to authorized users.</p>
       <p class="muted">Jobs run in background batches from smallest to largest to protect VPS resources and iNaturalist limits.</p>
+      {% if export_include_all_photos %}
+        <p class="muted"><strong>Photo mode:</strong> Include all photos (up to {{ export_max_photos_per_observation }} per observation).</p>
+      {% else %}
+        <p class="muted"><strong>Photo mode:</strong> Primary photo only.</p>
+      {% endif %}
       <div style="margin-top: 12px;">
         <a class="btn secondary" href="/">Back to lists</a>
         <a class="btn secondary" href="/admin">Admin</a>

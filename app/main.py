@@ -239,23 +239,40 @@ def list_page(
                     existing.photo_url = obs.photo_url
                     existing.photo_license_code = obs.photo_license_code
                     existing.photo_attribution = obs.photo_attribution
-                    continue
-                record = models.Observation(
-                    inat_observation_id=obs.inat_id,
-                    taxon_name=obs.taxon_name,
-                    species_guess=obs.species_guess,
-                    scientific_name=obs.scientific_name,
-                    common_name=obs.common_name,
-                    user_name=obs.user_name,
-                    observed_at=obs.observed_at,
-                    inat_url=obs.inat_url,
-                    dna_field_value=obs.dna_field_value,
-                    photo_url=obs.photo_url,
-                    photo_license_code=obs.photo_license_code,
-                    photo_attribution=obs.photo_attribution,
-                    list_id=obs_list.id,
+                    record = existing
+                else:
+                    record = models.Observation(
+                        inat_observation_id=obs.inat_id,
+                        taxon_name=obs.taxon_name,
+                        species_guess=obs.species_guess,
+                        scientific_name=obs.scientific_name,
+                        common_name=obs.common_name,
+                        user_name=obs.user_name,
+                        observed_at=obs.observed_at,
+                        inat_url=obs.inat_url,
+                        dna_field_value=obs.dna_field_value,
+                        photo_url=obs.photo_url,
+                        photo_license_code=obs.photo_license_code,
+                        photo_attribution=obs.photo_attribution,
+                        list_id=obs_list.id,
+                    )
+                    db.add(record)
+                    db.flush()
+
+                db.query(models.ObservationPhoto).filter_by(observation_id=record.id).delete(
+                    synchronize_session=False
                 )
-                db.add(record)
+                for photo in obs.photo_entries:
+                    db.add(
+                        models.ObservationPhoto(
+                            observation_id=record.id,
+                            inat_photo_id=photo.inat_photo_id,
+                            photo_index=photo.photo_index,
+                            photo_url=photo.photo_url,
+                            photo_license_code=photo.photo_license_code,
+                            photo_attribution=photo.photo_attribution,
+                        )
+                    )
             obs_list.last_sync_at = utc_now_naive()
             db.commit()
         except Exception as exc:
@@ -312,6 +329,8 @@ def exports_center(
                 "page": 1,
                 "pages": 1,
                 "error": "PDF exports are currently disabled by configuration.",
+                "export_include_all_photos": settings.export_include_all_photos,
+                "export_max_photos_per_observation": settings.export_max_photos_per_observation,
             },
             status_code=503,
         )
@@ -344,6 +363,8 @@ def exports_center(
             "page": page,
             "pages": pages,
             "error": None,
+            "export_include_all_photos": settings.export_include_all_photos,
+            "export_max_photos_per_observation": settings.export_max_photos_per_observation,
         },
     )
 
@@ -467,6 +488,11 @@ def admin_delete_list(
         db.query(models.ExportJob).filter(models.ExportJob.id.in_(job_ids)).delete(
             synchronize_session=False
         )
+    observation_ids = [row[0] for row in db.query(models.Observation.id).filter_by(list_id=list_id).all()]
+    if observation_ids:
+        db.query(models.ObservationPhoto).filter(
+            models.ObservationPhoto.observation_id.in_(observation_ids)
+        ).delete(synchronize_session=False)
     db.query(models.Observation).filter_by(list_id=list_id).delete(synchronize_session=False)
     db.query(models.ObservationList).filter_by(id=list_id).delete(synchronize_session=False)
     db.commit()
