@@ -124,7 +124,7 @@ Suggested cron entries (KVM 1):
 ## Development notes
 
 - The iNaturalist sync logic in `app/services/inat.py` supports either user ID or username, and verifies username/ID consistency when both are provided.
-- County/address filters are resolved through iNaturalist places lookup and applied as `place_id` to keep list sizes manageable.
+- iNaturalist place/location filters are resolved through places lookup and applied as `place_id` to keep list sizes manageable.
 - The sync logic filters results using the observation field ID (default `2330`) and also sends the field name filter (default `DNA Barcode ITS`) to the API when possible.
 - Important: avoid similarly named `DNA Barcode ITS:` (with colon); that is a different field.
 - All photo metadata for each synced observation is cached in `observation_photos`; export mode can use primary photo only or multiple photos.

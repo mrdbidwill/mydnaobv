@@ -231,7 +231,15 @@ def create_list(
                 taxon_filter=taxon_filter_clean or None,
             )
             precheck_eta = estimate_precheck_from_observations(precheck["total_results"])
+            place_match_text = ""
+            if precheck.get("resolved_place_name"):
+                place_match_text = (
+                    f"Matched iNaturalist location: {precheck['resolved_place_name']} "
+                    f"(place_id {precheck['resolved_place_id']}). "
+                )
             precheck_notice = (
+                place_match_text
+                + 
                 f"Pre-check estimate: about {precheck['total_results']} matching observations. "
                 f"Rough export size around {precheck_eta['eligible_items']} pages; likely completion {precheck_eta['eta_likely']} "
                 f"(best {precheck_eta['eta_best']}, worst {precheck_eta['eta_worst']}). "

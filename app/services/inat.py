@@ -233,6 +233,44 @@ def _resolve_place_id(client: httpx.Client, base: str, query: str) -> tuple[Opti
     return int(place_id), str(best_row.get("display_name") or best_row.get("name") or "")
 
 
+def _suggest_places(client: httpx.Client, base: str, query: str, limit: int = 5) -> list[str]:
+    place_query = (query or "").strip()
+    if not place_query:
+        return []
+    try:
+        resp = client.get(f"{base}/places/autocomplete", params={"q": place_query, "per_page": max(limit, 5)})
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception:
+        return []
+
+    out: list[str] = []
+    for row in data.get("results") or []:
+        if not isinstance(row, dict):
+            continue
+        label = str(row.get("display_name") or row.get("name") or "").strip()
+        if not label:
+            continue
+        out.append(label)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _place_error_message(client: httpx.Client, base: str, place_query: str) -> str:
+    suggestions = _suggest_places(client, base, place_query, limit=5)
+    if suggestions:
+        return (
+            "Could not resolve place/location filter. Try one of these iNaturalist place names: "
+            + "; ".join(suggestions)
+            + "."
+        )
+    return (
+        "Could not resolve place/location filter. Try a broader or clearer iNaturalist place "
+        "such as 'Alabama, US'."
+    )
+
+
 def estimate_total_observations(
     *,
     inat_user_id: Optional[int],
@@ -294,9 +332,7 @@ def estimate_total_observations(
         if cleaned_place_query:
             place_id, place_name = _resolve_place_id(client, base, cleaned_place_query)
             if place_id is None:
-                raise ValueError(
-                    "Could not resolve county/address filter. Try a clearer place such as 'Baldwin County, Alabama'."
-                )
+                raise ValueError(_place_error_message(client, base, cleaned_place_query))
             resolved_place_id = int(place_id)
             resolved_place_name = place_name or cleaned_place_query
 
@@ -427,9 +463,7 @@ def fetch_observations_for_list(obs_list: models.ObservationList) -> Iterable[In
         if place_query:
             place_id, place_name = _resolve_place_id(client, base, place_query)
             if place_id is None:
-                raise ValueError(
-                    "Could not resolve county/address filter. Try a clearer place such as 'Baldwin County, Alabama'."
-                )
+                raise ValueError(_place_error_message(client, base, place_query))
             resolved_place_id = int(place_id)
             obs_list.inat_place_id = resolved_place_id
             if place_name:

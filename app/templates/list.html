@@ -48,7 +48,7 @@
             <div class="muted">{{ list.taxon_filter if list.taxon_filter else "None" }}</div>
           </div>
           <div>
-            <strong>County/address filter</strong>
+            <strong>iNaturalist location filter</strong>
             <div class="muted">{{ list.place_query if list.place_query else "None" }}</div>
           </div>
         </div>
@@ -150,8 +150,8 @@
             <input class="input" type="text" name="inat_username" value="{{ list.inat_username if list.inat_username else '' }}" placeholder="e.g., cabracrazy" />
           </label>
           <label>
-            County/address filter (optional)
-            <input class="input" type="text" name="place_query" value="{{ list.place_query if list.place_query else '' }}" placeholder="e.g., Baldwin County, Alabama" />
+            iNaturalist place/location filter (optional)
+            <input class="input" type="text" name="place_query" value="{{ list.place_query if list.place_query else '' }}" placeholder="e.g., Alabama, US or Conecuh National Forest" />
           </label>
           <label>
             DNA field ID
