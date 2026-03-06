@@ -50,6 +50,7 @@ This project now supports a modular, queue-based PDF export pipeline for offline
 - Heavy export controls live on a separate authenticated page: `/exports`.
 - Optional publish mode copies finished files to external/static storage and exposes a public member page: `/downloads`.
 - Optional mode: include multiple photos per observation with conservative KVM1 caps.
+- Create/edit flow now includes a fast pre-check estimate, and list/export pages show synced-data ETA ranges before queueing.
 - Export access supports:
   - `EXPORT_OPERATORS_JSON` (preferred, multiple operator accounts), or
   - `EXPORT_USERNAME` / `EXPORT_PASSWORD` (single account), or

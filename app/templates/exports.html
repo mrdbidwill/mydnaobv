@@ -25,6 +25,7 @@
       {% if notice %}
         <p style="color: #1f6f43; margin-top: 10px;">{{ notice }}</p>
       {% endif %}
+      <p class="muted"><strong>Why limits exist:</strong> {{ limits_explanation }}</p>
     </div>
 
     <div class="card">
@@ -47,6 +48,13 @@
                   <a href="/lists/{{ list.id }}">{{ list.title }}</a>
                   {% if list.description %}
                     <div class="muted">{{ list.description }}</div>
+                  {% endif %}
+                  {% set eta = eta_by_list.get(list.id) %}
+                  {% if eta %}
+                    <div class="muted" style="margin-top: 4px;">
+                      Estimate: {{ eta.eligible_items }} exportable pages, likely {{ eta.eta_likely }} (best {{ eta.eta_best }}, worst {{ eta.eta_worst }}).
+                    </div>
+                    <div class="muted">Pace: {{ eta.items_per_run }} items/run, {{ eta.runs_per_day }} runs/day; bucket {{ eta.bucket }}.</div>
                   {% endif %}
                 </td>
                 <td>

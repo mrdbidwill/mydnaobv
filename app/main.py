@@ -21,7 +21,9 @@ from app.exports.service import (
     latest_completed_job_for_list,
 )
 from app.exports.publish import latest_artifact_exists, published_job_url, published_latest_url
+from app.exports.estimate import estimate_list_export_eta, estimate_precheck_from_observations
 from app.services.inat import fetch_observations_for_list
+from app.services.inat import estimate_total_observations
 
 
 templates = Jinja2Templates(directory="app/templates")
@@ -34,6 +36,19 @@ PAGE_SIZE = 10
 OBS_PAGE_SIZE = 15
 EXPORT_PAGE_SIZE = 12
 DOWNLOAD_PAGE_SIZE = 20
+
+
+def load_index_lists(db: Session, page: int) -> tuple[list[models.ObservationList], int]:
+    total = db.query(func.count(models.ObservationList.id)).scalar() or 0
+    lists = (
+        db.query(models.ObservationList)
+        .order_by(models.ObservationList.created_at.desc())
+        .offset((page - 1) * PAGE_SIZE)
+        .limit(PAGE_SIZE)
+        .all()
+    )
+    pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
+    return lists, pages
 
 
 def utc_now_naive() -> datetime:
@@ -111,16 +126,7 @@ def require_export_access(credentials: HTTPBasicCredentials = Depends(security))
 
 @app.get("/")
 def index(request: Request, page: int = Query(default=1, ge=1), db: Session = Depends(get_db)):
-    total = db.query(func.count(models.ObservationList.id)).scalar() or 0
-    lists = (
-        db.query(models.ObservationList)
-        .order_by(models.ObservationList.created_at.desc())
-        .offset((page - 1) * PAGE_SIZE)
-        .limit(PAGE_SIZE)
-        .all()
-    )
-
-    pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
+    lists, pages = load_index_lists(db, page)
 
     return templates.TemplateResponse(
         "index.html",
@@ -132,6 +138,15 @@ def index(request: Request, page: int = Query(default=1, ge=1), db: Session = De
             "pages": pages,
             "dna_field_id": settings.inat_dna_field_id or "",
             "public_downloads_enabled": settings.export_public_downloads_enabled,
+            "form_title": "",
+            "form_description": "",
+            "form_inat_user_id": "",
+            "form_inat_username": "",
+            "form_place_query": "",
+            "form_dna_field_id": settings.inat_dna_field_id or "",
+            "form_taxon_filter": "",
+            "precheck_notice": None,
+            "limits_explanation": "These limits are in place to keep exports dependable for everyone, protect shared VPS resources, and respect iNaturalist API/media capacity.",
         },
     )
 
@@ -146,9 +161,31 @@ def create_list(
     dna_field_id: str = Form(default=""),
     taxon_filter: str = Form(default=""),
     place_query: str = Form(default=""),
+    action: str = Form(default="save"),
     db: Session = Depends(get_db),
 ):
+    page = 1
+    lists, pages = load_index_lists(db, page)
     title = title.strip()
+    description_clean = description.strip()
+    inat_user_id_raw = (inat_user_id or "").strip()
+    inat_username_raw = (inat_username or "").strip()
+    place_query_clean = (place_query or "").strip()
+    dna_field_clean = dna_field_id.strip() or settings.inat_dna_field_id or ""
+    taxon_filter_clean = (taxon_filter or "").strip()
+
+    form_context = {
+        "form_title": title,
+        "form_description": description_clean,
+        "form_inat_user_id": inat_user_id_raw,
+        "form_inat_username": inat_username_raw,
+        "form_place_query": place_query_clean,
+        "form_dna_field_id": dna_field_clean,
+        "form_taxon_filter": taxon_filter_clean,
+        "precheck_notice": None,
+        "limits_explanation": "These limits are in place to keep exports dependable for everyone, protect shared VPS resources, and respect iNaturalist API/media capacity.",
+    }
+
     if not title:
         return templates.TemplateResponse(
             "index.html",
@@ -156,15 +193,17 @@ def create_list(
                 "request": request,
                 "app_name": settings.app_name,
                 "error": "Please provide a list title.",
-                "lists": [],
-                "page": 1,
-                "pages": 1,
-                "dna_field_id": dna_field_id or settings.inat_dna_field_id or "",
+                "lists": lists,
+                "page": page,
+                "pages": pages,
+                "dna_field_id": dna_field_clean,
+                "public_downloads_enabled": settings.export_public_downloads_enabled,
+                **form_context,
             },
             status_code=400,
         )
 
-    user_id_int, username, user_error = parse_user_filters(inat_user_id, inat_username)
+    user_id_int, username, user_error = parse_user_filters(inat_user_id_raw, inat_username_raw)
     if user_error:
         return templates.TemplateResponse(
             "index.html",
@@ -172,23 +211,60 @@ def create_list(
                 "request": request,
                 "app_name": settings.app_name,
                 "error": user_error,
-                "lists": [],
-                "page": 1,
-                "pages": 1,
-                "dna_field_id": dna_field_id or settings.inat_dna_field_id or "",
+                "lists": lists,
+                "page": page,
+                "pages": pages,
+                "dna_field_id": dna_field_clean,
+                "public_downloads_enabled": settings.export_public_downloads_enabled,
+                **form_context,
             },
             status_code=400,
         )
 
+    if action == "estimate":
+        precheck_notice = None
+        try:
+            precheck = estimate_total_observations(
+                inat_user_id=user_id_int,
+                inat_username=username,
+                place_query=place_query_clean or None,
+                taxon_filter=taxon_filter_clean or None,
+            )
+            precheck_eta = estimate_precheck_from_observations(precheck["total_results"])
+            precheck_notice = (
+                f"Pre-check estimate: about {precheck['total_results']} matching observations. "
+                f"Rough export size around {precheck_eta['eligible_items']} pages; likely completion {precheck_eta['eta_likely']} "
+                f"(best {precheck_eta['eta_best']}, worst {precheck_eta['eta_worst']}). "
+                "For faster turnaround, narrow by genus and/or a smaller place."
+            )
+        except Exception as exc:
+            precheck_notice = f"Pre-check estimate unavailable: {exc}"
+
+        return templates.TemplateResponse(
+            "index.html",
+            {
+                "request": request,
+                "app_name": settings.app_name,
+                "lists": lists,
+                "page": page,
+                "pages": pages,
+                "dna_field_id": dna_field_clean,
+                "public_downloads_enabled": settings.export_public_downloads_enabled,
+                **form_context,
+                "precheck_notice": precheck_notice,
+            },
+            status_code=200,
+        )
+
     obs_list = models.ObservationList(
         title=title,
-        description=description.strip() or None,
+        description=description_clean or None,
         inat_user_id=user_id_int,
         inat_username=username,
         inat_place_id=None,
-        place_query=place_query.strip() or None,
-        inat_dna_field_id=dna_field_id.strip() or settings.inat_dna_field_id,
-        taxon_filter=taxon_filter.strip() or None,
+        place_query=place_query_clean or None,
+        inat_dna_field_id=dna_field_clean or settings.inat_dna_field_id,
+        taxon_filter=taxon_filter_clean or None,
     )
     db.add(obs_list)
     db.commit()
@@ -291,6 +367,7 @@ def list_page(
         .scalar()
         or 0
     )
+    export_eta = estimate_list_export_eta(db, obs_list.id) if settings.enable_pdf_exports else None
     obs_pages = max(1, (total_obs + OBS_PAGE_SIZE - 1) // OBS_PAGE_SIZE)
     observations = (
         db.query(models.Observation)
@@ -315,6 +392,8 @@ def list_page(
             "pdf_exports_enabled": settings.enable_pdf_exports,
             "public_downloads_enabled": settings.export_public_downloads_enabled,
             "export_notice": export_notice,
+            "export_eta": export_eta,
+            "limits_explanation": "These limits are in place to keep exports dependable for everyone, protect shared VPS resources, and respect iNaturalist API/media capacity.",
         },
     )
 
@@ -344,6 +423,8 @@ def exports_center(
                 "published_job_urls": {},
                 "published_latest_urls": {},
                 "notice": notice,
+                "eta_by_list": {},
+                "limits_explanation": "These limits are in place to keep exports dependable for everyone, protect shared VPS resources, and respect iNaturalist API/media capacity.",
             },
             status_code=503,
         )
@@ -362,9 +443,11 @@ def exports_center(
     artifacts_by_job: dict[int, list[models.ExportArtifact]] = {}
     published_job_urls: dict[int, str] = {}
     published_latest_urls: dict[int, str] = {}
+    eta_by_list: dict[int, dict[str, object]] = {}
     for obs_list in lists:
         jobs = list_jobs_for_list(db, obs_list.id, limit=6)
         jobs_by_list[obs_list.id] = jobs
+        eta_by_list[obs_list.id] = estimate_list_export_eta(db, obs_list.id)
         for job in jobs:
             artifacts_by_job[job.id] = list_artifacts_for_job(db, job.id)
             for artifact in artifacts_by_job[job.id]:
@@ -392,6 +475,8 @@ def exports_center(
             "published_job_urls": published_job_urls,
             "published_latest_urls": published_latest_urls,
             "notice": notice,
+            "eta_by_list": eta_by_list,
+            "limits_explanation": "These limits are in place to keep exports dependable for everyone, protect shared VPS resources, and respect iNaturalist API/media capacity.",
         },
     )
 

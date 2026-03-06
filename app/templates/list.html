@@ -52,6 +52,21 @@
             <div class="muted">{{ list.place_query if list.place_query else "None" }}</div>
           </div>
         </div>
+        {% if export_eta %}
+          <div class="card" style="margin-top: 12px; padding: 12px;">
+            <strong>Export workload estimate</strong>
+            <div class="muted" style="margin-top: 6px;">
+              Observations: {{ export_eta.observation_count }} |
+              Exportable pages: {{ export_eta.eligible_items }} |
+              Likely completion: {{ export_eta.eta_likely }} (best {{ export_eta.eta_best }}, worst {{ export_eta.eta_worst }})
+            </div>
+            <div class="muted" style="margin-top: 4px;">
+              Queue bucket: {{ export_eta.bucket }} | Pace estimate: {{ export_eta.items_per_run }} items/run, {{ export_eta.runs_per_day }} runs/day.
+            </div>
+            <div class="muted" style="margin-top: 4px;"><strong>Why limits exist:</strong> {{ limits_explanation }}</div>
+            <div class="muted" style="margin-top: 4px;">If timing is too long, narrow by genus and/or a more specific place before queueing.</div>
+          </div>
+        {% endif %}
         <div style="margin-top: 16px;">
           <a class="btn" href="/lists/{{ list.id }}?refresh=true">Refresh now</a>
           <a class="btn secondary" href="/">Back to lists</a>
