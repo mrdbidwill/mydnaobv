@@ -267,7 +267,7 @@ def _place_error_message(client: httpx.Client, base: str, place_query: str) -> s
         )
     return (
         "Could not resolve place/location filter. Try a broader or clearer iNaturalist place "
-        "such as 'Alabama, US'."
+        "such as 'Alabama, US' or county format 'Winston County, US, AL'."
     )
 
 
