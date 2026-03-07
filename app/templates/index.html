@@ -14,6 +14,7 @@
         <p style="color: #1f6f43;">{{ precheck_notice }}</p>
       {% endif %}
       <form method="post" action="/lists/create" class="grid">
+        <input type="hidden" name="sort" value="{{ sort if sort else 'title_asc' }}" />
         <label>
           List title (save as)
           <input class="input" type="text" name="title" value="{{ form_title }}" placeholder="County-State-NameIt" required />
@@ -58,6 +59,30 @@
     <div class="card">
       <h2>Saved lists</h2>
       {% if lists and lists|length > 0 %}
+        <div style="margin-top: 12px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          {% if page > 1 %}
+            <a class="btn secondary" href="/?page={{ page - 1 }}&sort={{ sort }}">Previous</a>
+          {% endif %}
+          {% if page < pages %}
+            <a class="btn secondary" href="/?page={{ page + 1 }}&sort={{ sort }}">Next</a>
+          {% endif %}
+          <span class="muted">Page {{ page }} of {{ pages }}</span>
+          <form method="get" action="/" style="display: inline-flex; align-items: center; gap: 6px;">
+            <input type="hidden" name="sort" value="{{ sort }}" />
+            <label class="muted" for="index-page-goto-top">Go to page</label>
+            <input id="index-page-goto-top" class="input" type="number" name="page" min="1" max="{{ pages }}" value="{{ page }}" style="width: 96px;" />
+            <button class="btn secondary" type="submit">Go</button>
+          </form>
+          <form method="get" action="/" style="display: inline-flex; align-items: center; gap: 6px;">
+            <input type="hidden" name="page" value="1" />
+            <label class="muted" for="index-sort">Sort</label>
+            <select id="index-sort" class="input" name="sort" style="width: 180px;">
+              <option value="title_asc" {% if sort == "title_asc" %}selected{% endif %}>Title A to Z</option>
+              <option value="created_desc" {% if sort == "created_desc" %}selected{% endif %}>Newest first</option>
+            </select>
+            <button class="btn secondary" type="submit">Apply</button>
+          </form>
+        </div>
         <table>
           <thead>
             <tr>
@@ -88,14 +113,29 @@
             {% endfor %}
           </tbody>
         </table>
-        <div style="margin-top: 12px;">
+        <div style="margin-top: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
           {% if page > 1 %}
-            <a class="btn secondary" href="/?page={{ page - 1 }}">Previous</a>
+            <a class="btn secondary" href="/?page={{ page - 1 }}&sort={{ sort }}">Previous</a>
           {% endif %}
           {% if page < pages %}
-            <a class="btn secondary" href="/?page={{ page + 1 }}">Next</a>
+            <a class="btn secondary" href="/?page={{ page + 1 }}&sort={{ sort }}">Next</a>
           {% endif %}
-          <span class="muted" style="margin-left: 8px;">Page {{ page }} of {{ pages }}</span>
+          <span class="muted">Page {{ page }} of {{ pages }}</span>
+          <form method="get" action="/" style="display: inline-flex; align-items: center; gap: 6px;">
+            <input type="hidden" name="sort" value="{{ sort }}" />
+            <label class="muted" for="index-page-goto-bottom">Go to page</label>
+            <input id="index-page-goto-bottom" class="input" type="number" name="page" min="1" max="{{ pages }}" value="{{ page }}" style="width: 96px;" />
+            <button class="btn secondary" type="submit">Go</button>
+          </form>
+          <form method="get" action="/" style="display: inline-flex; align-items: center; gap: 6px;">
+            <input type="hidden" name="page" value="1" />
+            <label class="muted" for="index-sort-bottom">Sort</label>
+            <select id="index-sort-bottom" class="input" name="sort" style="width: 180px;">
+              <option value="title_asc" {% if sort == "title_asc" %}selected{% endif %}>Title A to Z</option>
+              <option value="created_desc" {% if sort == "created_desc" %}selected{% endif %}>Newest first</option>
+            </select>
+            <button class="btn secondary" type="submit">Apply</button>
+          </form>
         </div>
       {% else %}
         <div class="empty">

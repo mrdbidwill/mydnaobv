@@ -23,6 +23,9 @@ Purpose: persistent decision/history log for future chat sessions and implementa
 - Added pagination UX updates after county-scale seeding:
   - Admin saved-lists view now paginates.
   - Admin and Export Center both include a direct "Go to page" control.
+- Homepage (`/`) saved-lists section now includes:
+  - top + bottom pagination controls with "Go to page"
+  - sortable order (`Title A to Z` / `Newest first`) to find county lists faster
 
 ## Routine Update Rule
 On each major decision or architecture change:

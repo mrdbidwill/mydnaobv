@@ -41,17 +41,36 @@ DOWNLOAD_PAGE_SIZE = 20
 ADMIN_PAGE_SIZE = 25
 
 
-def load_index_lists(db: Session, page: int) -> tuple[list[models.ObservationList], int]:
+def normalize_index_sort(sort: str | None) -> str:
+    candidate = (sort or "").strip().lower()
+    if candidate in ("title_asc", "created_desc"):
+        return candidate
+    return "title_asc"
+
+
+def load_index_lists(
+    db: Session,
+    page: int,
+    sort: str,
+) -> tuple[list[models.ObservationList], int, int, str]:
+    normalized_sort = normalize_index_sort(sort)
     total = db.query(func.count(models.ObservationList.id)).scalar() or 0
+    pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
+    current_page = min(page, pages)
+
+    if normalized_sort == "created_desc":
+        order_clause = (models.ObservationList.created_at.desc(), models.ObservationList.id.desc())
+    else:
+        order_clause = (models.ObservationList.title.asc(), models.ObservationList.id.asc())
+
     lists = (
         db.query(models.ObservationList)
-        .order_by(models.ObservationList.created_at.desc())
-        .offset((page - 1) * PAGE_SIZE)
+        .order_by(*order_clause)
+        .offset((current_page - 1) * PAGE_SIZE)
         .limit(PAGE_SIZE)
         .all()
     )
-    pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
-    return lists, pages
+    return lists, pages, current_page, normalized_sort
 
 
 def utc_now_naive() -> datetime:
@@ -159,8 +178,13 @@ def require_export_access(credentials: HTTPBasicCredentials = Depends(security))
 
 
 @app.get("/")
-def index(request: Request, page: int = Query(default=1, ge=1), db: Session = Depends(get_db)):
-    lists, pages = load_index_lists(db, page)
+def index(
+    request: Request,
+    page: int = Query(default=1, ge=1),
+    sort: str = Query(default="title_asc"),
+    db: Session = Depends(get_db),
+):
+    lists, pages, current_page, normalized_sort = load_index_lists(db, page, sort)
 
     return templates.TemplateResponse(
         "index.html",
@@ -168,8 +192,9 @@ def index(request: Request, page: int = Query(default=1, ge=1), db: Session = De
             "request": request,
             "app_name": settings.app_name,
             "lists": lists,
-            "page": page,
+            "page": current_page,
             "pages": pages,
+            "sort": normalized_sort,
             "dna_field_id": settings.inat_dna_field_id or "",
             "public_downloads_enabled": settings.export_public_downloads_enabled,
             "form_title": "",
@@ -196,10 +221,12 @@ def create_list(
     taxon_filter: str = Form(default=""),
     place_query: str = Form(default=""),
     action: str = Form(default="save"),
+    sort: str = Form(default="title_asc"),
     db: Session = Depends(get_db),
 ):
     page = 1
-    lists, pages = load_index_lists(db, page)
+    normalized_sort = normalize_index_sort(sort)
+    lists, pages, current_page, _ = load_index_lists(db, page, normalized_sort)
     title = title.strip()
     description_clean = description.strip()
     inat_user_id_raw = (inat_user_id or "").strip()
@@ -218,6 +245,7 @@ def create_list(
         "form_taxon_filter": taxon_filter_clean,
         "precheck_notice": None,
         "limits_explanation": "These limits are in place to keep exports dependable for everyone, protect shared VPS resources, and respect iNaturalist API/media capacity.",
+        "sort": normalized_sort,
     }
 
     if not title:
@@ -228,8 +256,9 @@ def create_list(
                 "app_name": settings.app_name,
                 "error": "Please provide a list title.",
                 "lists": lists,
-                "page": page,
+                "page": current_page,
                 "pages": pages,
+                "sort": normalized_sort,
                 "dna_field_id": dna_field_clean,
                 "public_downloads_enabled": settings.export_public_downloads_enabled,
                 **form_context,
@@ -246,8 +275,9 @@ def create_list(
                 "app_name": settings.app_name,
                 "error": user_error,
                 "lists": lists,
-                "page": page,
+                "page": current_page,
                 "pages": pages,
+                "sort": normalized_sort,
                 "dna_field_id": dna_field_clean,
                 "public_downloads_enabled": settings.export_public_downloads_enabled,
                 **form_context,
@@ -288,8 +318,9 @@ def create_list(
                 "request": request,
                 "app_name": settings.app_name,
                 "lists": lists,
-                "page": page,
+                "page": current_page,
                 "pages": pages,
+                "sort": normalized_sort,
                 "dna_field_id": dna_field_clean,
                 "public_downloads_enabled": settings.export_public_downloads_enabled,
                 **form_context,
