@@ -38,6 +38,7 @@ PAGE_SIZE = 10
 OBS_PAGE_SIZE = 15
 EXPORT_PAGE_SIZE = 12
 DOWNLOAD_PAGE_SIZE = 20
+ADMIN_PAGE_SIZE = 25
 
 
 def load_index_lists(db: Session, page: int) -> tuple[list[models.ObservationList], int]:
@@ -672,12 +673,19 @@ def admin_page(
     request: Request,
     notice: Optional[str] = Query(default=None),
     error: Optional[str] = Query(default=None),
+    page: int = Query(default=1, ge=1),
     db: Session = Depends(get_db),
     _: bool = Depends(require_admin),
 ):
+    total = db.query(func.count(models.ObservationList.id)).scalar() or 0
+    pages = max(1, (total + ADMIN_PAGE_SIZE - 1) // ADMIN_PAGE_SIZE)
+    current_page = min(page, pages)
+
     lists = (
         db.query(models.ObservationList)
         .order_by(models.ObservationList.created_at.desc())
+        .offset((current_page - 1) * ADMIN_PAGE_SIZE)
+        .limit(ADMIN_PAGE_SIZE)
         .all()
     )
     return templates.TemplateResponse(
@@ -685,6 +693,8 @@ def admin_page(
         {
             "request": request,
             "lists": lists,
+            "page": current_page,
+            "pages": pages,
             "max_observations": settings.max_observations,
             "notice": notice,
             "error": error,

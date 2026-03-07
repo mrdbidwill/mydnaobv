@@ -20,6 +20,9 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - Added canonical project resolution against iNaturalist (`/projects/{id_or_slug}` / autocomplete fallback).
   - Admin county seeding now validates project IDs/slugs before creating county lists.
   - Sync/estimate now return clear project-not-found validation errors instead of raw `422` URLs.
+- Added pagination UX updates after county-scale seeding:
+  - Admin saved-lists view now paginates.
+  - Admin and Export Center both include a direct "Go to page" control.
 
 ## Routine Update Rule
 On each major decision or architecture change:

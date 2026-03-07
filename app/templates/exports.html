@@ -130,14 +130,19 @@
           </tbody>
         </table>
 
-        <div style="margin-top: 12px;">
+        <div style="margin-top: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
           {% if page > 1 %}
             <a class="btn secondary" href="/exports?page={{ page - 1 }}">Previous</a>
           {% endif %}
           {% if page < pages %}
             <a class="btn secondary" href="/exports?page={{ page + 1 }}">Next</a>
           {% endif %}
-          <span class="muted" style="margin-left: 8px;">Page {{ page }} of {{ pages }}</span>
+          <span class="muted">Page {{ page }} of {{ pages }}</span>
+          <form method="get" action="/exports" style="display: inline-flex; align-items: center; gap: 6px;">
+            <label class="muted" for="exports-page-goto">Go to page</label>
+            <input id="exports-page-goto" class="input" type="number" name="page" min="1" max="{{ pages }}" value="{{ page }}" style="width: 96px;" />
+            <button class="btn secondary" type="submit">Go</button>
+          </form>
         </div>
       {% else %}
         <div class="empty">
