@@ -31,6 +31,20 @@
     <div class="card">
       <h3>Lists available for export</h3>
       {% if lists and lists|length > 0 %}
+        <div style="margin-top: 12px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          {% if page > 1 %}
+            <a class="btn secondary" href="/exports?page={{ page - 1 }}">Previous</a>
+          {% endif %}
+          {% if page < pages %}
+            <a class="btn secondary" href="/exports?page={{ page + 1 }}">Next</a>
+          {% endif %}
+          <span class="muted">Page {{ page }} of {{ pages }}</span>
+          <form method="get" action="/exports" style="display: inline-flex; align-items: center; gap: 6px;">
+            <label class="muted" for="exports-page-goto-top">Go to page</label>
+            <input id="exports-page-goto-top" class="input" type="number" name="page" min="1" max="{{ pages }}" value="{{ page }}" style="width: 96px;" />
+            <button class="btn secondary" type="submit">Go</button>
+          </form>
+        </div>
         <table>
           <thead>
             <tr>
@@ -139,8 +153,8 @@
           {% endif %}
           <span class="muted">Page {{ page }} of {{ pages }}</span>
           <form method="get" action="/exports" style="display: inline-flex; align-items: center; gap: 6px;">
-            <label class="muted" for="exports-page-goto">Go to page</label>
-            <input id="exports-page-goto" class="input" type="number" name="page" min="1" max="{{ pages }}" value="{{ page }}" style="width: 96px;" />
+            <label class="muted" for="exports-page-goto-bottom">Go to page</label>
+            <input id="exports-page-goto-bottom" class="input" type="number" name="page" min="1" max="{{ pages }}" value="{{ page }}" style="width: 96px;" />
             <button class="btn secondary" type="submit">Go</button>
           </form>
         </div>
