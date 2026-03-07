@@ -19,6 +19,7 @@ class ObservationList(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     inat_user_id: Mapped[Optional[int]] = mapped_column(Integer, index=True, nullable=True)
     inat_username: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    inat_project_id: Mapped[Optional[str]] = mapped_column(String(255), index=True, nullable=True)
     inat_place_id: Mapped[Optional[int]] = mapped_column(Integer, index=True, nullable=True)
     place_query: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     inat_dna_field_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)

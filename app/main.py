@@ -24,6 +24,7 @@ from app.exports.publish import latest_artifact_exists, published_job_url, publi
 from app.exports.estimate import estimate_list_export_eta, estimate_precheck_from_observations
 from app.services.inat import fetch_observations_for_list
 from app.services.inat import estimate_total_observations
+from app.services.us_counties import STATE_OPTIONS, fetch_counties_for_state, normalize_state_code
 
 
 templates = Jinja2Templates(directory="app/templates")
@@ -84,6 +85,37 @@ def parse_user_filters(inat_user_id_raw: str, inat_username_raw: str) -> tuple[O
         return None, None, "Provide either an iNaturalist user ID or iNaturalist username."
 
     return user_id_int, username, None
+
+
+def parse_optional_user_filters(
+    inat_user_id_raw: str,
+    inat_username_raw: str,
+) -> tuple[Optional[int], Optional[str], Optional[str]]:
+    user_id_text = (inat_user_id_raw or "").strip()
+    username = (inat_username_raw or "").strip() or None
+    user_id_int: Optional[int] = None
+
+    if user_id_text:
+        try:
+            user_id_int = int(user_id_text)
+            if user_id_int <= 0:
+                raise ValueError
+        except ValueError:
+            return None, None, "Please provide a valid numeric iNaturalist user ID."
+
+    if username and " " in username:
+        return None, None, "iNaturalist username cannot contain spaces."
+
+    return user_id_int, username, None
+
+
+def parse_project_filter(inat_project_id_raw: str) -> tuple[Optional[str], Optional[str]]:
+    project_id = (inat_project_id_raw or "").strip()
+    if not project_id:
+        return None, None
+    if " " in project_id:
+        return None, "iNaturalist project ID/slug cannot contain spaces."
+    return project_id, None
 
 
 def require_admin(credentials: HTTPBasicCredentials = Depends(security)):
@@ -637,6 +669,8 @@ def download_export_artifact_by_job(
 @app.get("/admin")
 def admin_page(
     request: Request,
+    notice: Optional[str] = Query(default=None),
+    error: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
     _: bool = Depends(require_admin),
 ):
@@ -647,8 +681,94 @@ def admin_page(
     )
     return templates.TemplateResponse(
         "admin.html",
-        {"request": request, "lists": lists, "max_observations": settings.max_observations},
+        {
+            "request": request,
+            "lists": lists,
+            "max_observations": settings.max_observations,
+            "notice": notice,
+            "error": error,
+            "state_options": STATE_OPTIONS,
+            "default_state_code": "AL",
+            "default_project_id": settings.inat_default_project_id or "",
+        },
     )
+
+
+@app.post("/admin/projects/county-seed")
+def admin_seed_project_counties(
+    inat_project_id: str = Form(...),
+    state_code: str = Form(...),
+    description_prefix: str = Form(default=""),
+    db: Session = Depends(get_db),
+    _: bool = Depends(require_admin),
+):
+    project_id, project_error = parse_project_filter(inat_project_id)
+    if project_error:
+        return RedirectResponse(url=f"/admin?error={quote(project_error)}", status_code=303)
+    if not project_id:
+        return RedirectResponse(
+            url="/admin?error=Please+provide+an+iNaturalist+project+ID+or+slug.",
+            status_code=303,
+        )
+
+    normalized_state = normalize_state_code(state_code)
+    if not normalized_state:
+        return RedirectResponse(url="/admin?error=Please+select+a+valid+US+state.", status_code=303)
+
+    try:
+        county_rows = fetch_counties_for_state(normalized_state)
+    except Exception as exc:
+        return RedirectResponse(
+            url=f"/admin?error={quote(f'Unable to load county list: {exc}')}",
+            status_code=303,
+        )
+
+    created = 0
+    skipped_existing = 0
+    description_prefix_clean = (description_prefix or "").strip()
+
+    for row in county_rows:
+        existing = (
+            db.query(models.ObservationList)
+            .filter(
+                models.ObservationList.inat_project_id == project_id,
+                models.ObservationList.place_query == row.place_query,
+            )
+            .first()
+        )
+        if existing:
+            skipped_existing += 1
+            continue
+
+        title = f"{row.county_name}-{normalized_state} — {project_id}"
+        description_parts = [
+            "Auto-generated county list.",
+            f"Project: {project_id}.",
+            f"Place: {row.place_query}.",
+        ]
+        if description_prefix_clean:
+            description_parts.insert(0, description_prefix_clean)
+
+        obs_list = models.ObservationList(
+            title=title,
+            description=" ".join(description_parts),
+            inat_user_id=None,
+            inat_username=None,
+            inat_project_id=project_id,
+            inat_place_id=None,
+            place_query=row.place_query,
+            inat_dna_field_id=settings.inat_dna_field_id,
+            taxon_filter=None,
+        )
+        db.add(obs_list)
+        created += 1
+
+    db.commit()
+    notice = (
+        f"County seeding complete for {normalized_state} and project {project_id}: "
+        f"created {created}, skipped existing {skipped_existing}, total counties {len(county_rows)}."
+    )
+    return RedirectResponse(url=f"/admin?notice={quote(notice)}", status_code=303)
 
 
 @app.post("/admin/lists/{list_id}/delete")
@@ -701,6 +821,7 @@ def edit_list(
     description: str = Form(default=""),
     inat_user_id: str = Form(default=""),
     inat_username: str = Form(default=""),
+    inat_project_id: str = Form(default=""),
     dna_field_id: str = Form(default=""),
     taxon_filter: str = Form(default=""),
     place_query: str = Form(default=""),
@@ -732,7 +853,7 @@ def edit_list(
             status_code=400,
         )
 
-    user_id_int, username, user_error = parse_user_filters(inat_user_id, inat_username)
+    user_id_int, username, user_error = parse_optional_user_filters(inat_user_id, inat_username)
     if user_error:
         return templates.TemplateResponse(
             "list.html",
@@ -745,10 +866,36 @@ def edit_list(
             status_code=400,
         )
 
+    project_id, project_error = parse_project_filter(inat_project_id)
+    if project_error:
+        return templates.TemplateResponse(
+            "list.html",
+            {
+                "request": request,
+                "list": obs_list,
+                "observations": [],
+                "error": project_error,
+            },
+            status_code=400,
+        )
+
+    if user_id_int is None and not username and not project_id:
+        return templates.TemplateResponse(
+            "list.html",
+            {
+                "request": request,
+                "list": obs_list,
+                "observations": [],
+                "error": "Provide an iNaturalist user ID, username, or project ID/slug.",
+            },
+            status_code=400,
+        )
+
     obs_list.title = title
     obs_list.description = description.strip() or None
     obs_list.inat_user_id = user_id_int
     obs_list.inat_username = username
+    obs_list.inat_project_id = project_id
     new_place_query = place_query.strip() or None
     if obs_list.place_query != new_place_query:
         obs_list.inat_place_id = None

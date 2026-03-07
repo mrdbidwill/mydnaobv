@@ -2,6 +2,10 @@
 
 A lightweight, maintainable FastAPI app that displays iNaturalist observations filtered by the “DNA Barcode ITS” observation field. Lists can be keyed by iNaturalist numeric user ID, username, and optional county/address filter.
 
+Project continuity docs:
+- `docs/PROJECT_MEMORY.md` (dated decision/history log for future sessions)
+- `docs/KVM4_COUNTY_PIPELINE_ROADMAP.md` (staged plan for KVM4 + county-product pipeline)
+
 ## Quick start
 
 1. Create a virtual environment and install deps:
@@ -124,11 +128,16 @@ Suggested cron entries (KVM 1):
 ## Development notes
 
 - The iNaturalist sync logic in `app/services/inat.py` supports either user ID or username, and verifies username/ID consistency when both are provided.
+- Lists can also be filtered by iNaturalist project ID/slug (`inat_project_id`).
 - iNaturalist place/location filters are resolved through places lookup and applied as `place_id` to keep list sizes manageable.
 - The sync logic filters results using the observation field ID (default `2330`) and also sends the field name filter (default `DNA Barcode ITS`) to the API when possible.
 - Important: avoid similarly named `DNA Barcode ITS:` (with colon); that is a different field.
 - All photo metadata for each synced observation is cached in `observation_photos`; export mode can use primary photo only or multiple photos.
 - iNaturalist sync now caches primary photo URL/license/attribution to support compliant offline exports.
+- Admin page includes county seeding by project:
+  - pick a US state
+  - provide project slug/ID
+  - generate one list per county with `place_query` + `inat_project_id`
 - Published downloads are written to `EXPORT_PUBLISH_DIR` as:
   - `list_<list_id>/latest/<file>`
   - `list_<list_id>/job_<job_id>/<file>`

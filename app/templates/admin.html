@@ -5,6 +5,36 @@
       <h2>Admin</h2>
       <p class="muted">Manage lists and trigger syncs. Sync is capped at {{ max_observations }} observations to respect iNaturalist resources.</p>
       <a class="btn secondary" href="/exports">Open Export Center</a>
+      {% if notice %}
+        <p style="color: #1f6f43; margin-top: 10px;">{{ notice }}</p>
+      {% endif %}
+      {% if error %}
+        <p style="color: #b42318; margin-top: 10px;">{{ error }}</p>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <h3>Seed County Lists By Project</h3>
+      <p class="muted">Create one list per county for a selected US state using an iNaturalist project filter.</p>
+      <form method="post" action="/admin/projects/county-seed" class="grid">
+        <label>
+          iNaturalist project ID or slug
+          <input class="input" type="text" name="inat_project_id" value="{{ default_project_id }}" placeholder="e.g., fungi-of-alabama-ams-fundis-local-project" required />
+        </label>
+        <label>
+          State
+          <select class="input" name="state_code">
+            {% for code, label in state_options %}
+              <option value="{{ code }}" {% if code == default_state_code %}selected{% endif %}>{{ label }} ({{ code }})</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          Optional description prefix
+          <input class="input" type="text" name="description_prefix" placeholder="e.g., Fungi of Alabama AMS Fundis Local" />
+        </label>
+        <button class="btn" type="submit">Create county lists</button>
+      </form>
     </div>
 
     <div class="card">
@@ -15,6 +45,7 @@
             <tr>
               <th>Title</th>
               <th>User Filter</th>
+              <th>Project</th>
               <th>Place</th>
               <th>DNA Field</th>
               <th>Taxon</th>
@@ -36,6 +67,7 @@
                   {% if list.inat_user_id and list.inat_username %}<br>{% endif %}
                   {% if list.inat_username %}{{ list.inat_username }}{% endif %}
                 </td>
+                <td>{{ list.inat_project_id if list.inat_project_id else "" }}</td>
                 <td>{{ list.place_query if list.place_query else "" }}</td>
                 <td>
                   {% if list.inat_dna_field_id %}

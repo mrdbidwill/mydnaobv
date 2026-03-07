@@ -33,6 +33,10 @@
         </div>
         <div class="row" style="margin-top: 8px;">
           <div>
+            <strong>iNaturalist project filter</strong>
+            <div class="muted">{{ list.inat_project_id if list.inat_project_id else "None" }}</div>
+          </div>
+          <div>
             <strong>DNA field ID</strong>
             <div class="muted">
               {% if list.inat_dna_field_id %}
@@ -148,6 +152,10 @@
           <label>
             iNaturalist username (optional)
             <input class="input" type="text" name="inat_username" value="{{ list.inat_username if list.inat_username else '' }}" placeholder="e.g., cabracrazy" />
+          </label>
+          <label>
+            iNaturalist project ID or slug (optional)
+            <input class="input" type="text" name="inat_project_id" value="{{ list.inat_project_id if list.inat_project_id else '' }}" placeholder="e.g., fungi-of-alabama-ams-fundis-local-project" />
           </label>
           <label>
             iNaturalist place/location filter (optional)

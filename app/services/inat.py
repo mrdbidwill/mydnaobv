@@ -277,6 +277,7 @@ def estimate_total_observations(
     inat_username: Optional[str],
     place_query: Optional[str],
     taxon_filter: Optional[str],
+    inat_project_id: Optional[str] = None,
 ) -> dict[str, Any]:
     base = settings.inat_base_url.rstrip("/")
     url = f"{base}/observations"
@@ -285,12 +286,13 @@ def estimate_total_observations(
 
     resolved_user_id: Optional[int] = inat_user_id
     normalized_username = (inat_username or "").strip()
+    normalized_project_id = (inat_project_id or "").strip()
     resolved_place_id: Optional[int] = None
     resolved_place_name: Optional[str] = None
 
     with httpx.Client(timeout=timeout, headers=headers) as client:
-        if resolved_user_id is None and not normalized_username:
-            raise ValueError("Provide an iNaturalist user ID or username.")
+        if resolved_user_id is None and not normalized_username and not normalized_project_id:
+            raise ValueError("Provide an iNaturalist user ID, username, or project ID/slug.")
 
         if resolved_user_id is not None:
             detail = _fetch_user_detail_by_id(client, base, int(resolved_user_id))
@@ -317,7 +319,7 @@ def estimate_total_observations(
                     )
                 if row_login:
                     normalized_username = row_login
-        else:
+        elif normalized_username:
             user_row = _find_user_by_login(client, base, normalized_username)
             if not user_row:
                 raise ValueError("Could not find iNaturalist username.")
@@ -347,6 +349,8 @@ def estimate_total_observations(
             params["user_id"] = resolved_user_id
         elif normalized_username:
             params["user_login"] = normalized_username
+        if normalized_project_id:
+            params["project_id"] = normalized_project_id
         if settings.inat_dna_field_name:
             params[f"field:{settings.inat_dna_field_name}"] = ""
         cleaned_taxon = (taxon_filter or "").strip()
@@ -375,6 +379,7 @@ def fetch_observations_for_list(obs_list: models.ObservationList) -> Iterable[In
 
     Intended filters:
     - user_id or user login
+    - project_id slug/numeric ID
     - county/address (resolved to place_id)
     - observation field: DNA Barcode ITS
     - taxon: Fungi (default: 47170)
@@ -411,10 +416,11 @@ def fetch_observations_for_list(obs_list: models.ObservationList) -> Iterable[In
 
     with httpx.Client(timeout=timeout, headers=headers) as client:
         normalized_username = (obs_list.inat_username or "").strip()
+        normalized_project_id = (obs_list.inat_project_id or "").strip()
         resolved_user_id: Optional[int] = obs_list.inat_user_id
 
-        if resolved_user_id is None and not normalized_username:
-            raise ValueError("Provide an iNaturalist user ID or username.")
+        if resolved_user_id is None and not normalized_username and not normalized_project_id:
+            raise ValueError("Provide an iNaturalist user ID, username, or project ID/slug.")
 
         if resolved_user_id is not None:
             detail = _fetch_user_detail_by_id(client, base, int(resolved_user_id))
@@ -445,7 +451,7 @@ def fetch_observations_for_list(obs_list: models.ObservationList) -> Iterable[In
                 if row_login:
                     obs_list.inat_username = row_login
                     normalized_username = row_login
-        else:
+        elif normalized_username:
             user_row = _find_user_by_login(client, base, normalized_username)
             if not user_row:
                 raise ValueError("Could not find iNaturalist username.")
@@ -481,6 +487,8 @@ def fetch_observations_for_list(obs_list: models.ObservationList) -> Iterable[In
                 params["user_id"] = resolved_user_id
             elif normalized_username:
                 params["user_login"] = normalized_username
+            if normalized_project_id:
+                params["project_id"] = normalized_project_id
             if settings.inat_dna_field_name:
                 # iNaturalist search URL syntax supports field filters.
                 params[f"field:{settings.inat_dna_field_name}"] = ""
