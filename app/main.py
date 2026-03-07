@@ -24,6 +24,7 @@ from app.exports.publish import latest_artifact_exists, published_job_url, publi
 from app.exports.estimate import estimate_list_export_eta, estimate_precheck_from_observations
 from app.services.inat import fetch_observations_for_list
 from app.services.inat import estimate_total_observations
+from app.services.inat import resolve_project_filter
 from app.services.us_counties import STATE_OPTIONS, fetch_counties_for_state, normalize_state_code
 
 
@@ -710,6 +711,13 @@ def admin_seed_project_counties(
             url="/admin?error=Please+provide+an+iNaturalist+project+ID+or+slug.",
             status_code=303,
         )
+    try:
+        canonical_project_id, _, project_title = resolve_project_filter(project_id)
+    except Exception as exc:
+        return RedirectResponse(
+            url=f"/admin?error={quote(str(exc))}",
+            status_code=303,
+        )
 
     normalized_state = normalize_state_code(state_code)
     if not normalized_state:
@@ -731,7 +739,7 @@ def admin_seed_project_counties(
         existing = (
             db.query(models.ObservationList)
             .filter(
-                models.ObservationList.inat_project_id == project_id,
+                models.ObservationList.inat_project_id == canonical_project_id,
                 models.ObservationList.place_query == row.place_query,
             )
             .first()
@@ -740,12 +748,14 @@ def admin_seed_project_counties(
             skipped_existing += 1
             continue
 
-        title = f"{row.county_name}-{normalized_state} — {project_id}"
+        title = f"{row.county_name}-{normalized_state} — {canonical_project_id}"
         description_parts = [
             "Auto-generated county list.",
-            f"Project: {project_id}.",
+            f"Project: {canonical_project_id}.",
             f"Place: {row.place_query}.",
         ]
+        if project_title:
+            description_parts.append(f"Project title: {project_title}.")
         if description_prefix_clean:
             description_parts.insert(0, description_prefix_clean)
 
@@ -754,7 +764,7 @@ def admin_seed_project_counties(
             description=" ".join(description_parts),
             inat_user_id=None,
             inat_username=None,
-            inat_project_id=project_id,
+            inat_project_id=canonical_project_id,
             inat_place_id=None,
             place_query=row.place_query,
             inat_dna_field_id=settings.inat_dna_field_id,
@@ -765,7 +775,7 @@ def admin_seed_project_counties(
 
     db.commit()
     notice = (
-        f"County seeding complete for {normalized_state} and project {project_id}: "
+        f"County seeding complete for {normalized_state} and project {canonical_project_id}: "
         f"created {created}, skipped existing {skipped_existing}, total counties {len(county_rows)}."
     )
     return RedirectResponse(url=f"/admin?notice={quote(notice)}", status_code=303)

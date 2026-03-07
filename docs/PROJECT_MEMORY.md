@@ -16,6 +16,10 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - optional place filters
 - Added migration for `observation_lists.inat_project_id`.
 - Added this memory file and roadmap doc to keep progress discoverable.
+- Fixed a production issue where invalid/nonexistent project slugs returned iNaturalist `422` on sync.
+  - Added canonical project resolution against iNaturalist (`/projects/{id_or_slug}` / autocomplete fallback).
+  - Admin county seeding now validates project IDs/slugs before creating county lists.
+  - Sync/estimate now return clear project-not-found validation errors instead of raw `422` URLs.
 
 ## Routine Update Rule
 On each major decision or architecture change:

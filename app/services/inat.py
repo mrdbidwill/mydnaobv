@@ -271,6 +271,69 @@ def _place_error_message(client: httpx.Client, base: str, place_query: str) -> s
     )
 
 
+def _resolve_project_filter_with_client(
+    client: httpx.Client,
+    base: str,
+    project_id_or_slug: str,
+) -> tuple[str, Optional[int], Optional[str]]:
+    raw = (project_id_or_slug or "").strip()
+    if not raw:
+        raise ValueError("Provide an iNaturalist project ID/slug.")
+
+    def normalize_row(row: dict[str, Any]) -> tuple[str, Optional[int], Optional[str]] | None:
+        slug = str(row.get("slug") or "").strip()
+        title = str(row.get("title") or "").strip() or None
+        project_id_raw = row.get("id")
+        project_id_num = int(project_id_raw) if isinstance(project_id_raw, int) else None
+        canonical = slug or (str(project_id_num) if project_id_num is not None else "")
+        if not canonical:
+            return None
+        return canonical, project_id_num, title
+
+    try:
+        resp = client.get(f"{base}/projects/{raw}")
+        resp.raise_for_status()
+        data = resp.json()
+        results = data.get("results") or []
+        if results and isinstance(results[0], dict):
+            normalized = normalize_row(results[0])
+            if normalized:
+                return normalized
+    except Exception:
+        pass
+
+    try:
+        resp = client.get(f"{base}/projects/autocomplete", params={"q": raw, "per_page": 30})
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception:
+        data = {"results": []}
+
+    lower_raw = raw.lower()
+    for row in data.get("results") or []:
+        if not isinstance(row, dict):
+            continue
+        slug = str(row.get("slug") or "").strip().lower()
+        row_id = row.get("id")
+        if slug == lower_raw or (isinstance(row_id, int) and str(row_id) == raw):
+            normalized = normalize_row(row)
+            if normalized:
+                return normalized
+
+    raise ValueError(
+        "Could not find iNaturalist project ID/slug. Use the project's exact slug "
+        "(usually lowercase with hyphens) or numeric project ID."
+    )
+
+
+def resolve_project_filter(project_id_or_slug: str) -> tuple[str, Optional[int], Optional[str]]:
+    base = settings.inat_base_url.rstrip("/")
+    timeout = httpx.Timeout(10.0, connect=5.0)
+    headers = {"User-Agent": "myDNAobv/1.0 (+https://mrdbid.com)"}
+    with httpx.Client(timeout=timeout, headers=headers) as client:
+        return _resolve_project_filter_with_client(client, base, project_id_or_slug)
+
+
 def estimate_total_observations(
     *,
     inat_user_id: Optional[int],
@@ -329,6 +392,10 @@ def estimate_total_observations(
                 resolved_user_id = int(row_id)
             if row_login:
                 normalized_username = row_login
+
+        if normalized_project_id:
+            canonical_project, _, _ = _resolve_project_filter_with_client(client, base, normalized_project_id)
+            normalized_project_id = canonical_project
 
         cleaned_place_query = (place_query or "").strip()
         if cleaned_place_query:
@@ -463,6 +530,11 @@ def fetch_observations_for_list(obs_list: models.ObservationList) -> Iterable[In
             if row_login:
                 obs_list.inat_username = row_login
                 normalized_username = row_login
+
+        if normalized_project_id:
+            canonical_project, _, _ = _resolve_project_filter_with_client(client, base, normalized_project_id)
+            normalized_project_id = canonical_project
+            obs_list.inat_project_id = canonical_project
 
         resolved_place_id: Optional[int] = obs_list.inat_place_id
         place_query = (obs_list.place_query or "").strip()
