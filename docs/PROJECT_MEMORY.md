@@ -55,6 +55,10 @@ Purpose: persistent decision/history log for future chat sessions and implementa
 - Added runbook: `docs/STAGE12_TUNING_RUNBOOK.md` with apply/rollback commands.
 - Backlog for next commit:
   - add admin-protected "Reset all county products" action with strong confirmation
+- Fixed SQLAlchemy relationship mapping issue causing worker warning:
+  - `Observation.photos` / export relationship collections were being interpreted as scalar (`uselist=False`)
+  - normalized explicit collection relationship declarations to enforce list semantics
+  - warning addressed: `SAWarning: Multiple rows returned with uselist=False for ... Observation.photos`
 
 ## Routine Update Rule
 On each major decision or architecture change:

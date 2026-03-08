@@ -58,12 +58,12 @@ class Observation(Base):
     list_id: Mapped[int] = mapped_column(ForeignKey("observation_lists.id"), index=True)
 
     list: Mapped[ObservationList] = relationship(back_populates="observations")
-    photos: Mapped[list["ObservationPhoto"]] = relationship(
+    photos = relationship(
         "ObservationPhoto",
         back_populates="observation",
         uselist=True,
     )
-    export_items: Mapped[list["ExportItem"]] = relationship("ExportItem", back_populates="observation")
+    export_items = relationship("ExportItem", back_populates="observation", uselist=True)
 
 
 class ObservationPhoto(Base):
@@ -116,8 +116,8 @@ class ExportJob(Base):
     last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     list: Mapped[ObservationList] = relationship("ObservationList", back_populates="export_jobs")
-    items: Mapped[list["ExportItem"]] = relationship("ExportItem", back_populates="job")
-    artifacts: Mapped[list["ExportArtifact"]] = relationship("ExportArtifact", back_populates="job")
+    items = relationship("ExportItem", back_populates="job", uselist=True)
+    artifacts = relationship("ExportArtifact", back_populates="job", uselist=True)
 
 
 class ExportItem(Base):
