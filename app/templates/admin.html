@@ -38,7 +38,7 @@
     </div>
 
     <div class="card">
-      <h3>Build Existing State Counties</h3>
+      <h3>Process State Counties</h3>
       <p class="muted">Queue fresh sync+export builds for existing county lists in a state (optionally one project only).</p>
       <form method="post" action="/admin/states/build" class="grid">
         <label>
@@ -53,7 +53,7 @@
           Optional project ID or slug filter
           <input class="input" type="text" name="inat_project_id" value="{{ default_project_id }}" placeholder="Leave blank for all projects in this state" />
         </label>
-        <button class="btn" type="submit">Queue state build</button>
+        <button class="btn" type="submit">Process state</button>
       </form>
     </div>
 

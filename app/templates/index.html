@@ -4,6 +4,7 @@
     <div class="card">
       <h2>County PDF Downloads</h2>
       <p class="muted">Finished county PDFs are built by admins in throttled background jobs to protect server resources and iNaturalist capacity.</p>
+      <p class="muted">Refresh cadence: about every {{ refresh_interval_days }} days. PDFs are offline-friendly; external iNaturalist links require internet access.</p>
       <p class="muted"><strong>Why limits exist:</strong> {{ limits_explanation }}</p>
       <form method="get" action="/" style="display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;">
         <label class="muted" for="state-filter">State</label>
@@ -42,8 +43,10 @@
             <tr>
               <th>County</th>
               <th>Project</th>
+              <th>Refresh</th>
               <th>Status</th>
-              <th>Download</th>
+              <th>Observation List</th>
+              <th>County File</th>
             </tr>
           </thead>
           <tbody>
@@ -55,10 +58,27 @@
                   <div class="muted">{{ list.state_code if list.state_code else "" }}</div>
                 </td>
                 <td>{{ list.inat_project_id if list.inat_project_id else "" }}</td>
+                <td>
+                  {{ row.last_refreshed_label }}
+                  <div class="muted">
+                    {% if row.refresh_due %}
+                      Refresh due (target {{ row.next_refresh_label }})
+                    {% else %}
+                      Next refresh by {{ row.next_refresh_label }}
+                    {% endif %}
+                  </div>
+                </td>
                 <td>{{ row.status_label }}</td>
                 <td>
-                  {% if row.download_url %}
-                    <a class="btn secondary" href="{{ row.download_url }}" target="_blank" rel="noreferrer">Download {{ row.download_label }}</a>
+                  {% if row.index_download_url %}
+                    <a class="btn secondary" href="{{ row.index_download_url }}" target="_blank" rel="noreferrer">Download Observation PDF</a>
+                  {% else %}
+                    <span class="muted">Not ready yet</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if row.county_download_url %}
+                    <a class="btn secondary" href="{{ row.county_download_url }}" target="_blank" rel="noreferrer">Download {{ row.county_download_label }}</a>
                   {% else %}
                     <span class="muted">Not ready yet</span>
                   {% endif %}

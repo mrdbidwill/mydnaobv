@@ -10,9 +10,11 @@ Project continuity docs:
 ## Current flow
 
 - Public homepage `/` shows paginated county download catalog (finished files only).
+  - Separate downloads: county guide file + DNA-confirmed observation index PDF.
+  - Public rows show refresh recency and weekly refresh target.
 - Admin page `/admin` controls:
   - seed counties by state+project
-  - queue state-wide rebuilds
+  - process state-wide rebuilds
   - per-county sync/rebuild/show-hide/delete actions
 - Export queue/worker remains throttled to protect VPS and iNaturalist limits.
 
@@ -59,6 +61,7 @@ This project now supports a modular, queue-based PDF export pipeline for offline
 - Jobs are prioritized smallest to largest (`XS`, `S`, `M`, `L`).
 - Large jobs are limited to an overnight window.
 - If merge pressure is high, output degrades gracefully to split PDFs + ZIP.
+- Every completed job includes `observations_index.pdf` for linked record review.
 - Queue requests use a stale detector: no new job is created when list data has not changed since the latest completed export.
 - Public list creation and browsing remain unchanged.
 - Heavy export controls live on a separate authenticated page: `/exports`.
@@ -92,6 +95,7 @@ EXPORT_PUBLISH_ENABLED=true
 EXPORT_PUBLISH_DIR=/var/www/mydnaobv-downloads
 EXPORT_PUBLISH_BASE_URL=https://downloads.example.org/mydnaobv
 EXPORT_PUBLIC_DOWNLOADS_ENABLED=true
+PUBLIC_REFRESH_INTERVAL_DAYS=7
 ```
 
 ### Rights and license policy
@@ -148,12 +152,13 @@ Suggested cron entries (KVM 1):
   - pick a US state
   - provide project slug/ID
   - generate one list per county with `place_query` + `inat_project_id`
+  - use "Process state" to queue sync+build for existing counties in that state/project
 - Published downloads are written to `EXPORT_PUBLISH_DIR` as:
   - `list_<list_id>/latest/<file>`
   - `list_<list_id>/job_<job_id>/<file>`
 - Pages are server-rendered (Jinja2) for simplicity and durability.
 - The app uses PostgreSQL via SQLAlchemy 2.0.
-- The homepage includes pagination for saved lists.
+- The homepage includes pagination for county download catalog.
 
 ## Environment variables
 

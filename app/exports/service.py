@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from app import models
 from app.exports.config import export_config
 from app.exports.publish import cleanup_published_job, publish_job_artifacts
-from app.exports.pdf_writer import render_part_pdf
+from app.exports.pdf_writer import render_observation_index_pdf, render_part_pdf
 from app.exports.policy import evaluate_license, normalize_license_code
 from app.services.list_sync import sync_list_observations
 
@@ -593,6 +593,21 @@ def _phase_finalize(db: Session, job: models.ExportJob) -> bool:
     readme_path.write_text(_build_readme_text(job), encoding="utf-8")
     _upsert_artifact(db, job.id, "readme", _relative_to_storage(readme_path), None)
 
+    obs_list = db.query(models.ObservationList).filter(models.ObservationList.id == job.list_id).first()
+    observations = (
+        db.query(models.Observation)
+        .filter(models.Observation.list_id == job.list_id)
+        .order_by(models.Observation.observed_at.desc().nullslast(), models.Observation.id.asc())
+        .all()
+    )
+    index_pdf_path = docs_dir / "observations_index.pdf"
+    render_observation_index_pdf(
+        output_path=index_pdf_path,
+        list_title=obs_list.title if obs_list else f"List {job.list_id}",
+        observations=observations,
+    )
+    _upsert_artifact(db, job.id, "observations_index_pdf", _relative_to_storage(index_pdf_path), None)
+
     merged_created = False
     if len(parts) <= max(1, export_config.zip_only_part_threshold):
         merged_path = docs_dir / "all_observations.pdf"
@@ -610,6 +625,7 @@ def _phase_finalize(db: Session, job: models.ExportJob) -> bool:
     zip_path = docs_dir / "observation_export_parts.zip"
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.write(readme_path, arcname="README_FIRST.txt")
+        zf.write(index_pdf_path, arcname="observations_index.pdf")
         for part in parts:
             part_path = _storage_root() / part.relative_path
             arcname = f"parts/{Path(part.relative_path).name}"
@@ -632,9 +648,9 @@ def _phase_finalize(db: Session, job: models.ExportJob) -> bool:
     job.status = "ready" if merged_created else "partial_ready"
     job.finished_at = utc_now_naive()
     job.message = (
-        "Export complete: merged PDF and ZIP ready."
+        "Export complete: county guide PDF, observations index PDF, and ZIP ready."
         if merged_created
-        else "Export complete: ZIP with split PDF parts ready."
+        else "Export complete: observations index PDF and ZIP with split county guide parts ready."
     )
     publish_warning = publish_job_artifacts(job, artifacts, _storage_root())
     if publish_warning:
@@ -865,11 +881,13 @@ def _build_readme_text(job: models.ExportJob) -> str:
         "2. Right-click the ZIP file.\n"
         "3. Click 'Extract All' (or 'Unzip').\n"
         "4. Open the new extracted folder.\n"
-        "5. Open PART files in numeric order (Part 001, Part 002, and so on).\n"
+        "5. Open observations_index.pdf for the linked observation list.\n"
+        "6. Open all_observations.pdf if present, or PART files in numeric order.\n"
         "\n"
         "Why there are multiple files:\n"
         "- Large exports are split into smaller PDFs to keep the server stable.\n"
         + mode_line +
+        "- PDFs are readable offline. External iNaturalist links require internet access.\n"
         "\n"
         "License and attribution notice:\n"
         "- Images are included only when their licenses are allowed by this project policy.\n"

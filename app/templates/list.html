@@ -72,13 +72,8 @@
           </div>
         {% endif %}
         <div style="margin-top: 16px;">
-          <a class="btn secondary" href="/">Back to lists</a>
-          {% if pdf_exports_enabled %}
-            <a class="btn secondary" href="/exports">Export Center (authorized)</a>
-          {% endif %}
-          {% if public_downloads_enabled %}
-            <a class="btn secondary" href="/downloads">Member downloads</a>
-          {% endif %}
+          <a class="btn secondary" href="/">Back to county downloads</a>
+          <a class="btn secondary" href="/admin">Admin controls</a>
         </div>
       {% else %}
         <h2>List not found</h2>
@@ -126,7 +121,7 @@
     {% else %}
       <div class="empty">
         <strong>No observations cached yet.</strong>
-        <p class="muted">This will populate after the iNaturalist sync is implemented and run.</p>
+        <p class="muted">This will populate after a county sync/build runs.</p>
       </div>
     {% endif %}
 

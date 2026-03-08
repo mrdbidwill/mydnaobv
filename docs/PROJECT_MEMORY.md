@@ -33,6 +33,21 @@ Purpose: persistent decision/history log for future chat sessions and implementa
 - Added background build safety improvement:
   - export jobs now support `force_sync` so queue builds can sync observations before rendering PDFs.
 
+## 2026-03-08
+- Implemented split county outputs per completed export job:
+  - `observations_index.pdf` (DNA-confirmed list + iNaturalist links)
+  - existing county guide output (`merged_pdf`, ZIP fallback for large jobs)
+- Public county catalog now surfaces two distinct download buttons:
+  - Observation PDF
+  - County file (PDF/ZIP depending on build size)
+- Added public weekly refresh messaging:
+  - per-county "last refreshed" and "next refresh target"
+  - configurable cadence via `PUBLIC_REFRESH_INTERVAL_DAYS` (default `7`)
+- Clarified offline behavior:
+  - PDF content is offline-friendly
+  - external iNaturalist links still require internet access
+- Admin UX wording updated to "Process state" for state-wide sync+build queue action.
+
 ## Routine Update Rule
 On each major decision or architecture change:
 1. Add one dated entry in this file.

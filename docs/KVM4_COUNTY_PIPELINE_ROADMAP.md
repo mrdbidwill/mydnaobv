@@ -1,6 +1,6 @@
 # KVM4 + County Pipeline Roadmap
 
-Last updated: March 7, 2026
+Last updated: March 8, 2026
 
 ## Objective
 Reduce large-export turnaround time and move to a curated, prebuilt county-product model that protects shared VPS resources.
@@ -27,6 +27,10 @@ Reduce large-export turnaround time and move to a curated, prebuilt county-produ
 - Public homepage now shows county download catalog (finished files).
 - Public custom list creation flow is deprecated.
 - Admin retains full county controls.
+- Public catalog now shows split output downloads:
+  - county guide file
+  - observations index PDF
+- Public rows display weekly refresh recency messaging.
 
 ## Phase 4 (In Progress): Full KVM4 Utilization
 - Move from effectively single-lane worker behavior to safe parallel workers.

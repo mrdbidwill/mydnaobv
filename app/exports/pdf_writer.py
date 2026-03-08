@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 from reportlab.lib.pagesizes import letter
@@ -48,6 +49,14 @@ def _draw_image(c: canvas.Canvas, image_path: Path) -> None:
     x = IMAGE_LEFT + (box_width - draw_w) / 2.0
     y = IMAGE_BOTTOM + (box_height - draw_h) / 2.0
     c.drawImage(reader, x, y, draw_w, draw_h, preserveAspectRatio=True, anchor="c")
+
+
+def _format_observed_at(value: datetime | None) -> str:
+    if not value:
+        return "Unknown date"
+    if value.tzinfo is None:
+        return value.strftime("%Y-%m-%d")
+    return value.astimezone(UTC).strftime("%Y-%m-%d")
 
 
 def render_part_pdf(
@@ -100,5 +109,61 @@ def render_part_pdf(
         _draw_wrapped(c, attribution, MARGIN, 72, PAGE_WIDTH - (MARGIN * 2), line_height=10.0)
 
         c.showPage()
+
+    c.save()
+
+
+def render_observation_index_pdf(
+    output_path: Path,
+    list_title: str,
+    observations: list[models.Observation],
+) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    c = canvas.Canvas(str(output_path), pagesize=letter)
+
+    page_no = 1
+
+    def start_page() -> float:
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(MARGIN, TEXT_TOP, "DNA-Confirmed Observations Index")
+
+        c.setFont("Helvetica", 10)
+        y_pos = TEXT_TOP - 18
+        y_pos = _draw_wrapped(c, f"List: {list_title}", MARGIN, y_pos, PAGE_WIDTH - (MARGIN * 2))
+        y_pos = _draw_wrapped(
+            c,
+            "Offline note: this PDF can be viewed offline. External iNaturalist links require internet access.",
+            MARGIN,
+            y_pos,
+            PAGE_WIDTH - (MARGIN * 2),
+        )
+        c.setFont("Helvetica", 8)
+        c.drawRightString(PAGE_WIDTH - MARGIN, 24, f"Page {page_no}")
+        return y_pos - 6
+
+    y = start_page()
+
+    for idx, obs in enumerate(observations, start=1):
+        title = obs.scientific_name or obs.species_guess or obs.taxon_name or f"Observation {obs.inat_observation_id}"
+        common = obs.common_name or "Not provided"
+        observer = obs.user_name or "Unknown observer"
+        observed_text = _format_observed_at(obs.observed_at)
+
+        if y < 132:
+            c.showPage()
+            page_no += 1
+            y = start_page()
+
+        c.setFont("Helvetica-Bold", 11)
+        y = _draw_wrapped(c, f"{idx}. {title}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
+        c.setFont("Helvetica", 10)
+        y = _draw_wrapped(c, f"Observed: {observed_text} | Observer: {observer}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
+        y = _draw_wrapped(c, f"Common name: {common}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
+        y = _draw_wrapped(c, f"iNaturalist: {obs.inat_url}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
+        y -= 4
+
+    if not observations:
+        c.setFont("Helvetica", 10)
+        _draw_wrapped(c, "No DNA-confirmed observations were cached at build time.", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
 
     c.save()

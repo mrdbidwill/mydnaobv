@@ -41,6 +41,7 @@ EXPORT_PAGE_SIZE = 12
 DOWNLOAD_PAGE_SIZE = 20
 ADMIN_PAGE_SIZE = 25
 PUBLIC_COUNTY_PAGE_SIZE = 24
+PUBLIC_REFRESH_INTERVAL_DAYS = max(1, settings.public_refresh_interval_days)
 
 
 def normalize_index_sort(sort: str | None) -> str:
@@ -50,12 +51,61 @@ def normalize_index_sort(sort: str | None) -> str:
     return "title_asc"
 
 
-def _preferred_download_artifact(artifacts: list[models.ExportArtifact]) -> models.ExportArtifact | None:
+def _preferred_county_file_artifact(artifacts: list[models.ExportArtifact]) -> models.ExportArtifact | None:
     for wanted in ("merged_pdf", "zip"):
         for artifact in artifacts:
             if artifact.kind == wanted:
                 return artifact
     return None
+
+
+def _artifact_by_kind(artifacts: list[models.ExportArtifact], kind: str) -> models.ExportArtifact | None:
+    for artifact in artifacts:
+        if artifact.kind == kind:
+            return artifact
+    return None
+
+
+def _artifact_public_url(list_id: int, artifact: models.ExportArtifact | None) -> str | None:
+    if not artifact:
+        return None
+    if latest_artifact_exists(list_id, artifact):
+        latest_url = published_latest_url(list_id, artifact)
+        if latest_url:
+            return latest_url
+    return f"/public/lists/{list_id}/artifacts/{artifact.id}/download"
+
+
+def _format_utc_date(value: datetime | None) -> str:
+    utc_value = as_utc(value)
+    if not utc_value:
+        return "Not refreshed yet"
+    return utc_value.strftime("%Y-%m-%d")
+
+
+def _refresh_summary(last_sync_at: datetime | None) -> dict[str, object]:
+    if not last_sync_at:
+        return {
+            "last_refreshed_label": "Not refreshed yet",
+            "next_refresh_label": "Refresh pending",
+            "is_due": True,
+        }
+
+    last_sync_utc = as_utc(last_sync_at)
+    now_utc = as_utc(utc_now_naive())
+    if not last_sync_utc or not now_utc:
+        return {
+            "last_refreshed_label": "Not refreshed yet",
+            "next_refresh_label": "Refresh pending",
+            "is_due": True,
+        }
+
+    next_due = last_sync_utc + timedelta(days=PUBLIC_REFRESH_INTERVAL_DAYS)
+    return {
+        "last_refreshed_label": _format_utc_date(last_sync_utc),
+        "next_refresh_label": _format_utc_date(next_due),
+        "is_due": now_utc >= next_due,
+    }
 
 
 def _state_label_map() -> dict[str, str]:
@@ -113,32 +163,44 @@ def load_public_county_rows(
     catalog: list[dict[str, object]] = []
     for obs_list in rows:
         latest_job = latest_completed_job_for_list(db, obs_list.id)
-        artifact = None
-        download_url = None
-        download_label = None
+        county_artifact = None
+        index_artifact = None
+        county_download_url = None
+        county_download_label = None
+        index_download_url = None
         status_label = "Not built"
         if latest_job:
             artifacts = list_artifacts_for_job(db, latest_job.id)
-            artifact = _preferred_download_artifact(artifacts)
+            county_artifact = _preferred_county_file_artifact(artifacts)
+            index_artifact = _artifact_by_kind(artifacts, "observations_index_pdf")
             status_label = latest_job.status
-            if artifact:
+            if county_artifact and index_artifact:
                 status_label = "Ready"
-                if latest_artifact_exists(obs_list.id, artifact):
-                    latest_url = published_latest_url(obs_list.id, artifact)
-                    if latest_url:
-                        download_url = latest_url
-                if not download_url:
-                    download_url = f"/public/lists/{obs_list.id}/artifacts/{artifact.id}/download"
-                download_label = "PDF" if artifact.kind == "merged_pdf" else "ZIP"
+            elif county_artifact:
+                status_label = "County file ready"
+            elif index_artifact:
+                status_label = "Observation index ready"
+
+            county_download_url = _artifact_public_url(obs_list.id, county_artifact)
+            if county_artifact:
+                county_download_label = "County PDF" if county_artifact.kind == "merged_pdf" else "County ZIP"
+            index_download_url = _artifact_public_url(obs_list.id, index_artifact)
+
+        refresh_data = _refresh_summary(obs_list.last_sync_at)
 
         catalog.append(
             {
                 "list": obs_list,
                 "latest_job": latest_job,
-                "artifact": artifact,
+                "county_artifact": county_artifact,
+                "index_artifact": index_artifact,
                 "status_label": status_label,
-                "download_url": download_url,
-                "download_label": download_label,
+                "county_download_url": county_download_url,
+                "county_download_label": county_download_label,
+                "index_download_url": index_download_url,
+                "last_refreshed_label": refresh_data["last_refreshed_label"],
+                "next_refresh_label": refresh_data["next_refresh_label"],
+                "refresh_due": refresh_data["is_due"],
             }
         )
 
@@ -273,6 +335,7 @@ def index(
             "state_options": state_options,
             "state_code": normalized_state,
             "limits_explanation": "These downloads are pre-built by admins with queue throttles to protect VPS resources and iNaturalist capacity.",
+            "refresh_interval_days": PUBLIC_REFRESH_INTERVAL_DAYS,
         },
     )
 
@@ -551,7 +614,7 @@ def public_download_latest_artifact(
     artifact = get_artifact_for_job(db, job_id=latest_job.id, artifact_id=artifact_id)
     if not artifact:
         raise HTTPException(status_code=404, detail="Artifact not found")
-    if artifact.kind not in ("merged_pdf", "zip"):
+    if artifact.kind not in ("merged_pdf", "zip", "observations_index_pdf"):
         raise HTTPException(status_code=404, detail="Artifact not public")
 
     artifact_path = artifact_abspath(artifact)
@@ -605,7 +668,7 @@ def admin_page(
         if not latest_ready:
             continue
         artifacts = list_artifacts_for_job(db, latest_ready.id)
-        chosen = _preferred_download_artifact(artifacts)
+        chosen = _preferred_county_file_artifact(artifacts)
         if not chosen:
             continue
         if latest_artifact_exists(obs_list.id, chosen):
