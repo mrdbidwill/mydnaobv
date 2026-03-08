@@ -47,6 +47,14 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - PDF content is offline-friendly
   - external iNaturalist links still require internet access
 - Admin UX wording updated to "Process state" for state-wide sync+build queue action.
+- Added Stage 1/2 throughput tuning profile docs for production rollout:
+  - higher per-run timeout and faster queue cadences
+  - wider L-job processing window
+  - worker cron moved to every 2 minutes with `timeout 120s`
+  - iNaturalist guardrails intentionally unchanged
+- Added runbook: `docs/STAGE12_TUNING_RUNBOOK.md` with apply/rollback commands.
+- Backlog for next commit:
+  - add admin-protected "Reset all county products" action with strong confirmation
 
 ## Routine Update Rule
 On each major decision or architecture change:

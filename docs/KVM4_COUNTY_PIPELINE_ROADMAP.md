@@ -15,6 +15,11 @@ Reduce large-export turnaround time and move to a curated, prebuilt county-produ
   - `EXPORT_*_CADENCE_MINUTES`
   - daily/hourly media and API request caps
 - Re-check export timing and system metrics after each tuning step.
+- Stage 1/2 baseline profile selected:
+  - `EXPORT_RUN_TIMEOUT_SECONDS=90`
+  - `EXPORT_XS/S/M/L_CADENCE_MINUTES=2/4/8/20`
+  - `EXPORT_L_WINDOW_START_HOUR=0`, `EXPORT_L_WINDOW_END_HOUR=12`
+  - worker cron cadence target: every 2 minutes (`timeout 120s`)
 
 ## Phase 2 (Implemented): Admin County Seeding by iNaturalist Project
 - Add `inat_project_id` list filter in data model.

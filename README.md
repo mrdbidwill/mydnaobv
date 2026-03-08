@@ -52,7 +52,7 @@ uvicorn app.main:app --reload
 pytest -q
 ```
 
-## Queued PDF exports (KVM 1 profile)
+## Queued PDF exports (KVM staged profile)
 
 This project now supports a modular, queue-based PDF export pipeline for offline use.
 
@@ -79,7 +79,7 @@ Example multi-operator config:
 EXPORT_OPERATORS_JSON=[{"username":"ams_alice","password":"strong-pass-1"},{"username":"ams_bob","password":"strong-pass-2"}]
 ```
 
-Example multi-photo export mode (KVM1-safe starting point):
+Example multi-photo export mode (conservative starting point):
 
 ```env
 EXPORT_INCLUDE_ALL_PHOTOS=true
@@ -96,6 +96,18 @@ EXPORT_PUBLISH_DIR=/var/www/mydnaobv-downloads
 EXPORT_PUBLISH_BASE_URL=https://downloads.example.org/mydnaobv
 EXPORT_PUBLIC_DOWNLOADS_ENABLED=true
 PUBLIC_REFRESH_INTERVAL_DAYS=7
+```
+
+Recommended staged-throughput timing profile (keeps iNaturalist guardrails unchanged):
+
+```env
+EXPORT_RUN_TIMEOUT_SECONDS=90
+EXPORT_XS_CADENCE_MINUTES=2
+EXPORT_S_CADENCE_MINUTES=4
+EXPORT_M_CADENCE_MINUTES=8
+EXPORT_L_CADENCE_MINUTES=20
+EXPORT_L_WINDOW_START_HOUR=0
+EXPORT_L_WINDOW_END_HOUR=12
 ```
 
 ### Rights and license policy
@@ -132,10 +144,10 @@ Cleanup expired artifacts:
 python3 -m app.exports.worker --cleanup
 ```
 
-Suggested cron entries (KVM 1):
+Suggested cron entries (staged throughput):
 
 ```cron
-*/5 * * * * flock -n /var/lock/mydnaobv_export.lock timeout 45s nice -n 15 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
+*/2 * * * * flock -n /var/lock/mydnaobv_export.lock timeout 120s nice -n 15 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
 17 3 * * * /usr/bin/python3 -m app.exports.worker --cleanup
 ```
 
