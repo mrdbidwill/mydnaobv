@@ -59,6 +59,11 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - `Observation.photos` / export relationship collections were being interpreted as scalar (`uselist=False`)
   - normalized explicit collection relationship declarations to enforce list semantics
   - warning addressed: `SAWarning: Multiple rows returned with uselist=False for ... Observation.photos`
+- Added homepage AMS-facing project context section:
+  - purpose/field-use notes
+  - split output explanation (observation list PDF + county PDF)
+  - explicit current inclusion rule: project membership AND `DNA Barcode ITS`
+  - expandable note listing future filtering/data-source questions under review
 
 ## Routine Update Rule
 On each major decision or architecture change:

@@ -20,6 +20,19 @@
     </div>
 
     <div class="card">
+      <h3>About This AMS Pilot</h3>
+      <p class="muted">This project currently builds county outputs from iNaturalist project <strong>Fungi of Alabama- AMS FunDiS Local Project</strong> (created by cabracrazy on November 10, 2023).</p>
+      <p class="muted">Each county can publish two files: an observation list PDF (with iNaturalist links) and a county PDF guide (up to 3 images per observation by default). More images are possible, but increase processing and download time.</p>
+      <p class="muted">Field use note: downloaded PDFs are offline-friendly. iNaturalist links require internet access.</p>
+      <p class="muted"><strong>Current inclusion rule:</strong> results are built from observations that match both project membership and presence of the <em>DNA Barcode ITS</em> field.</p>
+      <details style="margin-top: 8px;">
+        <summary class="muted" style="cursor: pointer;">Future options under consideration</summary>
+        <p class="muted" style="margin-top: 8px;">Questions under active review include whether this should continue to require both project membership and DNA field presence, how to handle the timing gap before sequence data is added, and whether member workflow guidance should prioritize early project membership.</p>
+        <p class="muted">Related data-source question: whether iNaturalist should remain primary, or be complemented by other available sources.</p>
+      </details>
+    </div>
+
+    <div class="card">
       <h3>Available County Files</h3>
       {% if rows and rows|length > 0 %}
         <div style="margin-top: 12px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
