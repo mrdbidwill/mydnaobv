@@ -1,10 +1,20 @@
 # myDNAobv
 
-A lightweight, maintainable FastAPI app that displays iNaturalist observations filtered by the “DNA Barcode ITS” observation field. Lists can be keyed by iNaturalist numeric user ID, username, and optional county/address filter.
+A lightweight, maintainable FastAPI app for county-level iNaturalist PDF products.
+Admins seed/build county lists by state+project; public users browse/download finished county files.
 
 Project continuity docs:
 - `docs/PROJECT_MEMORY.md` (dated decision/history log for future sessions)
 - `docs/KVM4_COUNTY_PIPELINE_ROADMAP.md` (staged plan for KVM4 + county-product pipeline)
+
+## Current flow
+
+- Public homepage `/` shows paginated county download catalog (finished files only).
+- Admin page `/admin` controls:
+  - seed counties by state+project
+  - queue state-wide rebuilds
+  - per-county sync/rebuild/show-hide/delete actions
+- Export queue/worker remains throttled to protect VPS and iNaturalist limits.
 
 ## Quick start
 

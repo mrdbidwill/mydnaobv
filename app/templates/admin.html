@@ -2,8 +2,8 @@
 {% block content %}
   <div class="grid">
     <div class="card">
-      <h2>Admin</h2>
-      <p class="muted">Manage lists and trigger syncs. Sync is capped at {{ max_observations }} observations to respect iNaturalist resources.</p>
+      <h2>Admin County Build Control</h2>
+      <p class="muted">All heavy operations are admin-controlled. Sync and export work remain throttled by worker limits to protect VPS resources and iNaturalist API/media capacity.</p>
       <a class="btn secondary" href="/exports">Open Export Center</a>
       {% if notice %}
         <p style="color: #1f6f43; margin-top: 10px;">{{ notice }}</p>
@@ -14,8 +14,8 @@
     </div>
 
     <div class="card">
-      <h3>Seed County Lists By Project</h3>
-      <p class="muted">Create one list per county for a selected US state using an iNaturalist project filter.</p>
+      <h3>Seed And Build Counties</h3>
+      <p class="muted">Creates missing county lists for a state/project, then queues full builds for the matching counties.</p>
       <form method="post" action="/admin/projects/county-seed" class="grid">
         <label>
           iNaturalist project ID or slug
@@ -33,70 +33,112 @@
           Optional description prefix
           <input class="input" type="text" name="description_prefix" placeholder="e.g., Fungi of Alabama AMS Fundis Local" />
         </label>
-        <button class="btn" type="submit">Create county lists</button>
+        <button class="btn" type="submit">Seed counties + queue builds</button>
       </form>
     </div>
 
     <div class="card">
-      <h3>Saved lists</h3>
+      <h3>Build Existing State Counties</h3>
+      <p class="muted">Queue fresh sync+export builds for existing county lists in a state (optionally one project only).</p>
+      <form method="post" action="/admin/states/build" class="grid">
+        <label>
+          State
+          <select class="input" name="state_code">
+            {% for code, label in state_options %}
+              <option value="{{ code }}" {% if code == (state_code if state_code else default_state_code) %}selected{% endif %}>{{ label }} ({{ code }})</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          Optional project ID or slug filter
+          <input class="input" type="text" name="inat_project_id" value="{{ default_project_id }}" placeholder="Leave blank for all projects in this state" />
+        </label>
+        <button class="btn" type="submit">Queue state build</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h3>County Products</h3>
+      <form method="get" action="/admin" style="margin-bottom: 10px; display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+        <label class="muted" for="admin-state-filter">State</label>
+        <select id="admin-state-filter" class="input" name="state_code" style="width: 200px;">
+          <option value="">All states</option>
+          {% for code, label in present_state_options %}
+            <option value="{{ code }}" {% if state_code == code %}selected{% endif %}>{{ label }} ({{ code }})</option>
+          {% endfor %}
+        </select>
+        <button class="btn secondary" type="submit">Filter</button>
+      </form>
+
       {% if lists and lists|length > 0 %}
         <div style="margin-top: 12px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
           {% if page > 1 %}
-            <a class="btn secondary" href="/admin?page={{ page - 1 }}">Previous</a>
+            <a class="btn secondary" href="/admin?page={{ page - 1 }}{% if state_code %}&state_code={{ state_code }}{% endif %}">Previous</a>
           {% endif %}
           {% if page < pages %}
-            <a class="btn secondary" href="/admin?page={{ page + 1 }}">Next</a>
+            <a class="btn secondary" href="/admin?page={{ page + 1 }}{% if state_code %}&state_code={{ state_code }}{% endif %}">Next</a>
           {% endif %}
           <span class="muted">Page {{ page }} of {{ pages }}</span>
           <form method="get" action="/admin" style="display: inline-flex; align-items: center; gap: 6px;">
+            {% if state_code %}<input type="hidden" name="state_code" value="{{ state_code }}" />{% endif %}
             <label class="muted" for="admin-page-goto-top">Go to page</label>
             <input id="admin-page-goto-top" class="input" type="number" name="page" min="1" max="{{ pages }}" value="{{ page }}" style="width: 96px;" />
             <button class="btn secondary" type="submit">Go</button>
           </form>
         </div>
+
         <table>
           <thead>
             <tr>
-              <th>Title</th>
-              <th>User Filter</th>
+              <th>County</th>
               <th>Project</th>
-              <th>Place</th>
-              <th>DNA Field</th>
-              <th>Taxon</th>
               <th>Last Sync</th>
+              <th>Latest Build</th>
+              <th>Public</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {% for list in lists %}
+              {% set latest_job = latest_job_by_list.get(list.id) %}
               <tr>
                 <td>
-                  <a href="/lists/{{ list.id }}">{{ list.title }}</a>
-                  {% if list.description %}
-                    <div class="muted">{{ list.description }}</div>
-                  {% endif %}
-                </td>
-                <td>
-                  {% if list.inat_user_id %}ID {{ list.inat_user_id }}{% endif %}
-                  {% if list.inat_user_id and list.inat_username %}<br>{% endif %}
-                  {% if list.inat_username %}{{ list.inat_username }}{% endif %}
+                  <a href="/lists/{{ list.id }}">{{ list.county_name if list.county_name else list.title }}</a>
+                  <div class="muted">{{ list.state_code if list.state_code else "" }}{% if list.place_query %} · {{ list.place_query }}{% endif %}</div>
                 </td>
                 <td>{{ list.inat_project_id if list.inat_project_id else "" }}</td>
-                <td>{{ list.place_query if list.place_query else "" }}</td>
-                <td>
-                  {% if list.inat_dna_field_id %}
-                    <a href="https://www.inaturalist.org/observation_fields/{{ list.inat_dna_field_id }}" target="_blank" rel="noreferrer">
-                      {{ list.inat_dna_field_id }}
-                    </a>
-                  {% endif %}
-                </td>
-                <td>{{ list.taxon_filter if list.taxon_filter else "" }}</td>
                 <td>{{ list.last_sync_at if list.last_sync_at else "Not synced" }}</td>
                 <td>
+                  {% if latest_job %}
+                    {{ latest_job.status }}<br>
+                    <span class="muted">Job #{{ latest_job.id }}</span>
+                    {% if ready_download_url_by_list.get(list.id) %}
+                      <br><a href="{{ ready_download_url_by_list.get(list.id) }}" target="_blank" rel="noreferrer">Latest file</a>
+                    {% endif %}
+                  {% else %}
+                    Not built
+                  {% endif %}
+                </td>
+                <td>{{ "Yes" if list.is_public_download else "No" }}</td>
+                <td>
                   <form method="post" action="/admin/lists/{{ list.id }}/sync" style="display:inline;">
-                    <button class="btn" type="submit">Sync</button>
+                    <input type="hidden" name="page" value="{{ page }}" />
+                    <input type="hidden" name="state_code" value="{{ state_code }}" />
+                    <button class="btn" type="submit">Sync now</button>
                   </form>
-                  <form method="post" action="/admin/lists/{{ list.id }}/delete" style="display:inline;" onsubmit="return confirm('Delete this list and all cached observations?');">
+                  <form method="post" action="/admin/lists/{{ list.id }}/queue" style="display:inline;">
+                    <input type="hidden" name="page" value="{{ page }}" />
+                    <input type="hidden" name="state_code" value="{{ state_code }}" />
+                    <button class="btn" type="submit">Rebuild</button>
+                  </form>
+                  <form method="post" action="/admin/lists/{{ list.id }}/toggle-public" style="display:inline;">
+                    <input type="hidden" name="page" value="{{ page }}" />
+                    <input type="hidden" name="state_code" value="{{ state_code }}" />
+                    <button class="btn secondary" type="submit">{{ "Hide" if list.is_public_download else "Show" }}</button>
+                  </form>
+                  <form method="post" action="/admin/lists/{{ list.id }}/delete" style="display:inline;" onsubmit="return confirm('Delete this county list and all cached/export data?');">
+                    <input type="hidden" name="page" value="{{ page }}" />
+                    <input type="hidden" name="state_code" value="{{ state_code }}" />
                     <button class="btn secondary" type="submit">Delete</button>
                   </form>
                 </td>
@@ -104,15 +146,17 @@
             {% endfor %}
           </tbody>
         </table>
+
         <div style="margin-top: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
           {% if page > 1 %}
-            <a class="btn secondary" href="/admin?page={{ page - 1 }}">Previous</a>
+            <a class="btn secondary" href="/admin?page={{ page - 1 }}{% if state_code %}&state_code={{ state_code }}{% endif %}">Previous</a>
           {% endif %}
           {% if page < pages %}
-            <a class="btn secondary" href="/admin?page={{ page + 1 }}">Next</a>
+            <a class="btn secondary" href="/admin?page={{ page + 1 }}{% if state_code %}&state_code={{ state_code }}{% endif %}">Next</a>
           {% endif %}
           <span class="muted">Page {{ page }} of {{ pages }}</span>
           <form method="get" action="/admin" style="display: inline-flex; align-items: center; gap: 6px;">
+            {% if state_code %}<input type="hidden" name="state_code" value="{{ state_code }}" />{% endif %}
             <label class="muted" for="admin-page-goto-bottom">Go to page</label>
             <input id="admin-page-goto-bottom" class="input" type="number" name="page" min="1" max="{{ pages }}" value="{{ page }}" style="width: 96px;" />
             <button class="btn secondary" type="submit">Go</button>
@@ -120,7 +164,7 @@
         </div>
       {% else %}
         <div class="empty">
-          <strong>No lists found.</strong>
+          <strong>No county products found.</strong>
         </div>
       {% endif %}
     </div>

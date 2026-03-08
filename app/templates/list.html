@@ -72,7 +72,6 @@
           </div>
         {% endif %}
         <div style="margin-top: 16px;">
-          <a class="btn" href="/lists/{{ list.id }}?refresh=true">Refresh now</a>
           <a class="btn secondary" href="/">Back to lists</a>
           {% if pdf_exports_enabled %}
             <a class="btn secondary" href="/exports">Export Center (authorized)</a>
@@ -131,49 +130,5 @@
       </div>
     {% endif %}
 
-    {% if list %}
-      <div class="card">
-        <h3>Edit list</h3>
-        <p class="muted"><strong>Naming tip:</strong> Use <em>County-State — Short Descriptor</em> for the title and a clear one-sentence description.</p>
-        <p class="muted"><strong>Download rule:</strong> Only photos with reusable iNaturalist licenses (CC0, CC BY, CC BY-SA, CC BY-NC, CC BY-NC-SA) can be included in downloadable PDFs. Photos marked <em>all rights reserved</em> are excluded.</p>
-        <form method="post" action="/lists/{{ list.id }}/edit" class="grid">
-          <label>
-            List title
-            <input class="input" type="text" name="title" value="{{ list.title }}" required />
-          </label>
-          <label>
-            Description
-            <input class="input" type="text" name="description" value="{{ list.description if list.description else '' }}" />
-          </label>
-          <label>
-            iNaturalist user ID (optional)
-            <input class="input" type="text" name="inat_user_id" value="{{ list.inat_user_id if list.inat_user_id else '' }}" />
-          </label>
-          <label>
-            iNaturalist username (optional)
-            <input class="input" type="text" name="inat_username" value="{{ list.inat_username if list.inat_username else '' }}" placeholder="e.g., cabracrazy" />
-          </label>
-          <label>
-            iNaturalist project ID or slug (optional)
-            <input class="input" type="text" name="inat_project_id" value="{{ list.inat_project_id if list.inat_project_id else '' }}" placeholder="e.g., fungi-of-alabama-ams-fundis-local-project" />
-          </label>
-          <label>
-            iNaturalist place/location filter (optional)
-            <input class="input" type="text" name="place_query" value="{{ list.place_query if list.place_query else '' }}" placeholder="e.g., Alabama, US or Conecuh National Forest" />
-            <div class="muted" style="margin-top: 4px;">County format example: <strong>Winston County, US, AL</strong> (pattern: County Name, Country Code, State Code).</div>
-          </label>
-          <label>
-            DNA field ID
-            <input class="input" type="text" name="dna_field_id" value="{{ list.inat_dna_field_id if list.inat_dna_field_id else '' }}" />
-            <div class="muted" style="margin-top: 4px;">Use <strong>2330</strong> for "DNA Barcode ITS". Do not use similarly named "DNA Barcode ITS:" (with colon).</div>
-          </label>
-          <label>
-            Taxon filter (genus, optional)
-            <input class="input" type="text" name="taxon_filter" value="{{ list.taxon_filter if list.taxon_filter else '' }}" />
-          </label>
-          <button class="btn" type="submit">Save changes</button>
-        </form>
-      </div>
-    {% endif %}
   </div>
 {% endblock %}

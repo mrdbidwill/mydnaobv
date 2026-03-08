@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Optional
-from sqlalchemy import String, Integer, DateTime, ForeignKey, UniqueConstraint, Text, BigInteger
+from sqlalchemy import String, Integer, DateTime, ForeignKey, UniqueConstraint, Text, BigInteger, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db import Base
 
@@ -20,6 +20,10 @@ class ObservationList(Base):
     inat_user_id: Mapped[Optional[int]] = mapped_column(Integer, index=True, nullable=True)
     inat_username: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     inat_project_id: Mapped[Optional[str]] = mapped_column(String(255), index=True, nullable=True)
+    product_type: Mapped[str] = mapped_column(String(32), default="custom", index=True)
+    state_code: Mapped[Optional[str]] = mapped_column(String(2), index=True, nullable=True)
+    county_name: Mapped[Optional[str]] = mapped_column(String(255), index=True, nullable=True)
+    is_public_download: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     inat_place_id: Mapped[Optional[int]] = mapped_column(Integer, index=True, nullable=True)
     place_query: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     inat_dna_field_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
@@ -101,6 +105,7 @@ class ExportJob(Base):
     api_requests: Mapped[int] = mapped_column(Integer, default=0)
     bytes_downloaded: Mapped[int] = mapped_column(BigInteger, default=0)
     part_size: Mapped[int] = mapped_column(Integer, default=100)
+    force_sync: Mapped[bool] = mapped_column(Boolean, default=False)
     message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)

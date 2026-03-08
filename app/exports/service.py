@@ -17,6 +17,7 @@ from app.exports.config import export_config
 from app.exports.publish import cleanup_published_job, publish_job_artifacts
 from app.exports.pdf_writer import render_part_pdf
 from app.exports.policy import evaluate_license, normalize_license_code
+from app.services.list_sync import sync_list_observations
 
 ACTIVE_JOB_STATUSES = ("queued", "running", "waiting_quota")
 FINISHED_JOB_STATUSES = ("ready", "partial_ready", "failed", "canceled")
@@ -34,7 +35,12 @@ def normalize_naive_utc(value: datetime | None) -> datetime | None:
     return value.astimezone(UTC).replace(tzinfo=None)
 
 
-def enqueue_export_job(db: Session, list_id: int, requested_by: str | None = None) -> models.ExportJob:
+def enqueue_export_job(
+    db: Session,
+    list_id: int,
+    requested_by: str | None = None,
+    force_sync: bool = False,
+) -> models.ExportJob:
     existing = (
         db.query(models.ExportJob)
         .filter(models.ExportJob.list_id == list_id, models.ExportJob.status.in_(ACTIVE_JOB_STATUSES))
@@ -49,6 +55,7 @@ def enqueue_export_job(db: Session, list_id: int, requested_by: str | None = Non
         requested_by=requested_by,
         status="queued",
         phase="plan",
+        force_sync=force_sync,
         part_size=max(10, export_config.part_size),
         next_run_at=utc_now_naive(),
     )
@@ -98,6 +105,7 @@ def enqueue_export_job_for_list(
     obs_list: models.ObservationList,
     requested_by: str | None = None,
     only_if_stale: bool = True,
+    force_sync: bool = False,
 ) -> tuple[models.ExportJob, bool, str]:
     active = (
         db.query(models.ExportJob)
@@ -119,6 +127,7 @@ def enqueue_export_job_for_list(
         requested_by=requested_by,
         status="queued",
         phase="plan",
+        force_sync=force_sync,
         part_size=max(10, export_config.part_size),
         next_run_at=utc_now_naive(),
     )
@@ -279,6 +288,26 @@ def _phase_plan(db: Session, job: models.ExportJob) -> bool:
     if existing_count > 0:
         job.phase = "download"
         return True
+
+    if job.force_sync:
+        obs_list = db.query(models.ObservationList).filter(models.ObservationList.id == job.list_id).first()
+        if not obs_list:
+            job.status = "failed"
+            job.phase = "done"
+            job.message = "List not found for sync."
+            job.finished_at = utc_now_naive()
+            return True
+        try:
+            synced = sync_list_observations(db, obs_list)
+            job.message = f"Sync complete: {synced} observations refreshed."
+            job.force_sync = False
+        except Exception as exc:
+            db.rollback()
+            job.status = "failed"
+            job.phase = "done"
+            job.message = f"Sync failed before export: {exc}"
+            job.finished_at = utc_now_naive()
+            return True
 
     observations = (
         db.query(models.Observation)

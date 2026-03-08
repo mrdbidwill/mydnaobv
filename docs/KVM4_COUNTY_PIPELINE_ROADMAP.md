@@ -21,14 +21,14 @@ Reduce large-export turnaround time and move to a curated, prebuilt county-produ
 - Add admin flow to create one list per county for a selected US state:
   - inputs: `state_code`, `inat_project_id`
   - generated list fields include county place query + project filter
-- Keep public and export behavior unchanged for now.
+- Automatically queue county builds after seed for the selected state/project.
 
-## Phase 3 (Planned): Curated Downloads-Only Public Flow
-- Keep admin custom workflows.
-- Shift public users toward prebuilt county downloads.
-- Reduce or disable heavy public custom list creation paths when ready.
+## Phase 3 (Implemented): Curated Downloads-Only Public Flow
+- Public homepage now shows county download catalog (finished files).
+- Public custom list creation flow is deprecated.
+- Admin retains full county controls.
 
-## Phase 4 (Planned): Full KVM4 Utilization
+## Phase 4 (In Progress): Full KVM4 Utilization
 - Move from effectively single-lane worker behavior to safe parallel workers.
 - Add queue locking/concurrency guardrails per list/job.
 - Optionally isolate web and worker processes/services.

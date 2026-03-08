@@ -2,145 +2,90 @@
 {% block content %}
   <div class="grid">
     <div class="card">
-      <h2>Create a PDF of iNaturalist Observations</h2>
-      <p class="muted">Use an iNaturalist user ID or iNaturalist username to create a list of observations. You will be able to view the list below, but the PDF will process as server loads allow, possibly overnight or overnights, multiple.</p>
-      <p class="muted"><strong>Naming tip:</strong> Use <em>County-State — Short Descriptor</em> for the title and a clear one-sentence description. Example: <em>Baldwin County-AL — DNA-confirmed fungi</em>.</p>
-      <p class="muted"><strong>Download rule:</strong> Only photos with reusable iNaturalist licenses (CC0, CC BY, CC BY-SA, CC BY-NC, CC BY-NC-SA) can be included in downloadable PDFs. Photos marked <em>all rights reserved</em> are excluded.</p>
+      <h2>County PDF Downloads</h2>
+      <p class="muted">Finished county PDFs are built by admins in throttled background jobs to protect server resources and iNaturalist capacity.</p>
       <p class="muted"><strong>Why limits exist:</strong> {{ limits_explanation }}</p>
-      {% if error %}
-        <p style="color: #b42318;">{{ error }}</p>
-      {% endif %}
-      {% if precheck_notice %}
-        <p style="color: #1f6f43;">{{ precheck_notice }}</p>
-      {% endif %}
-      <form method="post" action="/lists/create" class="grid">
-        <input type="hidden" name="sort" value="{{ sort if sort else 'title_asc' }}" />
-        <label>
-          List title (save as)
-          <input class="input" type="text" name="title" value="{{ form_title }}" placeholder="County-State-NameIt" required />
-        </label>
-        <label>
-          Description
-          <input class="input" type="text" name="description" value="{{ form_description }}" placeholder="What is this list about?" />
-        </label>
-        <label>
-          iNaturalist user ID (optional)
-          <input class="input" type="text" name="inat_user_id" value="{{ form_inat_user_id }}" placeholder="e.g., 3924138" />
-        </label>
-        <label>
-          iNaturalist username (optional)
-          <input class="input" type="text" name="inat_username" value="{{ form_inat_username }}" placeholder="e.g., cabracrazy" />
-        </label>
-        <label>
-          iNaturalist place/location filter (optional)
-          <input class="input" type="text" name="place_query" value="{{ form_place_query }}" placeholder="e.g., Alabama, US or Conecuh National Forest" />
-          <div class="muted" style="margin-top: 4px;">County format example: <strong>Winston County, US, AL</strong> (pattern: County Name, Country Code, State Code).</div>
-        </label>
-        <label>
-          DNA field ID
-          <input class="input" type="text" name="dna_field_id" value="{{ form_dna_field_id if form_dna_field_id else dna_field_id }}" placeholder="Observation field ID" />
-          <div class="muted" style="margin-top: 4px;">Use <strong>2330</strong> for "DNA Barcode ITS". Do not use similarly named "DNA Barcode ITS:" (with colon).</div>
-        </label>
-        <label>
-          Taxon filter (genus, optional)
-          <input class="input" type="text" name="taxon_filter" value="{{ form_taxon_filter }}" placeholder="e.g., Russula" />
-        </label>
-        <div>
-          <button class="btn secondary" type="submit" name="action" value="estimate">Estimate workload</button>
-          <button class="btn" type="submit" name="action" value="save" style="margin-left: 8px;">Save list</button>
-        </div>
+      <form method="get" action="/" style="display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+        <label class="muted" for="state-filter">State</label>
+        <select id="state-filter" class="input" name="state_code" style="width: 220px;">
+          <option value="">All states</option>
+          {% for code, label in state_options %}
+            <option value="{{ code }}" {% if state_code == code %}selected{% endif %}>{{ label }} ({{ code }})</option>
+          {% endfor %}
+        </select>
+        <input type="hidden" name="page" value="1" />
+        <button class="btn secondary" type="submit">Apply filter</button>
       </form>
-      <p class="muted" style="margin-top: 10px;">Authorized staff can open the <a href="/exports">Export Center</a> for queued offline PDF jobs.</p>
-      {% if public_downloads_enabled %}
-        <p class="muted">Members can use the public <a href="/downloads">Downloads page</a> for latest finished files.</p>
-      {% endif %}
     </div>
 
     <div class="card">
-      <h2>Saved lists</h2>
-      {% if lists and lists|length > 0 %}
+      <h3>Available County Files</h3>
+      {% if rows and rows|length > 0 %}
         <div style="margin-top: 12px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
           {% if page > 1 %}
-            <a class="btn secondary" href="/?page={{ page - 1 }}&sort={{ sort }}">Previous</a>
+            <a class="btn secondary" href="/?page={{ page - 1 }}{% if state_code %}&state_code={{ state_code }}{% endif %}">Previous</a>
           {% endif %}
           {% if page < pages %}
-            <a class="btn secondary" href="/?page={{ page + 1 }}&sort={{ sort }}">Next</a>
+            <a class="btn secondary" href="/?page={{ page + 1 }}{% if state_code %}&state_code={{ state_code }}{% endif %}">Next</a>
           {% endif %}
           <span class="muted">Page {{ page }} of {{ pages }}</span>
           <form method="get" action="/" style="display: inline-flex; align-items: center; gap: 6px;">
-            <input type="hidden" name="sort" value="{{ sort }}" />
-            <label class="muted" for="index-page-goto-top">Go to page</label>
-            <input id="index-page-goto-top" class="input" type="number" name="page" min="1" max="{{ pages }}" value="{{ page }}" style="width: 96px;" />
+            {% if state_code %}<input type="hidden" name="state_code" value="{{ state_code }}" />{% endif %}
+            <label class="muted" for="home-page-goto-top">Go to page</label>
+            <input id="home-page-goto-top" class="input" type="number" name="page" min="1" max="{{ pages }}" value="{{ page }}" style="width: 96px;" />
             <button class="btn secondary" type="submit">Go</button>
           </form>
-          <form method="get" action="/" style="display: inline-flex; align-items: center; gap: 6px;">
-            <input type="hidden" name="page" value="1" />
-            <label class="muted" for="index-sort">Sort</label>
-            <select id="index-sort" class="input" name="sort" style="width: 180px;">
-              <option value="title_asc" {% if sort == "title_asc" %}selected{% endif %}>Title A to Z</option>
-              <option value="created_desc" {% if sort == "created_desc" %}selected{% endif %}>Newest first</option>
-            </select>
-            <button class="btn secondary" type="submit">Apply</button>
-          </form>
         </div>
+
         <table>
           <thead>
             <tr>
-              <th>Title</th>
-              <th>User Filter</th>
-              <th>Last sync</th>
+              <th>County</th>
+              <th>Project</th>
+              <th>Status</th>
+              <th>Download</th>
             </tr>
           </thead>
           <tbody>
-            {% for list in lists %}
+            {% for row in rows %}
+              {% set list = row.list %}
               <tr>
                 <td>
-                  <a href="/lists/{{ list.id }}">{{ list.title }}</a>
-                  {% if list.description %}
-                    <div class="muted">{{ list.description }}</div>
-                  {% endif %}
-                  {% if list.place_query %}
-                    <div class="muted">Place: {{ list.place_query }}</div>
-                  {% endif %}
+                  <a href="/lists/{{ list.id }}">{{ list.county_name if list.county_name else list.title }}</a>
+                  <div class="muted">{{ list.state_code if list.state_code else "" }}</div>
                 </td>
+                <td>{{ list.inat_project_id if list.inat_project_id else "" }}</td>
+                <td>{{ row.status_label }}</td>
                 <td>
-                  {% if list.inat_user_id %}ID {{ list.inat_user_id }}{% endif %}
-                  {% if list.inat_user_id and list.inat_username %}<br>{% endif %}
-                  {% if list.inat_username %}{{ list.inat_username }}{% endif %}
+                  {% if row.download_url %}
+                    <a class="btn secondary" href="{{ row.download_url }}" target="_blank" rel="noreferrer">Download {{ row.download_label }}</a>
+                  {% else %}
+                    <span class="muted">Not ready yet</span>
+                  {% endif %}
                 </td>
-                <td>{{ list.last_sync_at if list.last_sync_at else "Not synced" }}</td>
               </tr>
             {% endfor %}
           </tbody>
         </table>
+
         <div style="margin-top: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
           {% if page > 1 %}
-            <a class="btn secondary" href="/?page={{ page - 1 }}&sort={{ sort }}">Previous</a>
+            <a class="btn secondary" href="/?page={{ page - 1 }}{% if state_code %}&state_code={{ state_code }}{% endif %}">Previous</a>
           {% endif %}
           {% if page < pages %}
-            <a class="btn secondary" href="/?page={{ page + 1 }}&sort={{ sort }}">Next</a>
+            <a class="btn secondary" href="/?page={{ page + 1 }}{% if state_code %}&state_code={{ state_code }}{% endif %}">Next</a>
           {% endif %}
           <span class="muted">Page {{ page }} of {{ pages }}</span>
           <form method="get" action="/" style="display: inline-flex; align-items: center; gap: 6px;">
-            <input type="hidden" name="sort" value="{{ sort }}" />
-            <label class="muted" for="index-page-goto-bottom">Go to page</label>
-            <input id="index-page-goto-bottom" class="input" type="number" name="page" min="1" max="{{ pages }}" value="{{ page }}" style="width: 96px;" />
+            {% if state_code %}<input type="hidden" name="state_code" value="{{ state_code }}" />{% endif %}
+            <label class="muted" for="home-page-goto-bottom">Go to page</label>
+            <input id="home-page-goto-bottom" class="input" type="number" name="page" min="1" max="{{ pages }}" value="{{ page }}" style="width: 96px;" />
             <button class="btn secondary" type="submit">Go</button>
-          </form>
-          <form method="get" action="/" style="display: inline-flex; align-items: center; gap: 6px;">
-            <input type="hidden" name="page" value="1" />
-            <label class="muted" for="index-sort-bottom">Sort</label>
-            <select id="index-sort-bottom" class="input" name="sort" style="width: 180px;">
-              <option value="title_asc" {% if sort == "title_asc" %}selected{% endif %}>Title A to Z</option>
-              <option value="created_desc" {% if sort == "created_desc" %}selected{% endif %}>Newest first</option>
-            </select>
-            <button class="btn secondary" type="submit">Apply</button>
           </form>
         </div>
       {% else %}
         <div class="empty">
-          <strong>No lists saved yet.</strong>
-          <p class="muted">Create the first list using the form above.</p>
+          <strong>No finished county files found for this filter.</strong>
         </div>
       {% endif %}
     </div>

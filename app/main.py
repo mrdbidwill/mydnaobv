@@ -25,6 +25,7 @@ from app.exports.estimate import estimate_list_export_eta, estimate_precheck_fro
 from app.services.inat import fetch_observations_for_list
 from app.services.inat import estimate_total_observations
 from app.services.inat import resolve_project_filter
+from app.services.list_sync import sync_list_observations
 from app.services.us_counties import STATE_OPTIONS, fetch_counties_for_state, normalize_state_code
 
 
@@ -39,6 +40,7 @@ OBS_PAGE_SIZE = 15
 EXPORT_PAGE_SIZE = 12
 DOWNLOAD_PAGE_SIZE = 20
 ADMIN_PAGE_SIZE = 25
+PUBLIC_COUNTY_PAGE_SIZE = 24
 
 
 def normalize_index_sort(sort: str | None) -> str:
@@ -48,29 +50,99 @@ def normalize_index_sort(sort: str | None) -> str:
     return "title_asc"
 
 
-def load_index_lists(
+def _preferred_download_artifact(artifacts: list[models.ExportArtifact]) -> models.ExportArtifact | None:
+    for wanted in ("merged_pdf", "zip"):
+        for artifact in artifacts:
+            if artifact.kind == wanted:
+                return artifact
+    return None
+
+
+def _state_label_map() -> dict[str, str]:
+    return {code: label for code, label in STATE_OPTIONS}
+
+
+def load_public_county_rows(
     db: Session,
     page: int,
-    sort: str,
-) -> tuple[list[models.ObservationList], int, int, str]:
-    normalized_sort = normalize_index_sort(sort)
-    total = db.query(func.count(models.ObservationList.id)).scalar() or 0
-    pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
+    state_code: str | None,
+) -> tuple[list[dict[str, object]], int, int, list[tuple[str, str]], str]:
+    normalized_state = normalize_state_code(state_code or "") or ""
+
+    base_query = db.query(models.ObservationList).filter(
+        models.ObservationList.product_type == "county",
+        models.ObservationList.is_public_download.is_(True),
+    )
+    if normalized_state:
+        base_query = base_query.filter(models.ObservationList.state_code == normalized_state)
+
+    total = base_query.count()
+    pages = max(1, (total + PUBLIC_COUNTY_PAGE_SIZE - 1) // PUBLIC_COUNTY_PAGE_SIZE)
     current_page = min(page, pages)
-
-    if normalized_sort == "created_desc":
-        order_clause = (models.ObservationList.created_at.desc(), models.ObservationList.id.desc())
-    else:
-        order_clause = (models.ObservationList.title.asc(), models.ObservationList.id.asc())
-
-    lists = (
-        db.query(models.ObservationList)
-        .order_by(*order_clause)
-        .offset((current_page - 1) * PAGE_SIZE)
-        .limit(PAGE_SIZE)
+    rows = (
+        base_query
+        .order_by(
+            models.ObservationList.state_code.asc().nullslast(),
+            models.ObservationList.county_name.asc().nullslast(),
+            models.ObservationList.title.asc(),
+            models.ObservationList.id.asc(),
+        )
+        .offset((current_page - 1) * PUBLIC_COUNTY_PAGE_SIZE)
+        .limit(PUBLIC_COUNTY_PAGE_SIZE)
         .all()
     )
-    return lists, pages, current_page, normalized_sort
+
+    state_rows = (
+        db.query(models.ObservationList.state_code)
+        .filter(
+            models.ObservationList.product_type == "county",
+            models.ObservationList.is_public_download.is_(True),
+            models.ObservationList.state_code.isnot(None),
+        )
+        .distinct()
+        .order_by(models.ObservationList.state_code.asc())
+        .all()
+    )
+    labels = _state_label_map()
+    state_options = [
+        (code, labels.get(code, code))
+        for (code,) in state_rows
+        if code
+    ]
+
+    catalog: list[dict[str, object]] = []
+    for obs_list in rows:
+        latest_job = latest_completed_job_for_list(db, obs_list.id)
+        artifact = None
+        download_url = None
+        download_label = None
+        status_label = "Not built"
+        if latest_job:
+            artifacts = list_artifacts_for_job(db, latest_job.id)
+            artifact = _preferred_download_artifact(artifacts)
+            status_label = latest_job.status
+            if artifact:
+                status_label = "Ready"
+                if latest_artifact_exists(obs_list.id, artifact):
+                    latest_url = published_latest_url(obs_list.id, artifact)
+                    if latest_url:
+                        download_url = latest_url
+                if not download_url:
+                    download_url = f"/public/lists/{obs_list.id}/artifacts/{artifact.id}/download"
+                download_label = "PDF" if artifact.kind == "merged_pdf" else "ZIP"
+
+        catalog.append(
+            {
+                "list": obs_list,
+                "latest_job": latest_job,
+                "artifact": artifact,
+                "status_label": status_label,
+                "download_url": download_url,
+                "download_label": download_label,
+            }
+        )
+
+    return catalog, pages, current_page, state_options, normalized_state
 
 
 def utc_now_naive() -> datetime:
@@ -181,176 +253,44 @@ def require_export_access(credentials: HTTPBasicCredentials = Depends(security))
 def index(
     request: Request,
     page: int = Query(default=1, ge=1),
-    sort: str = Query(default="title_asc"),
+    state_code: str = Query(default=""),
     db: Session = Depends(get_db),
 ):
-    lists, pages, current_page, normalized_sort = load_index_lists(db, page, sort)
+    rows, pages, current_page, state_options, normalized_state = load_public_county_rows(
+        db,
+        page,
+        state_code,
+    )
 
     return templates.TemplateResponse(
         "index.html",
         {
             "request": request,
             "app_name": settings.app_name,
-            "lists": lists,
+            "rows": rows,
             "page": current_page,
             "pages": pages,
-            "sort": normalized_sort,
-            "dna_field_id": settings.inat_dna_field_id or "",
-            "public_downloads_enabled": settings.export_public_downloads_enabled,
-            "form_title": "",
-            "form_description": "",
-            "form_inat_user_id": "",
-            "form_inat_username": "",
-            "form_place_query": "",
-            "form_dna_field_id": settings.inat_dna_field_id or "",
-            "form_taxon_filter": "",
-            "precheck_notice": None,
-            "limits_explanation": "These limits are in place to keep exports dependable for everyone, protect shared VPS resources, and respect iNaturalist API/media capacity.",
+            "state_options": state_options,
+            "state_code": normalized_state,
+            "limits_explanation": "These downloads are pre-built by admins with queue throttles to protect VPS resources and iNaturalist capacity.",
         },
     )
 
 
 @app.post("/lists/create")
 def create_list(
-    request: Request,
-    title: str = Form(...),
-    description: str = Form(default=""),
-    inat_user_id: str = Form(default=""),
-    inat_username: str = Form(default=""),
-    dna_field_id: str = Form(default=""),
-    taxon_filter: str = Form(default=""),
-    place_query: str = Form(default=""),
-    action: str = Form(default="save"),
-    sort: str = Form(default="title_asc"),
-    db: Session = Depends(get_db),
+    _: bool = Depends(require_admin),
 ):
-    page = 1
-    normalized_sort = normalize_index_sort(sort)
-    lists, pages, current_page, _ = load_index_lists(db, page, normalized_sort)
-    title = title.strip()
-    description_clean = description.strip()
-    inat_user_id_raw = (inat_user_id or "").strip()
-    inat_username_raw = (inat_username or "").strip()
-    place_query_clean = (place_query or "").strip()
-    dna_field_clean = dna_field_id.strip() or settings.inat_dna_field_id or ""
-    taxon_filter_clean = (taxon_filter or "").strip()
-
-    form_context = {
-        "form_title": title,
-        "form_description": description_clean,
-        "form_inat_user_id": inat_user_id_raw,
-        "form_inat_username": inat_username_raw,
-        "form_place_query": place_query_clean,
-        "form_dna_field_id": dna_field_clean,
-        "form_taxon_filter": taxon_filter_clean,
-        "precheck_notice": None,
-        "limits_explanation": "These limits are in place to keep exports dependable for everyone, protect shared VPS resources, and respect iNaturalist API/media capacity.",
-        "sort": normalized_sort,
-    }
-
-    if not title:
-        return templates.TemplateResponse(
-            "index.html",
-            {
-                "request": request,
-                "app_name": settings.app_name,
-                "error": "Please provide a list title.",
-                "lists": lists,
-                "page": current_page,
-                "pages": pages,
-                "sort": normalized_sort,
-                "dna_field_id": dna_field_clean,
-                "public_downloads_enabled": settings.export_public_downloads_enabled,
-                **form_context,
-            },
-            status_code=400,
-        )
-
-    user_id_int, username, user_error = parse_user_filters(inat_user_id_raw, inat_username_raw)
-    if user_error:
-        return templates.TemplateResponse(
-            "index.html",
-            {
-                "request": request,
-                "app_name": settings.app_name,
-                "error": user_error,
-                "lists": lists,
-                "page": current_page,
-                "pages": pages,
-                "sort": normalized_sort,
-                "dna_field_id": dna_field_clean,
-                "public_downloads_enabled": settings.export_public_downloads_enabled,
-                **form_context,
-            },
-            status_code=400,
-        )
-
-    if action == "estimate":
-        precheck_notice = None
-        try:
-            precheck = estimate_total_observations(
-                inat_user_id=user_id_int,
-                inat_username=username,
-                place_query=place_query_clean or None,
-                taxon_filter=taxon_filter_clean or None,
-            )
-            precheck_eta = estimate_precheck_from_observations(precheck["total_results"])
-            place_match_text = ""
-            if precheck.get("resolved_place_name"):
-                place_match_text = (
-                    f"Matched iNaturalist location: {precheck['resolved_place_name']} "
-                    f"(place_id {precheck['resolved_place_id']}). "
-                )
-            precheck_notice = (
-                place_match_text
-                + 
-                f"Pre-check estimate: about {precheck['total_results']} matching observations. "
-                f"Rough export size around {precheck_eta['eligible_items']} pages; likely completion {precheck_eta['eta_likely']} "
-                f"(best {precheck_eta['eta_best']}, worst {precheck_eta['eta_worst']}). "
-                "For faster turnaround, narrow by genus and/or a smaller place."
-            )
-        except Exception as exc:
-            precheck_notice = f"Pre-check estimate unavailable: {exc}"
-
-        return templates.TemplateResponse(
-            "index.html",
-            {
-                "request": request,
-                "app_name": settings.app_name,
-                "lists": lists,
-                "page": current_page,
-                "pages": pages,
-                "sort": normalized_sort,
-                "dna_field_id": dna_field_clean,
-                "public_downloads_enabled": settings.export_public_downloads_enabled,
-                **form_context,
-                "precheck_notice": precheck_notice,
-            },
-            status_code=200,
-        )
-
-    obs_list = models.ObservationList(
-        title=title,
-        description=description_clean or None,
-        inat_user_id=user_id_int,
-        inat_username=username,
-        inat_place_id=None,
-        place_query=place_query_clean or None,
-        inat_dna_field_id=dna_field_clean or settings.inat_dna_field_id,
-        taxon_filter=taxon_filter_clean or None,
+    return RedirectResponse(
+        url="/admin?notice=Public+custom+list+creation+is+deprecated.+Use+Admin+county+controls.",
+        status_code=303,
     )
-    db.add(obs_list)
-    db.commit()
-    db.refresh(obs_list)
-
-    return RedirectResponse(url=f"/lists/{obs_list.id}", status_code=303)
 
 
 @app.get("/lists/{list_id}")
 def list_page(
     request: Request,
     list_id: int,
-    refresh: bool = False,
     export_notice: Optional[str] = Query(default=None),
     page: int = Query(default=1, ge=1),
     db: Session = Depends(get_db),
@@ -368,71 +308,7 @@ def list_page(
             status_code=404,
         )
 
-    ttl = timedelta(hours=settings.cache_ttl_hours)
-    last_sync_at_utc = as_utc(obs_list.last_sync_at)
-    needs_sync = refresh or not last_sync_at_utc or (datetime.now(UTC) - last_sync_at_utc) > ttl
-
     sync_error = None
-    if needs_sync and obs_list.inat_dna_field_id:
-        try:
-            observations = fetch_observations_for_list(obs_list)
-            for obs in observations:
-                existing = (
-                    db.query(models.Observation)
-                    .filter_by(list_id=obs_list.id, inat_observation_id=obs.inat_id)
-                    .first()
-                )
-                if existing:
-                    existing.taxon_name = obs.taxon_name
-                    existing.species_guess = obs.species_guess
-                    existing.scientific_name = obs.scientific_name
-                    existing.common_name = obs.common_name
-                    existing.user_name = obs.user_name
-                    existing.observed_at = obs.observed_at
-                    existing.inat_url = obs.inat_url
-                    existing.dna_field_value = obs.dna_field_value
-                    existing.photo_url = obs.photo_url
-                    existing.photo_license_code = obs.photo_license_code
-                    existing.photo_attribution = obs.photo_attribution
-                    record = existing
-                else:
-                    record = models.Observation(
-                        inat_observation_id=obs.inat_id,
-                        taxon_name=obs.taxon_name,
-                        species_guess=obs.species_guess,
-                        scientific_name=obs.scientific_name,
-                        common_name=obs.common_name,
-                        user_name=obs.user_name,
-                        observed_at=obs.observed_at,
-                        inat_url=obs.inat_url,
-                        dna_field_value=obs.dna_field_value,
-                        photo_url=obs.photo_url,
-                        photo_license_code=obs.photo_license_code,
-                        photo_attribution=obs.photo_attribution,
-                        list_id=obs_list.id,
-                    )
-                    db.add(record)
-                    db.flush()
-
-                db.query(models.ObservationPhoto).filter_by(observation_id=record.id).delete(
-                    synchronize_session=False
-                )
-                for photo in obs.photo_entries:
-                    db.add(
-                        models.ObservationPhoto(
-                            observation_id=record.id,
-                            inat_photo_id=photo.inat_photo_id,
-                            photo_index=photo.photo_index,
-                            photo_url=photo.photo_url,
-                            photo_license_code=photo.photo_license_code,
-                            photo_attribution=photo.photo_attribution,
-                        )
-                    )
-            obs_list.last_sync_at = utc_now_naive()
-            db.commit()
-        except Exception as exc:
-            db.rollback()
-            sync_error = f"Sync failed: {exc}"
 
     total_obs = (
         db.query(func.count(models.Observation.id))
@@ -556,52 +432,9 @@ def exports_center(
 
 @app.get("/downloads")
 def public_downloads(
-    request: Request,
-    page: int = Query(default=1, ge=1),
-    db: Session = Depends(get_db),
+    _: Request,
 ):
-    if not settings.export_public_downloads_enabled:
-        raise HTTPException(status_code=404, detail="Not found")
-
-    total = db.query(func.count(models.ObservationList.id)).scalar() or 0
-    lists = (
-        db.query(models.ObservationList)
-        .order_by(models.ObservationList.created_at.desc())
-        .offset((page - 1) * DOWNLOAD_PAGE_SIZE)
-        .limit(DOWNLOAD_PAGE_SIZE)
-        .all()
-    )
-    pages = max(1, (total + DOWNLOAD_PAGE_SIZE - 1) // DOWNLOAD_PAGE_SIZE)
-
-    latest_job_by_list: dict[int, models.ExportJob] = {}
-    artifacts_by_list: dict[int, list[models.ExportArtifact]] = {}
-    published_latest_urls: dict[int, str] = {}
-
-    for obs_list in lists:
-        latest_job = latest_completed_job_for_list(db, obs_list.id)
-        if not latest_job:
-            continue
-        latest_job_by_list[obs_list.id] = latest_job
-        artifacts = list_artifacts_for_job(db, latest_job.id)
-        artifacts_by_list[obs_list.id] = artifacts
-        for artifact in artifacts:
-            if latest_artifact_exists(obs_list.id, artifact):
-                latest_url = published_latest_url(obs_list.id, artifact)
-                if latest_url:
-                    published_latest_urls[artifact.id] = latest_url
-
-    return templates.TemplateResponse(
-        "downloads.html",
-        {
-            "request": request,
-            "lists": lists,
-            "latest_job_by_list": latest_job_by_list,
-            "artifacts_by_list": artifacts_by_list,
-            "published_latest_urls": published_latest_urls,
-            "page": page,
-            "pages": pages,
-        },
-    )
+    return RedirectResponse(url="/", status_code=303)
 
 
 @app.post("/exports/lists/{list_id}/queue")
@@ -699,26 +532,108 @@ def download_export_artifact_by_job(
     return FileResponse(path=str(artifact_path), filename=artifact_path.name)
 
 
+@app.get("/public/lists/{list_id}/artifacts/{artifact_id}/download")
+def public_download_latest_artifact(
+    list_id: int,
+    artifact_id: int,
+    db: Session = Depends(get_db),
+):
+    obs_list = db.query(models.ObservationList).filter_by(id=list_id).first()
+    if not obs_list:
+        raise HTTPException(status_code=404, detail="List not found")
+    if obs_list.product_type != "county" or not obs_list.is_public_download:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    latest_job = latest_completed_job_for_list(db, list_id)
+    if not latest_job:
+        raise HTTPException(status_code=404, detail="No completed export available")
+
+    artifact = get_artifact_for_job(db, job_id=latest_job.id, artifact_id=artifact_id)
+    if not artifact:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+    if artifact.kind not in ("merged_pdf", "zip"):
+        raise HTTPException(status_code=404, detail="Artifact not public")
+
+    artifact_path = artifact_abspath(artifact)
+    if not artifact_path.exists() or not artifact_path.is_file():
+        raise HTTPException(status_code=404, detail="File not available")
+
+    return FileResponse(path=str(artifact_path), filename=artifact_path.name)
+
+
 @app.get("/admin")
 def admin_page(
     request: Request,
     notice: Optional[str] = Query(default=None),
     error: Optional[str] = Query(default=None),
     page: int = Query(default=1, ge=1),
+    state_code: str = Query(default=""),
     db: Session = Depends(get_db),
     _: bool = Depends(require_admin),
 ):
-    total = db.query(func.count(models.ObservationList.id)).scalar() or 0
+    normalized_state = normalize_state_code(state_code or "") or ""
+    base_query = db.query(models.ObservationList).filter(
+        models.ObservationList.product_type == "county",
+    )
+    if normalized_state:
+        base_query = base_query.filter(models.ObservationList.state_code == normalized_state)
+
+    total = base_query.count()
     pages = max(1, (total + ADMIN_PAGE_SIZE - 1) // ADMIN_PAGE_SIZE)
     current_page = min(page, pages)
 
     lists = (
-        db.query(models.ObservationList)
-        .order_by(models.ObservationList.created_at.desc())
+        base_query
+        .order_by(
+            models.ObservationList.state_code.asc().nullslast(),
+            models.ObservationList.county_name.asc().nullslast(),
+            models.ObservationList.title.asc(),
+        )
         .offset((current_page - 1) * ADMIN_PAGE_SIZE)
         .limit(ADMIN_PAGE_SIZE)
         .all()
     )
+
+    latest_job_by_list: dict[int, models.ExportJob] = {}
+    ready_download_url_by_list: dict[int, str] = {}
+    for obs_list in lists:
+        recent_jobs = list_jobs_for_list(db, obs_list.id, limit=1)
+        if recent_jobs:
+            latest_job_by_list[obs_list.id] = recent_jobs[0]
+
+        latest_ready = latest_completed_job_for_list(db, obs_list.id)
+        if not latest_ready:
+            continue
+        artifacts = list_artifacts_for_job(db, latest_ready.id)
+        chosen = _preferred_download_artifact(artifacts)
+        if not chosen:
+            continue
+        if latest_artifact_exists(obs_list.id, chosen):
+            latest_url = published_latest_url(obs_list.id, chosen)
+            if latest_url:
+                ready_download_url_by_list[obs_list.id] = latest_url
+                continue
+        ready_download_url_by_list[obs_list.id] = (
+            f"/public/lists/{obs_list.id}/artifacts/{chosen.id}/download"
+        )
+
+    state_rows = (
+        db.query(models.ObservationList.state_code)
+        .filter(
+            models.ObservationList.product_type == "county",
+            models.ObservationList.state_code.isnot(None),
+        )
+        .distinct()
+        .order_by(models.ObservationList.state_code.asc())
+        .all()
+    )
+    label_map = _state_label_map()
+    present_state_options = [
+        (code, label_map.get(code, code))
+        for (code,) in state_rows
+        if code
+    ]
+
     return templates.TemplateResponse(
         "admin.html",
         {
@@ -726,12 +641,16 @@ def admin_page(
             "lists": lists,
             "page": current_page,
             "pages": pages,
+            "state_code": normalized_state,
             "max_observations": settings.max_observations,
             "notice": notice,
             "error": error,
             "state_options": STATE_OPTIONS,
+            "present_state_options": present_state_options,
             "default_state_code": "AL",
             "default_project_id": settings.inat_default_project_id or "",
+            "latest_job_by_list": latest_job_by_list,
+            "ready_download_url_by_list": ready_download_url_by_list,
         },
     )
 
@@ -774,12 +693,16 @@ def admin_seed_project_counties(
 
     created = 0
     skipped_existing = 0
+    queued = 0
+    skipped_queue_existing = 0
     description_prefix_clean = (description_prefix or "").strip()
 
     for row in county_rows:
         existing = (
             db.query(models.ObservationList)
             .filter(
+                models.ObservationList.product_type == "county",
+                models.ObservationList.state_code == normalized_state,
                 models.ObservationList.inat_project_id == canonical_project_id,
                 models.ObservationList.place_query == row.place_query,
             )
@@ -806,6 +729,10 @@ def admin_seed_project_counties(
             inat_user_id=None,
             inat_username=None,
             inat_project_id=canonical_project_id,
+            product_type="county",
+            state_code=normalized_state,
+            county_name=row.county_name,
+            is_public_download=True,
             inat_place_id=None,
             place_query=row.place_query,
             inat_dna_field_id=settings.inat_dna_field_id,
@@ -815,16 +742,146 @@ def admin_seed_project_counties(
         created += 1
 
     db.commit()
+
+    target_lists = (
+        db.query(models.ObservationList)
+        .filter(
+            models.ObservationList.product_type == "county",
+            models.ObservationList.state_code == normalized_state,
+            models.ObservationList.inat_project_id == canonical_project_id,
+        )
+        .all()
+    )
+    for obs_list in target_lists:
+        _, was_queued, _ = enqueue_export_job_for_list(
+            db,
+            obs_list=obs_list,
+            requested_by="admin-county-seed",
+            only_if_stale=False,
+            force_sync=True,
+        )
+        if was_queued:
+            queued += 1
+        else:
+            skipped_queue_existing += 1
+
     notice = (
         f"County seeding complete for {normalized_state} and project {canonical_project_id}: "
-        f"created {created}, skipped existing {skipped_existing}, total counties {len(county_rows)}."
+        f"created {created}, skipped existing {skipped_existing}, total counties {len(county_rows)}. "
+        f"Build queue: queued {queued}, already active/up-to-date {skipped_queue_existing}."
     )
     return RedirectResponse(url=f"/admin?notice={quote(notice)}", status_code=303)
+
+
+@app.post("/admin/states/build")
+def admin_build_state_counties(
+    state_code: str = Form(...),
+    inat_project_id: str = Form(default=""),
+    db: Session = Depends(get_db),
+    _: bool = Depends(require_admin),
+):
+    normalized_state = normalize_state_code(state_code or "")
+    if not normalized_state:
+        return RedirectResponse(url="/admin?error=Please+select+a+valid+US+state.", status_code=303)
+
+    project_id = (inat_project_id or "").strip()
+    canonical_project_id: str | None = None
+    if project_id:
+        try:
+            canonical_project_id, _, _ = resolve_project_filter(project_id)
+        except Exception as exc:
+            return RedirectResponse(url=f"/admin?error={quote(str(exc))}", status_code=303)
+
+    query = db.query(models.ObservationList).filter(
+        models.ObservationList.product_type == "county",
+        models.ObservationList.state_code == normalized_state,
+    )
+    if canonical_project_id:
+        query = query.filter(models.ObservationList.inat_project_id == canonical_project_id)
+    targets = query.all()
+
+    if not targets:
+        return RedirectResponse(
+            url=f"/admin?error={quote(f'No county products found for state {normalized_state}.')}",
+            status_code=303,
+        )
+
+    queued = 0
+    reused = 0
+    for obs_list in targets:
+        _, was_queued, _ = enqueue_export_job_for_list(
+            db,
+            obs_list=obs_list,
+            requested_by="admin-build-state",
+            only_if_stale=False,
+            force_sync=True,
+        )
+        if was_queued:
+            queued += 1
+        else:
+            reused += 1
+
+    notice = (
+        f"Build queued for {normalized_state}: targeted {len(targets)}, "
+        f"queued {queued}, existing active/reused {reused}."
+    )
+    return RedirectResponse(url=f"/admin?state_code={normalized_state}&notice={quote(notice)}", status_code=303)
+
+
+@app.post("/admin/lists/{list_id}/queue")
+def admin_queue_list_build(
+    list_id: int,
+    page: int = Form(default=1),
+    state_code: str = Form(default=""),
+    db: Session = Depends(get_db),
+    _: bool = Depends(require_admin),
+):
+    obs_list = db.query(models.ObservationList).filter_by(id=list_id).first()
+    if not obs_list:
+        return RedirectResponse(url="/admin?error=County+list+not+found.", status_code=303)
+    _, _, message = enqueue_export_job_for_list(
+        db,
+        obs_list=obs_list,
+        requested_by="admin-single-build",
+        only_if_stale=False,
+        force_sync=True,
+    )
+    state_q = normalize_state_code(state_code or "") or ""
+    query_bits = [f"page={max(1, page)}"]
+    if state_q:
+        query_bits.append(f"state_code={state_q}")
+    query_bits.append(f"notice={quote(message)}")
+    return RedirectResponse(url=f"/admin?{'&'.join(query_bits)}", status_code=303)
+
+
+@app.post("/admin/lists/{list_id}/toggle-public")
+def admin_toggle_public_download(
+    list_id: int,
+    page: int = Form(default=1),
+    state_code: str = Form(default=""),
+    db: Session = Depends(get_db),
+    _: bool = Depends(require_admin),
+):
+    obs_list = db.query(models.ObservationList).filter_by(id=list_id).first()
+    if not obs_list:
+        return RedirectResponse(url="/admin?error=County+list+not+found.", status_code=303)
+    obs_list.is_public_download = not bool(obs_list.is_public_download)
+    db.commit()
+    status_text = "visible" if obs_list.is_public_download else "hidden"
+    notice = f"{obs_list.title} is now {status_text} on public downloads."
+    state_q = normalize_state_code(state_code or "") or ""
+    query_bits = [f"page={max(1, page)}"]
+    if state_q:
+        query_bits.append(f"state_code={state_q}")
+    query_bits.append(f"notice={quote(notice)}")
+    return RedirectResponse(url=f"/admin?{'&'.join(query_bits)}", status_code=303)
 
 
 @app.post("/admin/lists/{list_id}/delete")
 def admin_delete_list(
     list_id: int,
+    page: int = Form(default=1),
+    state_code: str = Form(default=""),
     db: Session = Depends(get_db),
     _: bool = Depends(require_admin),
 ):
@@ -847,21 +904,39 @@ def admin_delete_list(
     db.query(models.Observation).filter_by(list_id=list_id).delete(synchronize_session=False)
     db.query(models.ObservationList).filter_by(id=list_id).delete(synchronize_session=False)
     db.commit()
-    return RedirectResponse(url="/admin", status_code=303)
+    state_q = normalize_state_code(state_code or "") or ""
+    query_bits = [f"page={max(1, page)}", "notice=County+list+deleted."]
+    if state_q:
+        query_bits.insert(1, f"state_code={state_q}")
+    return RedirectResponse(url=f"/admin?{'&'.join(query_bits)}", status_code=303)
 
 
 @app.post("/admin/lists/{list_id}/sync")
 def admin_sync_list(
     list_id: int,
+    page: int = Form(default=1),
+    state_code: str = Form(default=""),
     db: Session = Depends(get_db),
     _: bool = Depends(require_admin),
 ):
     obs_list = db.query(models.ObservationList).filter_by(id=list_id).first()
     if not obs_list:
-        return RedirectResponse(url="/admin", status_code=303)
-    obs_list.last_sync_at = None
-    db.commit()
-    return RedirectResponse(url=f"/lists/{list_id}?refresh=true", status_code=303)
+        return RedirectResponse(url="/admin?error=County+list+not+found.", status_code=303)
+
+    try:
+        synced = sync_list_observations(db, obs_list)
+        notice = f"Sync complete for {obs_list.title}: {synced} observations."
+        key = "notice"
+    except Exception as exc:
+        db.rollback()
+        notice = f"Sync failed for {obs_list.title}: {exc}"
+        key = "error"
+
+    state_q = normalize_state_code(state_code or "") or ""
+    query_bits = [f"page={max(1, page)}", f"{key}={quote(notice)}"]
+    if state_q:
+        query_bits.insert(1, f"state_code={state_q}")
+    return RedirectResponse(url=f"/admin?{'&'.join(query_bits)}", status_code=303)
 
 
 @app.post("/lists/{list_id}/edit")
@@ -877,6 +952,7 @@ def edit_list(
     taxon_filter: str = Form(default=""),
     place_query: str = Form(default=""),
     db: Session = Depends(get_db),
+    _: bool = Depends(require_admin),
 ):
     obs_list = db.query(models.ObservationList).filter_by(id=list_id).first()
     if not obs_list:

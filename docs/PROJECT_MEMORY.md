@@ -26,6 +26,12 @@ Purpose: persistent decision/history log for future chat sessions and implementa
 - Homepage (`/`) saved-lists section now includes:
   - top + bottom pagination controls with "Go to page"
   - sortable order (`Title A to Z` / `Newest first`) to find county lists faster
+- Flow pivot implemented:
+  - Public `/` now serves finished county downloads catalog.
+  - Admin `/admin` now acts as county build dashboard (seed, state build, per-county sync/rebuild/show-hide/delete).
+  - Public custom list-creation endpoint is deprecated.
+- Added background build safety improvement:
+  - export jobs now support `force_sync` so queue builds can sync observations before rendering PDFs.
 
 ## Routine Update Rule
 On each major decision or architecture change:
