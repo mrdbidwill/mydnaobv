@@ -6,6 +6,7 @@ Admins seed/build county lists by state+project; public users browse/download fi
 Project continuity docs:
 - `docs/PROJECT_MEMORY.md` (dated decision/history log for future sessions)
 - `docs/KVM4_COUNTY_PIPELINE_ROADMAP.md` (staged plan for KVM4 + county-product pipeline)
+- `docs/GITHUB_ACTIONS_DEPLOY.md` (GitHub Actions deploy setup + troubleshooting)
 
 ## Current flow
 
@@ -162,6 +163,12 @@ python scripts/export_problem_observations.py --state AL --days 30 --output repo
 
 This report lists failed/skipped items from the latest county job per list, including iNaturalist URLs, issue type, and observer field for manual outreach.
 
+Latest failed job per county mode:
+
+```bash
+python scripts/export_problem_observations.py --mode latest_failed --state AL --days 30 --output reports/problem_observations_AL_latest_failed.csv
+```
+
 Production deploy automation:
 
 On the server host:
@@ -181,6 +188,28 @@ Optional flags:
 - `SYSTEMCTL_USE_SUDO=0` if service user can restart without sudo
 - `HEALTHCHECK_URL=http://127.0.0.1/` to override health endpoint
 - `ALLOW_DIRTY=1` to bypass clean-worktree protection (not recommended)
+
+GitHub Actions deploy:
+
+- Workflow file: `.github/workflows/deploy.yml`
+- Safe by default:
+  - push-to-main deploy is skipped unless repository variable `DEPLOY_ENABLED=true`
+  - missing deploy secrets cause a clean "skipped" run (not a failure)
+- Required repository secrets:
+  - `DEPLOY_HOST` (example: `dna.mrdbid.com`)
+  - `DEPLOY_USER` (example: `mydnaobv`)
+  - `DEPLOY_SSH_KEY` (private key for `DEPLOY_USER`)
+- Optional repository variables:
+  - `DEPLOY_PORT` (default `22`)
+  - `DEPLOY_APP_DIR` (default `/opt/mydnaobv/app`)
+  - `DEPLOY_BRANCH` (default `main`)
+  - `DEPLOY_SERVICE_NAME` (default `mydnaobv`)
+  - `DEPLOY_HEALTHCHECK_URL` (default `http://127.0.0.1/`)
+  - `SYSTEMCTL_USE_SUDO` (default `1`)
+  - `DEPLOY_ENABLED` (`true` to enable auto deploy on push)
+- Manual deploy path:
+  - Actions -> "Deploy Production" -> "Run workflow"
+  - optional input `run_tests=true`
 
 ## Development notes
 

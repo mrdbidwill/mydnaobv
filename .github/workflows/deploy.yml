@@ -1,0 +1,137 @@
+name: Deploy Production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      run_tests:
+        description: "Run pytest on the server during deploy"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Preflight Config Check
+        id: preflight
+        shell: bash
+        env:
+          DEPLOY_ENABLED: ${{ vars.DEPLOY_ENABLED }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          enabled="$(printf '%s' "${DEPLOY_ENABLED:-false}" | tr '[:upper:]' '[:lower:]')"
+
+          if [[ "${GITHUB_EVENT_NAME}" == "push" && "${enabled}" != "true" ]]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "reason=Auto-deploy disabled (set repository variable DEPLOY_ENABLED=true to enable)." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          missing=()
+          [[ -z "${DEPLOY_HOST:-}" ]] && missing+=("DEPLOY_HOST (secret)")
+          [[ -z "${DEPLOY_USER:-}" ]] && missing+=("DEPLOY_USER (secret)")
+          [[ -z "${DEPLOY_SSH_KEY:-}" ]] && missing+=("DEPLOY_SSH_KEY (secret)")
+
+          if (( ${#missing[@]} > 0 )); then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "reason=Missing required deploy configuration: ${missing[*]}." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+          echo "reason=Preflight checks passed." >> "$GITHUB_OUTPUT"
+
+      - name: Deployment Skipped
+        if: steps.preflight.outputs.ready != 'true'
+        shell: bash
+        run: |
+          echo "Deployment skipped."
+          echo "${{ steps.preflight.outputs.reason }}"
+          {
+            echo "### Deploy Skipped"
+            echo ""
+            echo "${{ steps.preflight.outputs.reason }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Configure SSH
+        if: steps.preflight.outputs.ready == 'true'
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+        run: |
+          set -euo pipefail
+          port="${DEPLOY_PORT:-22}"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${DEPLOY_SSH_KEY}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "${port}" -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
+
+      - name: Deploy Over SSH
+        if: steps.preflight.outputs.ready == 'true'
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+          DEPLOY_APP_DIR: ${{ vars.DEPLOY_APP_DIR }}
+          DEPLOY_BRANCH: ${{ vars.DEPLOY_BRANCH }}
+          DEPLOY_SERVICE_NAME: ${{ vars.DEPLOY_SERVICE_NAME }}
+          DEPLOY_HEALTHCHECK_URL: ${{ vars.DEPLOY_HEALTHCHECK_URL }}
+          SYSTEMCTL_USE_SUDO: ${{ vars.SYSTEMCTL_USE_SUDO }}
+          RUN_TESTS_INPUT: ${{ github.event.inputs.run_tests }}
+        run: |
+          set -euo pipefail
+          port="${DEPLOY_PORT:-22}"
+          app_dir="${DEPLOY_APP_DIR:-/opt/mydnaobv/app}"
+          branch="${DEPLOY_BRANCH:-main}"
+          service_name="${DEPLOY_SERVICE_NAME:-mydnaobv}"
+          healthcheck_url="${DEPLOY_HEALTHCHECK_URL:-http://127.0.0.1/}"
+          systemctl_use_sudo="${SYSTEMCTL_USE_SUDO:-1}"
+
+          run_tests="0"
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${RUN_TESTS_INPUT:-false}" == "true" ]]; then
+            run_tests="1"
+          fi
+
+          ssh -p "${port}" "${DEPLOY_USER}@${DEPLOY_HOST}" "set -euo pipefail; \
+            cd '${app_dir}'; \
+            git fetch origin '${branch}'; \
+            git checkout '${branch}'; \
+            git pull --ff-only origin '${branch}'; \
+            chmod +x ./scripts/deploy_server.sh; \
+            APP_DIR='${app_dir}' \
+            BRANCH='${branch}' \
+            SERVICE_NAME='${service_name}' \
+            SYSTEMCTL_USE_SUDO='${systemctl_use_sudo}' \
+            RUN_TESTS='${run_tests}' \
+            HEALTHCHECK_URL='${healthcheck_url}' \
+            ./scripts/deploy_server.sh"
+
+      - name: Deployment Summary
+        if: steps.preflight.outputs.ready == 'true'
+        shell: bash
+        run: |
+          {
+            echo "### Deploy Complete"
+            echo ""
+            echo "- Event: ${GITHUB_EVENT_NAME}"
+            echo "- Repo: ${GITHUB_REPOSITORY}"
+            echo "- Ref: ${GITHUB_REF}"
+            echo "- SHA: ${GITHUB_SHA}"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -38,9 +38,17 @@ def _issue_type(item: models.ExportItem) -> str:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Export problematic county observations from the latest export job per county "
-            "to CSV for follow-up."
+            "Export problematic county observations from county export jobs to CSV for follow-up."
         )
+    )
+    parser.add_argument(
+        "--mode",
+        choices=("latest", "latest_failed"),
+        default="latest",
+        help=(
+            "Job scope: latest = latest job per county list (default); "
+            "latest_failed = latest failed job per county list."
+        ),
     )
     parser.add_argument(
         "--output",
@@ -71,14 +79,13 @@ def main() -> int:
 
     db = SessionLocal()
     try:
-        latest_job_subq = (
-            db.query(
-                models.ExportJob.list_id.label("list_id"),
-                func.max(models.ExportJob.id).label("job_id"),
-            )
-            .group_by(models.ExportJob.list_id)
-            .subquery()
+        job_scope_query = db.query(
+            models.ExportJob.list_id.label("list_id"),
+            func.max(models.ExportJob.id).label("job_id"),
         )
+        if args.mode == "latest_failed":
+            job_scope_query = job_scope_query.filter(models.ExportJob.status == "failed")
+        latest_job_subq = job_scope_query.group_by(models.ExportJob.list_id).subquery()
 
         rows = (
             db.query(
@@ -178,7 +185,7 @@ def main() -> int:
                     }
                 )
 
-        print(f"Wrote {len(rows)} rows to {output_path}")
+        print(f"Wrote {len(rows)} rows to {output_path} (mode={args.mode})")
         if issue_counts:
             print("Issue counts:")
             for issue_name, count in sorted(issue_counts.items(), key=lambda x: (-x[1], x[0])):
