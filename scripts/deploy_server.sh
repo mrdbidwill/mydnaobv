@@ -12,6 +12,7 @@ VENV_DIR="${VENV_DIR:-.venv}"
 SERVICE_NAME="${SERVICE_NAME:-mydnaobv}"
 HEALTHCHECK_URL="${HEALTHCHECK_URL:-http://127.0.0.1/}"
 ALLOW_DIRTY="${ALLOW_DIRTY:-0}"
+ALLOW_UNTRACKED="${ALLOW_UNTRACKED:-1}"
 RUN_TESTS="${RUN_TESTS:-0}"
 SYSTEMCTL_USE_SUDO="${SYSTEMCTL_USE_SUDO:-1}"
 
@@ -39,10 +40,18 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ "${ALLOW_DIRTY}" != "1" ]] && [[ -n "$(git status --porcelain)" ]]; then
-  log "Repository has uncommitted changes; aborting. Set ALLOW_DIRTY=1 to bypass."
-  git status --short
-  exit 1
+if [[ "${ALLOW_DIRTY}" != "1" ]]; then
+  if ! git diff --quiet --ignore-submodules -- || ! git diff --cached --quiet --ignore-submodules --; then
+    log "Repository has tracked uncommitted changes; aborting. Set ALLOW_DIRTY=1 to bypass."
+    git status --short
+    exit 1
+  fi
+
+  if [[ "${ALLOW_UNTRACKED}" != "1" ]] && [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
+    log "Repository has untracked files; aborting. Set ALLOW_UNTRACKED=1 to bypass."
+    git status --short
+    exit 1
+  fi
 fi
 
 log "Fetching latest ${BRANCH}"

@@ -20,6 +20,8 @@ Variables (optional, defaults shown):
 - `DEPLOY_SERVICE_NAME=mydnaobv`
 - `DEPLOY_HEALTHCHECK_URL=http://127.0.0.1/`
 - `SYSTEMCTL_USE_SUDO=1`
+- `DEPLOY_ALLOW_UNTRACKED=1`
+- `DEPLOY_ALLOW_DIRTY=0`
 - `DEPLOY_ENABLED=false` (set to `true` when you want auto deploy on push)
 
 2. Ensure server user access:
@@ -50,7 +52,8 @@ Variables (optional, defaults shown):
   - grant service restart permission or set `SYSTEMCTL_USE_SUDO=0` if not needed.
 
 - `Repository has uncommitted changes; aborting`:
-  - clean server working tree or set `ALLOW_DIRTY=1` only for emergency/manual runs.
+  - tracked file edits are blocked by default; set `DEPLOY_ALLOW_DIRTY=1` only for emergency/manual runs.
+  - untracked files are allowed by default (`DEPLOY_ALLOW_UNTRACKED=1`).
 
 - Migration failure:
   - inspect workflow logs at migration step (`alembic upgrade head`) and fix schema/env mismatch.

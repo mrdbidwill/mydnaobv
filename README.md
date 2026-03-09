@@ -187,6 +187,7 @@ Optional flags:
 - `RUN_TESTS=1` to run tests during deploy
 - `SYSTEMCTL_USE_SUDO=0` if service user can restart without sudo
 - `HEALTHCHECK_URL=http://127.0.0.1/` to override health endpoint
+- `ALLOW_UNTRACKED=1` allows local untracked files on server (default)
 - `ALLOW_DIRTY=1` to bypass clean-worktree protection (not recommended)
 
 GitHub Actions deploy:
@@ -206,6 +207,8 @@ GitHub Actions deploy:
   - `DEPLOY_SERVICE_NAME` (default `mydnaobv`)
   - `DEPLOY_HEALTHCHECK_URL` (default `http://127.0.0.1/`)
   - `SYSTEMCTL_USE_SUDO` (default `1`)
+  - `DEPLOY_ALLOW_UNTRACKED` (default `1`)
+  - `DEPLOY_ALLOW_DIRTY` (default `0`)
   - `DEPLOY_ENABLED` (`true` to enable auto deploy on push)
 - Manual deploy path:
   - Actions -> "Deploy Production" -> "Run workflow"

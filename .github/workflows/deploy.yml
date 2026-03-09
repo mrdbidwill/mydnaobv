@@ -94,6 +94,8 @@ jobs:
           DEPLOY_SERVICE_NAME: ${{ vars.DEPLOY_SERVICE_NAME }}
           DEPLOY_HEALTHCHECK_URL: ${{ vars.DEPLOY_HEALTHCHECK_URL }}
           SYSTEMCTL_USE_SUDO: ${{ vars.SYSTEMCTL_USE_SUDO }}
+          ALLOW_DIRTY: ${{ vars.DEPLOY_ALLOW_DIRTY }}
+          ALLOW_UNTRACKED: ${{ vars.DEPLOY_ALLOW_UNTRACKED }}
           RUN_TESTS_INPUT: ${{ github.event.inputs.run_tests }}
         run: |
           set -euo pipefail
@@ -103,6 +105,8 @@ jobs:
           service_name="${DEPLOY_SERVICE_NAME:-mydnaobv}"
           healthcheck_url="${DEPLOY_HEALTHCHECK_URL:-http://127.0.0.1/}"
           systemctl_use_sudo="${SYSTEMCTL_USE_SUDO:-1}"
+          allow_dirty="${ALLOW_DIRTY:-0}"
+          allow_untracked="${ALLOW_UNTRACKED:-1}"
 
           run_tests="0"
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${RUN_TESTS_INPUT:-false}" == "true" ]]; then
@@ -111,14 +115,13 @@ jobs:
 
           ssh -p "${port}" "${DEPLOY_USER}@${DEPLOY_HOST}" "set -euo pipefail; \
             cd '${app_dir}'; \
-            git fetch origin '${branch}'; \
-            git checkout '${branch}'; \
-            git pull --ff-only origin '${branch}'; \
             chmod +x ./scripts/deploy_server.sh; \
             APP_DIR='${app_dir}' \
             BRANCH='${branch}' \
             SERVICE_NAME='${service_name}' \
             SYSTEMCTL_USE_SUDO='${systemctl_use_sudo}' \
+            ALLOW_DIRTY='${allow_dirty}' \
+            ALLOW_UNTRACKED='${allow_untracked}' \
             RUN_TESTS='${run_tests}' \
             HEALTHCHECK_URL='${healthcheck_url}' \
             ./scripts/deploy_server.sh"
