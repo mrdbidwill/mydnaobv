@@ -169,6 +169,12 @@ Latest failed job per county mode:
 python scripts/export_problem_observations.py --mode latest_failed --state AL --days 30 --output reports/problem_observations_AL_latest_failed.csv
 ```
 
+Unique user list for license outreach (from generated report CSV):
+
+```bash
+python scripts/export_license_issue_users.py --input reports/problem_observations_AL_latest.csv --output reports/license_issue_users_AL_latest.csv
+```
+
 Production deploy automation:
 
 On the server host:
