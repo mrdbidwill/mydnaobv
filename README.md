@@ -17,6 +17,7 @@ Project continuity docs:
   - process state-wide rebuilds
   - per-county sync/rebuild/show-hide/delete actions
 - Export queue/worker remains throttled to protect VPS and iNaturalist limits.
+- Legacy `/exports` now redirects to `/admin`.
 
 ## Quick start
 
@@ -64,9 +65,10 @@ This project now supports a modular, queue-based PDF export pipeline for offline
 - Every completed job includes `observations_index.pdf` for linked record review.
 - Queue requests use a stale detector: no new job is created when list data has not changed since the latest completed export.
 - Public list creation and browsing remain unchanged.
-- Heavy export controls live on a separate authenticated page: `/exports`.
+- Heavy export controls live on authenticated admin page: `/admin`.
 - Optional publish mode copies finished files to external/static storage and exposes a public member page: `/downloads`.
 - Optional mode: include multiple photos per observation with conservative KVM1 caps.
+- County jobs with zero exportable image pages now complete with a placeholder county guide PDF instead of failing.
 - Create/edit flow now includes a fast pre-check estimate, and list/export pages show synced-data ETA ranges before queueing.
 - Export access supports:
   - `EXPORT_OPERATORS_JSON` (preferred, multiple operator accounts), or
@@ -96,6 +98,7 @@ EXPORT_PUBLISH_DIR=/var/www/mydnaobv-downloads
 EXPORT_PUBLISH_BASE_URL=https://downloads.example.org/mydnaobv
 EXPORT_PUBLIC_DOWNLOADS_ENABLED=true
 PUBLIC_REFRESH_INTERVAL_DAYS=7
+PUBLIC_STATE_CODES=AL
 ```
 
 Recommended staged-throughput timing profile (keeps iNaturalist guardrails unchanged):
@@ -150,6 +153,34 @@ Suggested cron entries (staged throughput):
 */2 * * * * flock -n /var/lock/mydnaobv_export.lock timeout 120s nice -n 15 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
 17 3 * * * /usr/bin/python3 -m app.exports.worker --cleanup
 ```
+
+Problem-observation reporting (for owner follow-up):
+
+```bash
+python scripts/export_problem_observations.py --state AL --days 30 --output reports/problem_observations_AL_latest.csv
+```
+
+This report lists failed/skipped items from the latest county job per list, including iNaturalist URLs, issue type, and observer field for manual outreach.
+
+Production deploy automation:
+
+On the server host:
+
+```bash
+APP_DIR=/opt/mydnaobv/app BRANCH=main SERVICE_NAME=mydnaobv ./scripts/deploy_server.sh
+```
+
+From your local machine over SSH:
+
+```bash
+HOST=dna.mrdbid.com USER_NAME=mydnaobv APP_DIR=/opt/mydnaobv/app BRANCH=main SERVICE_NAME=mydnaobv ./scripts/deploy_remote.sh
+```
+
+Optional flags:
+- `RUN_TESTS=1` to run tests during deploy
+- `SYSTEMCTL_USE_SUDO=0` if service user can restart without sudo
+- `HEALTHCHECK_URL=http://127.0.0.1/` to override health endpoint
+- `ALLOW_DIRTY=1` to bypass clean-worktree protection (not recommended)
 
 ## Development notes
 

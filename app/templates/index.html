@@ -7,9 +7,11 @@
       <p class="muted">Refresh cadence: about every {{ refresh_interval_days }} days. PDFs are offline-friendly; external iNaturalist links require internet access.</p>
       <p class="muted"><strong>Why limits exist:</strong> {{ limits_explanation }}</p>
       <form method="get" action="/" style="display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-        <label class="muted" for="state-filter">State</label>
+        <label class="muted" for="state-filter">Completed state</label>
         <select id="state-filter" class="input" name="state_code" style="width: 220px;">
-          <option value="">All states</option>
+          {% if state_options|length > 1 %}
+            <option value="">All completed states</option>
+          {% endif %}
           {% for code, label in state_options %}
             <option value="{{ code }}" {% if state_code == code %}selected{% endif %}>{{ label }} ({{ code }})</option>
           {% endfor %}
@@ -67,7 +69,7 @@
               {% set list = row.list %}
               <tr>
                 <td>
-                  <a href="/lists/{{ list.id }}">{{ list.county_name if list.county_name else list.title }}</a>
+                  {{ list.county_name if list.county_name else list.title }}
                   <div class="muted">{{ list.state_code if list.state_code else "" }}</div>
                 </td>
                 <td>{{ list.inat_project_id if list.inat_project_id else "" }}</td>

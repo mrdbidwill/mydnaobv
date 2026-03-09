@@ -20,7 +20,7 @@ from app.exports.service import (
     list_jobs_for_list,
     latest_completed_job_for_list,
 )
-from app.exports.publish import latest_artifact_exists, published_job_url, published_latest_url
+from app.exports.publish import latest_artifact_exists, published_latest_url
 from app.exports.estimate import estimate_list_export_eta, estimate_precheck_from_observations
 from app.services.inat import fetch_observations_for_list
 from app.services.inat import estimate_total_observations
@@ -37,8 +37,6 @@ security = HTTPBasic()
 
 PAGE_SIZE = 10
 OBS_PAGE_SIZE = 15
-EXPORT_PAGE_SIZE = 12
-DOWNLOAD_PAGE_SIZE = 20
 ADMIN_PAGE_SIZE = 25
 PUBLIC_COUNTY_PAGE_SIZE = 24
 PUBLIC_REFRESH_INTERVAL_DAYS = max(1, settings.public_refresh_interval_days)
@@ -112,17 +110,39 @@ def _state_label_map() -> dict[str, str]:
     return {code: label for code, label in STATE_OPTIONS}
 
 
+def _configured_public_states() -> set[str]:
+    raw = (settings.public_state_codes or "").strip()
+    if not raw:
+        return set()
+
+    tokens = [token.strip() for token in raw.split(",") if token.strip()]
+    if any(token.upper() in ("ALL", "*") for token in tokens):
+        return {code for code, _ in STATE_OPTIONS}
+
+    out: set[str] = set()
+    for token in tokens:
+        normalized = normalize_state_code(token)
+        if normalized:
+            out.add(normalized)
+    return out
+
+
 def load_public_county_rows(
     db: Session,
     page: int,
     state_code: str | None,
 ) -> tuple[list[dict[str, object]], int, int, list[tuple[str, str]], str]:
     normalized_state = normalize_state_code(state_code or "") or ""
+    allowed_states = _configured_public_states()
+    if allowed_states and normalized_state and normalized_state not in allowed_states:
+        normalized_state = ""
 
     base_query = db.query(models.ObservationList).filter(
         models.ObservationList.product_type == "county",
         models.ObservationList.is_public_download.is_(True),
     )
+    if allowed_states:
+        base_query = base_query.filter(models.ObservationList.state_code.in_(sorted(allowed_states)))
     if normalized_state:
         base_query = base_query.filter(models.ObservationList.state_code == normalized_state)
 
@@ -149,6 +169,8 @@ def load_public_county_rows(
             models.ObservationList.is_public_download.is_(True),
             models.ObservationList.state_code.isnot(None),
         )
+        .join(models.ExportJob, models.ExportJob.list_id == models.ObservationList.id)
+        .filter(models.ExportJob.status.in_(("ready", "partial_ready")))
         .distinct()
         .order_by(models.ObservationList.state_code.asc())
         .all()
@@ -157,7 +179,7 @@ def load_public_county_rows(
     state_options = [
         (code, labels.get(code, code))
         for (code,) in state_rows
-        if code
+        if code and (not allowed_states or code in allowed_states)
     ]
 
     catalog: list[dict[str, object]] = []
@@ -357,6 +379,7 @@ def list_page(
     export_notice: Optional[str] = Query(default=None),
     page: int = Query(default=1, ge=1),
     db: Session = Depends(get_db),
+    _: bool = Depends(require_admin),
 ):
     obs_list = db.query(models.ObservationList).filter_by(id=list_id).first()
     if not obs_list:
@@ -412,84 +435,11 @@ def list_page(
 
 @app.get("/exports")
 def exports_center(
-    request: Request,
-    notice: Optional[str] = Query(default=None),
-    page: int = Query(default=1, ge=1),
-    db: Session = Depends(get_db),
-    _: bool = Depends(require_export_access),
+    _: bool = Depends(require_admin),
 ):
-    if not settings.enable_pdf_exports:
-        return templates.TemplateResponse(
-            "exports.html",
-            {
-                "request": request,
-                "lists": [],
-                "jobs_by_list": {},
-                "artifacts_by_job": {},
-                "page": 1,
-                "pages": 1,
-                "error": "PDF exports are currently disabled by configuration.",
-                "export_include_all_photos": settings.export_include_all_photos,
-                "export_max_photos_per_observation": settings.export_max_photos_per_observation,
-                "publish_enabled": settings.export_publish_enabled,
-                "published_job_urls": {},
-                "published_latest_urls": {},
-                "notice": notice,
-                "eta_by_list": {},
-                "limits_explanation": "These limits are in place to keep exports dependable for everyone, protect shared VPS resources, and respect iNaturalist API/media capacity.",
-            },
-            status_code=503,
-        )
-
-    total = db.query(func.count(models.ObservationList.id)).scalar() or 0
-    lists = (
-        db.query(models.ObservationList)
-        .order_by(models.ObservationList.created_at.desc())
-        .offset((page - 1) * EXPORT_PAGE_SIZE)
-        .limit(EXPORT_PAGE_SIZE)
-        .all()
-    )
-    pages = max(1, (total + EXPORT_PAGE_SIZE - 1) // EXPORT_PAGE_SIZE)
-
-    jobs_by_list: dict[int, list[models.ExportJob]] = {}
-    artifacts_by_job: dict[int, list[models.ExportArtifact]] = {}
-    published_job_urls: dict[int, str] = {}
-    published_latest_urls: dict[int, str] = {}
-    eta_by_list: dict[int, dict[str, object]] = {}
-    for obs_list in lists:
-        jobs = list_jobs_for_list(db, obs_list.id, limit=6)
-        jobs_by_list[obs_list.id] = jobs
-        eta_by_list[obs_list.id] = estimate_list_export_eta(db, obs_list.id)
-        for job in jobs:
-            artifacts_by_job[job.id] = list_artifacts_for_job(db, job.id)
-            for artifact in artifacts_by_job[job.id]:
-                if latest_artifact_exists(obs_list.id, artifact):
-                    latest_url = published_latest_url(obs_list.id, artifact)
-                    if latest_url:
-                        published_latest_urls[artifact.id] = latest_url
-                job_url = published_job_url(obs_list.id, job.id, artifact)
-                if job_url:
-                    published_job_urls[artifact.id] = job_url
-
-    return templates.TemplateResponse(
-        "exports.html",
-        {
-            "request": request,
-            "lists": lists,
-            "jobs_by_list": jobs_by_list,
-            "artifacts_by_job": artifacts_by_job,
-            "page": page,
-            "pages": pages,
-            "error": None,
-            "export_include_all_photos": settings.export_include_all_photos,
-            "export_max_photos_per_observation": settings.export_max_photos_per_observation,
-            "publish_enabled": settings.export_publish_enabled,
-            "published_job_urls": published_job_urls,
-            "published_latest_urls": published_latest_urls,
-            "notice": notice,
-            "eta_by_list": eta_by_list,
-            "limits_explanation": "These limits are in place to keep exports dependable for everyone, protect shared VPS resources, and respect iNaturalist API/media capacity.",
-        },
+    return RedirectResponse(
+        url="/admin?notice=Export+Center+retired.+Use+Admin+County+Build+Control.",
+        status_code=303,
     )
 
 

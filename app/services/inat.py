@@ -53,6 +53,16 @@ class InatPhoto:
         self.photo_attribution = photo_attribution
 
 
+def _queryable_dna_field_name() -> Optional[str]:
+    candidate = (settings.inat_dna_field_name or "").strip()
+    if not candidate:
+        return None
+    # Protect against malformed env values accidentally concatenating another key.
+    if "=" in candidate:
+        return "DNA Barcode ITS"
+    return candidate
+
+
 def _extract_field_value(obs: dict, field_id: str) -> Optional[str]:
     candidates = (
         obs.get("ofvs"),
@@ -418,8 +428,9 @@ def estimate_total_observations(
             params["user_login"] = normalized_username
         if normalized_project_id:
             params["project_id"] = normalized_project_id
-        if settings.inat_dna_field_name:
-            params[f"field:{settings.inat_dna_field_name}"] = ""
+        dna_field_name = _queryable_dna_field_name()
+        if dna_field_name:
+            params[f"field:{dna_field_name}"] = ""
         cleaned_taxon = (taxon_filter or "").strip()
         if cleaned_taxon:
             params["taxon_name"] = cleaned_taxon
@@ -532,13 +543,13 @@ def fetch_observations_for_list(obs_list: models.ObservationList) -> Iterable[In
                 normalized_username = row_login
 
         if normalized_project_id:
-            canonical_project, _, _ = _resolve_project_filter_with_client(client, base, normalized_project_id)
-            normalized_project_id = canonical_project
-            obs_list.inat_project_id = canonical_project
+            # Lists are already validated at create/edit time; avoid extra project lookup
+            # during every sync run to reduce external dependency failures.
+            obs_list.inat_project_id = normalized_project_id
 
         resolved_place_id: Optional[int] = obs_list.inat_place_id
         place_query = (obs_list.place_query or "").strip()
-        if place_query:
+        if place_query and resolved_place_id is None:
             place_id, place_name = _resolve_place_id(client, base, place_query)
             if place_id is None:
                 raise ValueError(_place_error_message(client, base, place_query))
@@ -561,9 +572,10 @@ def fetch_observations_for_list(obs_list: models.ObservationList) -> Iterable[In
                 params["user_login"] = normalized_username
             if normalized_project_id:
                 params["project_id"] = normalized_project_id
-            if settings.inat_dna_field_name:
+            dna_field_name = _queryable_dna_field_name()
+            if dna_field_name:
                 # iNaturalist search URL syntax supports field filters.
-                params[f"field:{settings.inat_dna_field_name}"] = ""
+                params[f"field:{dna_field_name}"] = ""
             if obs_list.taxon_filter:
                 params["taxon_name"] = obs_list.taxon_filter.strip()
             if resolved_place_id is not None:

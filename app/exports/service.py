@@ -15,7 +15,11 @@ from sqlalchemy.orm import Session
 from app import models
 from app.exports.config import export_config
 from app.exports.publish import cleanup_published_job, publish_job_artifacts
-from app.exports.pdf_writer import render_observation_index_pdf, render_part_pdf
+from app.exports.pdf_writer import (
+    render_empty_county_guide_pdf,
+    render_observation_index_pdf,
+    render_part_pdf,
+)
 from app.exports.policy import evaluate_license, normalize_license_code
 from app.services.list_sync import sync_list_observations
 
@@ -397,10 +401,14 @@ def _phase_plan(db: Session, job: models.ExportJob) -> bool:
     job.part_size = _recommended_part_size()
 
     if eligible == 0:
-        job.status = "failed"
-        job.phase = "done"
-        job.message = "No exportable observations. All records missing images or excluded by license policy."
-        job.finished_at = utc_now_naive()
+        # Complete gracefully so each county still publishes the two expected documents.
+        job.phase = "finalize"
+        job.next_run_at = utc_now_naive()
+        job.message = (
+            "No exportable county guide pages were eligible "
+            "(missing images and/or excluded by license policy). "
+            "Generating observations index and placeholder county guide."
+        )
         return True
 
     job.phase = "download"
@@ -579,12 +587,6 @@ def _phase_finalize(db: Session, job: models.ExportJob) -> bool:
         .order_by(models.ExportArtifact.part_number.asc())
         .all()
     )
-    if not parts:
-        job.status = "failed"
-        job.phase = "done"
-        job.message = "No PDF parts were generated."
-        job.finished_at = utc_now_naive()
-        return True
 
     docs_dir = _job_dir(job.id) / "final"
     docs_dir.mkdir(parents=True, exist_ok=True)
@@ -609,7 +611,21 @@ def _phase_finalize(db: Session, job: models.ExportJob) -> bool:
     _upsert_artifact(db, job.id, "observations_index_pdf", _relative_to_storage(index_pdf_path), None)
 
     merged_created = False
-    if len(parts) <= max(1, export_config.zip_only_part_threshold):
+    used_placeholder_county_guide = False
+    if not parts:
+        merged_path = docs_dir / "all_observations.pdf"
+        render_empty_county_guide_pdf(
+            output_path=merged_path,
+            list_title=obs_list.title if obs_list else f"List {job.list_id}",
+            reason=(
+                "No exportable county guide pages were available "
+                "(images missing, restricted by license, or download unavailable)."
+            ),
+        )
+        _upsert_artifact(db, job.id, "merged_pdf", _relative_to_storage(merged_path), None)
+        merged_created = True
+        used_placeholder_county_guide = True
+    elif len(parts) <= max(1, export_config.zip_only_part_threshold):
         merged_path = docs_dir / "all_observations.pdf"
         writer = PdfWriter()
         for part in parts:
@@ -647,11 +663,14 @@ def _phase_finalize(db: Session, job: models.ExportJob) -> bool:
     job.phase = "done"
     job.status = "ready" if merged_created else "partial_ready"
     job.finished_at = utc_now_naive()
-    job.message = (
-        "Export complete: county guide PDF, observations index PDF, and ZIP ready."
-        if merged_created
-        else "Export complete: observations index PDF and ZIP with split county guide parts ready."
-    )
+    if used_placeholder_county_guide:
+        job.message = "Export complete: placeholder county guide PDF, observations index PDF, and ZIP ready."
+    else:
+        job.message = (
+            "Export complete: county guide PDF, observations index PDF, and ZIP ready."
+            if merged_created
+            else "Export complete: observations index PDF and ZIP with split county guide parts ready."
+        )
     publish_warning = publish_job_artifacts(job, artifacts, _storage_root())
     if publish_warning:
         job.message = f"{job.message} Publish note: {publish_warning}"

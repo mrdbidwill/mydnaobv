@@ -113,6 +113,40 @@ def render_part_pdf(
     c.save()
 
 
+def render_empty_county_guide_pdf(
+    output_path: Path,
+    list_title: str,
+    reason: str | None = None,
+) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    c = canvas.Canvas(str(output_path), pagesize=letter)
+
+    c.setFont("Helvetica-Bold", 15)
+    c.drawString(MARGIN, TEXT_TOP, "County Guide")
+
+    c.setFont("Helvetica", 11)
+    y = TEXT_TOP - 22
+    y = _draw_wrapped(c, f"List: {list_title}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
+    y = _draw_wrapped(
+        c,
+        "No exportable county guide pages were available at build time.",
+        MARGIN,
+        y,
+        PAGE_WIDTH - (MARGIN * 2),
+    )
+    y = _draw_wrapped(
+        c,
+        "Check observations_index.pdf for the linked observation list and metadata.",
+        MARGIN,
+        y,
+        PAGE_WIDTH - (MARGIN * 2),
+    )
+    if reason:
+        _draw_wrapped(c, f"Build note: {reason}", MARGIN, y - 4, PAGE_WIDTH - (MARGIN * 2))
+
+    c.save()
+
+
 def render_observation_index_pdf(
     output_path: Path,
     list_title: str,

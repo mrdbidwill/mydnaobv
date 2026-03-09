@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     export_publish_base_url: Optional[str] = Field(default=None, alias="EXPORT_PUBLISH_BASE_URL")
     export_public_downloads_enabled: bool = Field(default=False, alias="EXPORT_PUBLIC_DOWNLOADS_ENABLED")
     public_refresh_interval_days: int = Field(default=7, alias="PUBLIC_REFRESH_INTERVAL_DAYS")
+    public_state_codes: str = Field(default="AL", alias="PUBLIC_STATE_CODES")
 
     def export_operator_credentials(self) -> list[tuple[str, str]]:
         """
