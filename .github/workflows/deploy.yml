@@ -4,6 +4,14 @@ on:
   push:
     branches:
       - main
+    paths:
+      - "app/**"
+      - "alembic/**"
+      - "scripts/**"
+      - "requirements.txt"
+      - "requirements-dev.txt"
+      - ".env.example"
+      - ".github/workflows/deploy.yml"
   workflow_dispatch:
     inputs:
       run_tests:
@@ -22,6 +30,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - name: Preflight Config Check
         id: preflight
@@ -94,6 +103,10 @@ jobs:
           DEPLOY_SERVICE_NAME: ${{ vars.DEPLOY_SERVICE_NAME }}
           DEPLOY_HEALTHCHECK_URL: ${{ vars.DEPLOY_HEALTHCHECK_URL }}
           DEPLOY_HEALTHCHECK_HOST_HEADER: ${{ vars.DEPLOY_HEALTHCHECK_HOST_HEADER }}
+          DEPLOY_HEALTHCHECK_ATTEMPTS: ${{ vars.DEPLOY_HEALTHCHECK_ATTEMPTS }}
+          DEPLOY_HEALTHCHECK_RETRY_DELAY_SECONDS: ${{ vars.DEPLOY_HEALTHCHECK_RETRY_DELAY_SECONDS }}
+          DEPLOY_SSH_ATTEMPTS: ${{ vars.DEPLOY_SSH_ATTEMPTS }}
+          DEPLOY_SSH_RETRY_DELAY_SECONDS: ${{ vars.DEPLOY_SSH_RETRY_DELAY_SECONDS }}
           SYSTEMCTL_USE_SUDO: ${{ vars.SYSTEMCTL_USE_SUDO }}
           ALLOW_DIRTY: ${{ vars.DEPLOY_ALLOW_DIRTY }}
           ALLOW_UNTRACKED: ${{ vars.DEPLOY_ALLOW_UNTRACKED }}
@@ -106,6 +119,10 @@ jobs:
           service_name="${DEPLOY_SERVICE_NAME:-mydnaobv}"
           healthcheck_url="${DEPLOY_HEALTHCHECK_URL:-http://127.0.0.1/}"
           healthcheck_host_header="${DEPLOY_HEALTHCHECK_HOST_HEADER:-}"
+          healthcheck_attempts="${DEPLOY_HEALTHCHECK_ATTEMPTS:-6}"
+          healthcheck_retry_delay_seconds="${DEPLOY_HEALTHCHECK_RETRY_DELAY_SECONDS:-5}"
+          ssh_attempts="${DEPLOY_SSH_ATTEMPTS:-3}"
+          ssh_retry_delay_seconds="${DEPLOY_SSH_RETRY_DELAY_SECONDS:-6}"
           systemctl_use_sudo="${SYSTEMCTL_USE_SUDO:-1}"
           allow_dirty="${ALLOW_DIRTY:-0}"
           allow_untracked="${ALLOW_UNTRACKED:-1}"
@@ -115,22 +132,35 @@ jobs:
             run_tests="1"
           fi
 
-          ssh -p "${port}" "${DEPLOY_USER}@${DEPLOY_HOST}" "set -euo pipefail; \
-            cd '${app_dir}'; \
-            git fetch origin '${branch}'; \
-            git checkout '${branch}'; \
-            git pull --ff-only origin '${branch}'; \
-            chmod +x ./scripts/deploy_server.sh; \
-            APP_DIR='${app_dir}' \
-            BRANCH='${branch}' \
-            SERVICE_NAME='${service_name}' \
-            SYSTEMCTL_USE_SUDO='${systemctl_use_sudo}' \
-            ALLOW_DIRTY='${allow_dirty}' \
-            ALLOW_UNTRACKED='${allow_untracked}' \
-            RUN_TESTS='${run_tests}' \
-            HEALTHCHECK_URL='${healthcheck_url}' \
-            HEALTHCHECK_HOST_HEADER='${healthcheck_host_header}' \
-            ./scripts/deploy_server.sh"
+          for attempt in $(seq 1 "${ssh_attempts}"); do
+            if ssh -o ConnectTimeout=20 -o ServerAliveInterval=20 -p "${port}" "${DEPLOY_USER}@${DEPLOY_HOST}" "set -euo pipefail; \
+              cd '${app_dir}'; \
+              git fetch origin '${branch}'; \
+              git checkout '${branch}'; \
+              git pull --ff-only origin '${branch}'; \
+              chmod +x ./scripts/deploy_server.sh; \
+              APP_DIR='${app_dir}' \
+              BRANCH='${branch}' \
+              SERVICE_NAME='${service_name}' \
+              SYSTEMCTL_USE_SUDO='${systemctl_use_sudo}' \
+              ALLOW_DIRTY='${allow_dirty}' \
+              ALLOW_UNTRACKED='${allow_untracked}' \
+              RUN_TESTS='${run_tests}' \
+              HEALTHCHECK_URL='${healthcheck_url}' \
+              HEALTHCHECK_HOST_HEADER='${healthcheck_host_header}' \
+              HEALTHCHECK_ATTEMPTS='${healthcheck_attempts}' \
+              HEALTHCHECK_RETRY_DELAY_SECONDS='${healthcheck_retry_delay_seconds}' \
+              ./scripts/deploy_server.sh"; then
+              break
+            fi
+
+            if [[ "${attempt}" -ge "${ssh_attempts}" ]]; then
+              echo "Deploy failed after ${ssh_attempts} SSH attempts."
+              exit 1
+            fi
+            echo "Deploy SSH attempt ${attempt}/${ssh_attempts} failed; retrying in ${ssh_retry_delay_seconds}s."
+            sleep "${ssh_retry_delay_seconds}"
+          done
 
       - name: Deployment Summary
         if: steps.preflight.outputs.ready == 'true'

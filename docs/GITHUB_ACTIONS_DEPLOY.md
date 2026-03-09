@@ -20,6 +20,10 @@ Variables (optional, defaults shown):
 - `DEPLOY_SERVICE_NAME=mydnaobv`
 - `DEPLOY_HEALTHCHECK_URL=http://127.0.0.1/`
 - `DEPLOY_HEALTHCHECK_HOST_HEADER=dna.mrdbid.com` (optional for nginx host-based routing)
+- `DEPLOY_HEALTHCHECK_ATTEMPTS=6`
+- `DEPLOY_HEALTHCHECK_RETRY_DELAY_SECONDS=5`
+- `DEPLOY_SSH_ATTEMPTS=3`
+- `DEPLOY_SSH_RETRY_DELAY_SECONDS=6`
 - `SYSTEMCTL_USE_SUDO=1`
 - `DEPLOY_ALLOW_UNTRACKED=1`
 - `DEPLOY_ALLOW_DIRTY=0`
@@ -40,6 +44,11 @@ Variables (optional, defaults shown):
    - GitHub Actions -> `Deploy Production` -> `Run workflow`
 3. Confirm deploy success on server logs/site.
 4. Set `DEPLOY_ENABLED=true` to enable push-to-main auto deploy.
+
+Deploy noise controls included:
+- Auto deploy runs only on `main` pushes that touch deploy-relevant files.
+- SSH deploy step retries automatically before failing.
+- Health check retries automatically before failing.
 
 ## Failure quick-fixes
 
