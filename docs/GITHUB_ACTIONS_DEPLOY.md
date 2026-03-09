@@ -19,6 +19,7 @@ Variables (optional, defaults shown):
 - `DEPLOY_BRANCH=main`
 - `DEPLOY_SERVICE_NAME=mydnaobv`
 - `DEPLOY_HEALTHCHECK_URL=http://127.0.0.1/`
+- `DEPLOY_HEALTHCHECK_HOST_HEADER=dna.mrdbid.com` (optional for nginx host-based routing)
 - `SYSTEMCTL_USE_SUDO=1`
 - `DEPLOY_ALLOW_UNTRACKED=1`
 - `DEPLOY_ALLOW_DIRTY=0`
@@ -47,6 +48,9 @@ Variables (optional, defaults shown):
 
 - `Host key verification failed`:
   - workflow auto-adds host key with `ssh-keyscan`; verify `DEPLOY_HOST` and `DEPLOY_PORT`.
+
+- Health check `404` at `127.0.0.1`:
+  - set `DEPLOY_HEALTHCHECK_HOST_HEADER` to the site hostname used by nginx server block.
 
 - `systemctl restart ...` fails:
   - grant service restart permission or set `SYSTEMCTL_USE_SUDO=0` if not needed.

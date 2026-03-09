@@ -93,6 +93,7 @@ jobs:
           DEPLOY_BRANCH: ${{ vars.DEPLOY_BRANCH }}
           DEPLOY_SERVICE_NAME: ${{ vars.DEPLOY_SERVICE_NAME }}
           DEPLOY_HEALTHCHECK_URL: ${{ vars.DEPLOY_HEALTHCHECK_URL }}
+          DEPLOY_HEALTHCHECK_HOST_HEADER: ${{ vars.DEPLOY_HEALTHCHECK_HOST_HEADER }}
           SYSTEMCTL_USE_SUDO: ${{ vars.SYSTEMCTL_USE_SUDO }}
           ALLOW_DIRTY: ${{ vars.DEPLOY_ALLOW_DIRTY }}
           ALLOW_UNTRACKED: ${{ vars.DEPLOY_ALLOW_UNTRACKED }}
@@ -104,6 +105,7 @@ jobs:
           branch="${DEPLOY_BRANCH:-main}"
           service_name="${DEPLOY_SERVICE_NAME:-mydnaobv}"
           healthcheck_url="${DEPLOY_HEALTHCHECK_URL:-http://127.0.0.1/}"
+          healthcheck_host_header="${DEPLOY_HEALTHCHECK_HOST_HEADER:-}"
           systemctl_use_sudo="${SYSTEMCTL_USE_SUDO:-1}"
           allow_dirty="${ALLOW_DIRTY:-0}"
           allow_untracked="${ALLOW_UNTRACKED:-1}"
@@ -127,6 +129,7 @@ jobs:
             ALLOW_UNTRACKED='${allow_untracked}' \
             RUN_TESTS='${run_tests}' \
             HEALTHCHECK_URL='${healthcheck_url}' \
+            HEALTHCHECK_HOST_HEADER='${healthcheck_host_header}' \
             ./scripts/deploy_server.sh"
 
       - name: Deployment Summary

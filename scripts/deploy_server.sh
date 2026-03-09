@@ -11,6 +11,7 @@ BRANCH="${BRANCH:-main}"
 VENV_DIR="${VENV_DIR:-.venv}"
 SERVICE_NAME="${SERVICE_NAME:-mydnaobv}"
 HEALTHCHECK_URL="${HEALTHCHECK_URL:-http://127.0.0.1/}"
+HEALTHCHECK_HOST_HEADER="${HEALTHCHECK_HOST_HEADER:-}"
 ALLOW_DIRTY="${ALLOW_DIRTY:-0}"
 ALLOW_UNTRACKED="${ALLOW_UNTRACKED:-1}"
 RUN_TESTS="${RUN_TESTS:-0}"
@@ -93,7 +94,13 @@ fi
 
 if command -v curl >/dev/null 2>&1; then
   log "Health check ${HEALTHCHECK_URL}"
-  curl --fail --silent --show-error --max-time 20 "${HEALTHCHECK_URL}" >/dev/null
+  if [[ -n "${HEALTHCHECK_HOST_HEADER}" ]]; then
+    curl --fail --silent --show-error --max-time 20 \
+      -H "Host: ${HEALTHCHECK_HOST_HEADER}" \
+      "${HEALTHCHECK_URL}" >/dev/null
+  else
+    curl --fail --silent --show-error --max-time 20 "${HEALTHCHECK_URL}" >/dev/null
+  fi
 else
   log "curl not found; skipping health check"
 fi
