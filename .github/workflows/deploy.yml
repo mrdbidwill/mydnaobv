@@ -115,6 +115,9 @@ jobs:
 
           ssh -p "${port}" "${DEPLOY_USER}@${DEPLOY_HOST}" "set -euo pipefail; \
             cd '${app_dir}'; \
+            git fetch origin '${branch}'; \
+            git checkout '${branch}'; \
+            git pull --ff-only origin '${branch}'; \
             chmod +x ./scripts/deploy_server.sh; \
             APP_DIR='${app_dir}' \
             BRANCH='${branch}' \
