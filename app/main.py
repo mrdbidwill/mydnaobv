@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Optional
 from urllib.parse import quote
 from fastapi import FastAPI, Request, Form, Depends, Query, HTTPException, status
+from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -32,6 +33,7 @@ from app.services.us_counties import STATE_OPTIONS, fetch_counties_for_state, no
 templates = Jinja2Templates(directory="app/templates")
 
 app = FastAPI(title=settings.app_name)
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 security = HTTPBasic()
 
 
@@ -356,8 +358,6 @@ def index(
             "pages": pages,
             "state_options": state_options,
             "state_code": normalized_state,
-            "limits_explanation": "These downloads are pre-built by admins with queue throttles to protect VPS resources and iNaturalist capacity.",
-            "refresh_interval_days": PUBLIC_REFRESH_INTERVAL_DAYS,
         },
     )
 

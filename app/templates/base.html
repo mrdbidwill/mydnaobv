@@ -29,6 +29,17 @@
         position: sticky;
         top: 0;
       }
+      .header-inner {
+        max-width: 980px;
+        margin: 0 auto;
+        display: flex;
+        gap: 14px;
+        align-items: flex-start;
+        justify-content: space-between;
+      }
+      .brand-block {
+        min-width: 0;
+      }
       main {
         max-width: 980px;
         margin: 0 auto;
@@ -41,6 +52,22 @@
       }
       .subtitle {
         color: var(--muted);
+        margin-top: 6px;
+      }
+      .provider {
+        text-align: right;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.3;
+      }
+      .provider a {
+        color: inherit;
+        text-decoration: none;
+      }
+      .provider-logo {
+        display: block;
+        height: 34px;
+        width: auto;
         margin-top: 6px;
       }
       .card {
@@ -102,13 +129,30 @@
       @media (max-width: 720px) {
         .row { grid-template-columns: 1fr; }
         header { position: static; }
+        .header-inner {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+        .provider {
+          text-align: left;
+        }
       }
     </style>
   </head>
   <body>
     <header>
-      <div class="brand">myDNAobv</div>
-      <div class="subtitle">DNA-confirmed fungal observations for a specific place</div>
+      <div class="header-inner">
+        <div class="brand-block">
+          <div class="brand">myDNAobv</div>
+          <div class="subtitle">DNA-confirmed fungal observations for a specific place</div>
+        </div>
+        <div class="provider">
+          <a href="https://mrdbid.com" target="_blank" rel="noreferrer">Provided by MRDBID</a>
+          <a href="https://mrdbid.com" target="_blank" rel="noreferrer">
+            <img class="provider-logo" src="/static/images/mrdbid_logo.svg" alt="MRDBID" />
+          </a>
+        </div>
+      </div>
     </header>
     <main>
       {% block content %}{% endblock %}

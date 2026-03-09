@@ -3,9 +3,7 @@
   <div class="grid">
     <div class="card">
       <h2>County PDF Downloads</h2>
-      <p class="muted">Finished county PDFs are built by admins in throttled background jobs to protect server resources and iNaturalist capacity.</p>
-      <p class="muted">Refresh cadence: about every {{ refresh_interval_days }} days. PDFs are offline-friendly; external iNaturalist links require internet access.</p>
-      <p class="muted"><strong>Why limits exist:</strong> {{ limits_explanation }}</p>
+      <p class="muted">Browse and download available county files.</p>
       <form method="get" action="/" style="display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;">
         <label class="muted" for="state-filter">Completed state</label>
         <select id="state-filter" class="input" name="state_code" style="width: 220px;">
@@ -26,7 +24,8 @@
       <p class="muted">This project currently builds county outputs from iNaturalist project <strong>Fungi of Alabama- AMS FunDiS Local Project</strong> (created by cabracrazy on November 10, 2023).</p>
       <p class="muted">Each county can publish two files: an observation list PDF (with iNaturalist links) and a county PDF guide (up to 3 images per observation by default). More images are possible, but increase processing and download time.</p>
       <p class="muted">Field use note: downloaded PDFs are offline-friendly. iNaturalist links require internet access.</p>
-      <p class="muted"><strong>Current inclusion rule:</strong> results are built from observations that match both project membership and presence of the <em>DNA Barcode ITS</em> field.</p>
+      <p class="muted"><strong>Current inclusion rule:</strong> results are built from observations that match both project membership and presence of the <em>DNA Barcode ITS</em> field. We are not offering legal advice, and observers may have valid reasons to restrict image licenses. Restricted or missing-license images cannot be included in county guide PDF pages. The observation list is still created from matching records, but image-based county PDF content may be unavailable for those observations.</p>
+      <p class="muted">If you would like to create a project for another state or another iNaturalist project, please email your request using MRDBID's Contact Page at <a href="https://mrdbid.com/contact" target="_blank" rel="noreferrer">https://mrdbid.com/contact</a>.</p>
       <details style="margin-top: 8px;">
         <summary class="muted" style="cursor: pointer;">Future options under consideration</summary>
         <p class="muted" style="margin-top: 8px;">Questions under active review include whether this should continue to require both project membership and DNA field presence, how to handle the timing gap before sequence data is added, and whether member workflow guidance should prioritize early project membership.</p>
