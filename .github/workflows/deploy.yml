@@ -89,7 +89,17 @@ jobs:
           install -m 700 -d ~/.ssh
           printf '%s\n' "${DEPLOY_SSH_KEY}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -p "${port}" -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
+          scanned=0
+          for attempt in 1 2 3; do
+            if ssh-keyscan -T 10 -p "${port}" -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts 2>/dev/null; then
+              scanned=1
+              break
+            fi
+            sleep 2
+          done
+          if [[ "${scanned}" != "1" ]]; then
+            echo "ssh-keyscan did not return host key; continuing with StrictHostKeyChecking=accept-new."
+          fi
 
       - name: Deploy Over SSH
         if: steps.preflight.outputs.ready == 'true'
@@ -133,7 +143,7 @@ jobs:
           fi
 
           for attempt in $(seq 1 "${ssh_attempts}"); do
-            if ssh -o ConnectTimeout=20 -o ServerAliveInterval=20 -p "${port}" "${DEPLOY_USER}@${DEPLOY_HOST}" "set -euo pipefail; \
+            if ssh -o ConnectTimeout=20 -o ServerAliveInterval=20 -o StrictHostKeyChecking=accept-new -p "${port}" "${DEPLOY_USER}@${DEPLOY_HOST}" "set -euo pipefail; \
               cd '${app_dir}'; \
               git fetch origin '${branch}'; \
               git checkout '${branch}'; \
