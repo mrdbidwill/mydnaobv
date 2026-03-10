@@ -103,13 +103,12 @@ Example multi-operator config:
 EXPORT_OPERATORS_JSON=[{"username":"ams_alice","password":"strong-pass-1"},{"username":"ams_bob","password":"strong-pass-2"}]
 ```
 
-Example multi-photo export mode (conservative starting point):
+Recommended low-storage export mode:
 
 ```env
-EXPORT_INCLUDE_ALL_PHOTOS=true
-EXPORT_MAX_PHOTOS_PER_OBSERVATION=3
-EXPORT_DOWNLOAD_CHUNK_SIZE=4
-EXPORT_PART_SIZE=60
+EXPORT_INCLUDE_ALL_PHOTOS=false
+EXPORT_MAX_PHOTOS_PER_OBSERVATION=1
+EXPORT_RETENTION_HOURS=48
 ```
 
 Example published member downloads mode:
