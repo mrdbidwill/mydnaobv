@@ -22,10 +22,16 @@ Project continuity docs:
 
 ## Quick start
 
+Prerequisites (local development):
+
+- `python3` available on PATH (macOS/Linux often do not provide plain `python`)
+- virtualenv support (`python3 -m venv`)
+- `ripgrep` (`rg`) recommended for fast code search
+
 1. Create a virtual environment and install deps:
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements-dev.txt
 ```
@@ -34,6 +40,21 @@ pip install -r requirements-dev.txt
 
 ```bash
 cp .env.example .env
+```
+
+Do not `source .env` in your shell. `.env` values are app config, not shell-safe syntax.
+Some values contain spaces and can break shell parsing.
+
+Safe patterns:
+
+```bash
+# run app/tools with app-level .env loading
+uvicorn app.main:app --reload
+alembic upgrade head
+
+# read individual values when needed
+grep '^ADMIN_USERNAME=' .env
+grep '^ADMIN_PASSWORD=' .env
 ```
 
 3. Run database migrations (once configured):
