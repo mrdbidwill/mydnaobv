@@ -38,6 +38,48 @@ def _draw_wrapped(c: canvas.Canvas, text: str, x: float, y: float, width: float,
     return cursor
 
 
+def _draw_link_line(
+    c: canvas.Canvas,
+    label: str,
+    url: str,
+    x: float,
+    y: float,
+    width: float,
+    line_height: float = 14.0,
+) -> float:
+    c.setFont("Helvetica", 10)
+    label_text = f"{label}: "
+    label_width = c.stringWidth(label_text, "Helvetica", 10)
+    url_width = c.stringWidth(url, "Helvetica", 10)
+
+    c.setFillColorRGB(0, 0, 0)
+    if label_width + url_width <= width:
+        c.drawString(x, y, label_text)
+        link_x = x + label_width
+        link_y = y
+    else:
+        # Keep the label and place the URL on the next line when needed.
+        c.drawString(x, y, f"{label}:")
+        link_x = x
+        link_y = y - line_height
+
+    c.setFillColorRGB(0.0, 0.25, 0.85)
+    c.drawString(link_x, link_y, url)
+    c.setStrokeColorRGB(0.0, 0.25, 0.85)
+    c.setLineWidth(0.8)
+    c.line(link_x, link_y - 1, link_x + url_width, link_y - 1)
+    c.linkURL(
+        url,
+        (link_x, link_y - 2, link_x + url_width, link_y + 10),
+        relative=0,
+        thickness=0,
+    )
+
+    c.setFillColorRGB(0, 0, 0)
+    c.setStrokeColorRGB(0, 0, 0)
+    return link_y - line_height
+
+
 def _draw_image(c: canvas.Canvas, image_path: Path) -> None:
     reader = ImageReader(str(image_path))
     width, height = reader.getSize()
@@ -193,7 +235,7 @@ def render_observation_index_pdf(
         c.setFont("Helvetica", 10)
         y = _draw_wrapped(c, f"Observed: {observed_text} | Observer: {observer}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
         y = _draw_wrapped(c, f"Common name: {common}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
-        y = _draw_wrapped(c, f"iNaturalist: {obs.inat_url}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
+        y = _draw_link_line(c, "iNaturalist", obs.inat_url, MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
         y -= 4
 
     if not observations:

@@ -169,6 +169,13 @@ Cleanup expired artifacts:
 python3 -m app.exports.worker --cleanup
 ```
 
+Dry-run orphan export/publish directory cleanup (folders left behind with no DB rows):
+
+```bash
+python scripts/cleanup_orphan_exports.py
+python scripts/cleanup_orphan_exports.py --apply
+```
+
 Suggested cron entries (staged throughput):
 
 ```cron

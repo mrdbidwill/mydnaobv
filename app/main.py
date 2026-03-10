@@ -1,4 +1,6 @@
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
+import shutil
 from typing import Optional
 from urllib.parse import quote
 from fastapi import FastAPI, Request, Form, Depends, Query, HTTPException, status
@@ -74,6 +76,16 @@ def _artifact_public_url(list_id: int, artifact: models.ExportArtifact | None) -
         if latest_url:
             return latest_url
     return f"/public/lists/{list_id}/artifacts/{artifact.id}/download"
+
+
+def _cleanup_list_export_files(job_ids: list[int], list_id: int) -> None:
+    storage_root = Path(settings.export_storage_dir)
+    for job_id in job_ids:
+        shutil.rmtree(storage_root / f"job_{job_id}", ignore_errors=True)
+
+    publish_root = (settings.export_publish_dir or "").strip()
+    if publish_root:
+        shutil.rmtree(Path(publish_root) / f"list_{list_id}", ignore_errors=True)
 
 
 def _format_utc_date(value: datetime | None) -> str:
@@ -899,6 +911,7 @@ def admin_delete_list(
     _: bool = Depends(require_admin),
 ):
     job_ids = [row[0] for row in db.query(models.ExportJob.id).filter_by(list_id=list_id).all()]
+    _cleanup_list_export_files(job_ids, list_id)
     if job_ids:
         db.query(models.ExportArtifact).filter(models.ExportArtifact.job_id.in_(job_ids)).delete(
             synchronize_session=False
