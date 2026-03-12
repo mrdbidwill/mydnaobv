@@ -34,8 +34,15 @@ class ExportConfig:
     allowed_licenses_csv: str
     allow_unlicensed: bool
     publish_enabled: bool
+    publish_backend: str
     publish_dir: str | None
     publish_base_url: str | None
+    publish_bucket: str | None
+    publish_prefix: str
+    publish_s3_endpoint: str | None
+    publish_s3_region: str
+    publish_s3_access_key_id: str | None
+    publish_s3_secret_access_key: str | None
     public_downloads_enabled: bool
 
     def classify_bucket(self, item_count: int) -> str:
@@ -113,8 +120,15 @@ export_config = ExportConfig(
     allowed_licenses_csv=settings.export_allowed_licenses,
     allow_unlicensed=settings.export_allow_unlicensed,
     publish_enabled=settings.export_publish_enabled,
+    publish_backend=settings.export_publish_backend,
     publish_dir=settings.export_publish_dir,
     publish_base_url=settings.export_publish_base_url,
+    publish_bucket=settings.export_publish_bucket,
+    publish_prefix=settings.export_publish_prefix,
+    publish_s3_endpoint=settings.export_publish_s3_endpoint,
+    publish_s3_region=settings.export_publish_s3_region,
+    publish_s3_access_key_id=settings.export_publish_s3_access_key_id,
+    publish_s3_secret_access_key=settings.export_publish_s3_secret_access_key,
     public_downloads_enabled=settings.export_public_downloads_enabled,
 )
 
