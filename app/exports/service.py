@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 import json
 from pathlib import Path
+import re
 import shutil
 import time
 import zipfile
@@ -596,13 +597,17 @@ def _phase_finalize(db: Session, job: models.ExportJob) -> bool:
     _upsert_artifact(db, job.id, "readme", _relative_to_storage(readme_path), None)
 
     obs_list = db.query(models.ObservationList).filter(models.ObservationList.id == job.list_id).first()
+    filename_prefix = _filename_prefix_for_list(obs_list, job.list_id)
+    index_pdf_name = f"{filename_prefix}_observations_index.pdf"
+    county_pdf_name = f"{filename_prefix}_all_observations.pdf"
+    zip_name = f"{filename_prefix}_observation_export_parts.zip"
     observations = (
         db.query(models.Observation)
         .filter(models.Observation.list_id == job.list_id)
         .order_by(models.Observation.observed_at.desc().nullslast(), models.Observation.id.asc())
         .all()
     )
-    index_pdf_path = docs_dir / "observations_index.pdf"
+    index_pdf_path = docs_dir / index_pdf_name
     render_observation_index_pdf(
         output_path=index_pdf_path,
         list_title=obs_list.title if obs_list else f"List {job.list_id}",
@@ -613,7 +618,7 @@ def _phase_finalize(db: Session, job: models.ExportJob) -> bool:
     merged_created = False
     used_placeholder_county_guide = False
     if not parts:
-        merged_path = docs_dir / "all_observations.pdf"
+        merged_path = docs_dir / county_pdf_name
         render_empty_county_guide_pdf(
             output_path=merged_path,
             list_title=obs_list.title if obs_list else f"List {job.list_id}",
@@ -626,7 +631,7 @@ def _phase_finalize(db: Session, job: models.ExportJob) -> bool:
         merged_created = True
         used_placeholder_county_guide = True
     elif len(parts) <= max(1, export_config.zip_only_part_threshold):
-        merged_path = docs_dir / "all_observations.pdf"
+        merged_path = docs_dir / county_pdf_name
         writer = PdfWriter()
         for part in parts:
             part_path = _storage_root() / part.relative_path
@@ -638,17 +643,17 @@ def _phase_finalize(db: Session, job: models.ExportJob) -> bool:
         _upsert_artifact(db, job.id, "merged_pdf", _relative_to_storage(merged_path), None)
         merged_created = True
 
-    zip_path = docs_dir / "observation_export_parts.zip"
+    zip_path = docs_dir / zip_name
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.write(readme_path, arcname="README_FIRST.txt")
-        zf.write(index_pdf_path, arcname="observations_index.pdf")
+        zf.write(index_pdf_path, arcname=index_pdf_name)
         for part in parts:
             part_path = _storage_root() / part.relative_path
             arcname = f"parts/{Path(part.relative_path).name}"
             zf.write(part_path, arcname=arcname)
         if merged_created:
-            merged_path = docs_dir / "all_observations.pdf"
-            zf.write(merged_path, arcname="all_observations.pdf")
+            merged_path = docs_dir / county_pdf_name
+            zf.write(merged_path, arcname=county_pdf_name)
 
     _upsert_artifact(db, job.id, "zip", _relative_to_storage(zip_path), None)
 
@@ -900,8 +905,8 @@ def _build_readme_text(job: models.ExportJob) -> str:
         "2. Right-click the ZIP file.\n"
         "3. Click 'Extract All' (or 'Unzip').\n"
         "4. Open the new extracted folder.\n"
-        "5. Open observations_index.pdf for the linked observation list.\n"
-        "6. Open all_observations.pdf if present, or PART files in numeric order.\n"
+        "5. Open *_observations_index.pdf for the linked observation list.\n"
+        "6. Open *_all_observations.pdf if present, or PART files in numeric order.\n"
         "\n"
         "Why there are multiple files:\n"
         "- Large exports are split into smaller PDFs to keep the server stable.\n"
@@ -913,3 +918,23 @@ def _build_readme_text(job: models.ExportJob) -> str:
         "- Each page contains source and attribution details from iNaturalist metadata.\n"
         f"\nExport job ID: {job.id}\n"
     )
+
+
+def _filename_prefix_for_list(obs_list: models.ObservationList | None, list_id: int) -> str:
+    tokens: list[str] = []
+    if obs_list:
+        if obs_list.county_name:
+            tokens.append(obs_list.county_name)
+        if obs_list.state_code:
+            tokens.append(obs_list.state_code)
+        if not tokens and obs_list.title:
+            tokens.append(obs_list.title)
+
+    if not tokens:
+        return f"list-{list_id}"
+
+    raw = "-".join(tokens)
+    cleaned = re.sub(r"[^A-Za-z0-9]+", "-", raw).strip("-").lower()
+    if not cleaned:
+        return f"list-{list_id}"
+    return cleaned
