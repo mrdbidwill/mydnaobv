@@ -48,7 +48,7 @@ PUBLIC_REFRESH_INTERVAL_DAYS = max(1, settings.public_refresh_interval_days)
 
 @app.get("/favicon.ico", include_in_schema=False)
 def favicon() -> FileResponse:
-    return FileResponse("app/static/images/mrdbid_logo.svg", media_type="image/svg+xml")
+    return FileResponse("app/static/images/favicon.svg", media_type="image/svg+xml")
 
 
 def template_response(
