@@ -117,6 +117,7 @@ Purpose: persistent decision/history log for future chat sessions and implementa
 - Maintenance posture (current):
   - keep manual deploy path as known-good fallback while GitHub Actions deploy workflow is noisy/failing.
   - keep service-user ownership/permissions aligned for export working directories.
+  - avoid running git operations as `root` inside `/opt/mydnaobv/app`; mixed ownership in `.git/objects` breaks both manual and CI deploy fetch/pull.
   - keep conservative photo/export limits until backlog and runtime metrics are consistently healthy.
   - keep `dna.mrdbid.com` as Cloudflare `DNS only` (gray cloud) because proxied mode breaks SSH/admin access to port 22.
   - ensure operator SSH public key remains present in `/opt/mydnaobv/.ssh/authorized_keys` (the account home for `mydnaobv`).

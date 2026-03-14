@@ -42,3 +42,21 @@ Expected:
 ## 4) SSH/DNS guardrail reminder
 
 `dna.mrdbid.com` must stay Cloudflare `DNS only` (gray cloud), not proxied, or SSH deploy will fail.
+
+## 5) If GitHub/SSH deploy fails with `.git/objects` permission errors
+
+Symptom:
+- `error: insufficient permission for adding an object to repository database .git/objects`
+
+Cause:
+- mixed ownership in repo files (often from running git as `root` in app repo path).
+
+Fix (run as `root` on server):
+
+```bash
+chown -R mydnaobv:mydnaobv /opt/mydnaobv/app
+```
+
+Prevention:
+- avoid running `git fetch/pull` as `root` in `/opt/mydnaobv/app`.
+- use deploy user (`mydnaobv`) for repo operations.
