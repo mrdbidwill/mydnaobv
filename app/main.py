@@ -46,6 +46,27 @@ PUBLIC_COUNTY_PAGE_SIZE = 24
 PUBLIC_REFRESH_INTERVAL_DAYS = max(1, settings.public_refresh_interval_days)
 
 
+def template_response(
+    request: Request,
+    template_name: str,
+    context: dict[str, object],
+    *,
+    show_ads: bool = False,
+    status_code: int = 200,
+):
+    adsense_client_id = (settings.adsense_client_id or "").strip()
+    adsense_banner_slot = (settings.adsense_banner_slot or "").strip()
+    render_ads = bool(show_ads and settings.adsense_enabled and adsense_client_id)
+    payload = {
+        "request": request,
+        "show_adsense": render_ads,
+        "adsense_client_id": adsense_client_id,
+        "adsense_banner_slot": adsense_banner_slot,
+    }
+    payload.update(context)
+    return templates.TemplateResponse(template_name, payload, status_code=status_code)
+
+
 def normalize_index_sort(sort: str | None) -> str:
     candidate = (sort or "").strip().lower()
     if candidate in ("title_asc", "created_desc"):
@@ -360,10 +381,10 @@ def index(
         state_code,
     )
 
-    return templates.TemplateResponse(
+    return template_response(
+        request,
         "index.html",
         {
-            "request": request,
             "app_name": settings.app_name,
             "rows": rows,
             "page": current_page,
@@ -371,6 +392,7 @@ def index(
             "state_options": state_options,
             "state_code": normalized_state,
         },
+        show_ads=True,
     )
 
 
@@ -395,10 +417,10 @@ def list_page(
 ):
     obs_list = db.query(models.ObservationList).filter_by(id=list_id).first()
     if not obs_list:
-        return templates.TemplateResponse(
+        return template_response(
+            request,
             "list.html",
             {
-                "request": request,
                 "list": None,
                 "observations": [],
                 "error": "List not found.",
@@ -425,10 +447,10 @@ def list_page(
         .all()
     )
 
-    return templates.TemplateResponse(
+    return template_response(
+        request,
         "list.html",
         {
-            "request": request,
             "list": obs_list,
             "observations": observations,
             "cache_ttl_hours": settings.cache_ttl_hours,
@@ -659,10 +681,10 @@ def admin_page(
         if code
     ]
 
-    return templates.TemplateResponse(
+    return template_response(
+        request,
         "admin.html",
         {
-            "request": request,
             "lists": lists,
             "page": current_page,
             "pages": pages,
@@ -982,10 +1004,10 @@ def edit_list(
 ):
     obs_list = db.query(models.ObservationList).filter_by(id=list_id).first()
     if not obs_list:
-        return templates.TemplateResponse(
+        return template_response(
+            request,
             "list.html",
             {
-                "request": request,
                 "list": None,
                 "observations": [],
                 "error": "List not found.",
@@ -995,10 +1017,10 @@ def edit_list(
 
     title = title.strip()
     if not title:
-        return templates.TemplateResponse(
+        return template_response(
+            request,
             "list.html",
             {
-                "request": request,
                 "list": obs_list,
                 "observations": [],
                 "error": "Title is required.",
@@ -1008,10 +1030,10 @@ def edit_list(
 
     user_id_int, username, user_error = parse_optional_user_filters(inat_user_id, inat_username)
     if user_error:
-        return templates.TemplateResponse(
+        return template_response(
+            request,
             "list.html",
             {
-                "request": request,
                 "list": obs_list,
                 "observations": [],
                 "error": user_error,
@@ -1021,10 +1043,10 @@ def edit_list(
 
     project_id, project_error = parse_project_filter(inat_project_id)
     if project_error:
-        return templates.TemplateResponse(
+        return template_response(
+            request,
             "list.html",
             {
-                "request": request,
                 "list": obs_list,
                 "observations": [],
                 "error": project_error,
@@ -1033,10 +1055,10 @@ def edit_list(
         )
 
     if user_id_int is None and not username and not project_id:
-        return templates.TemplateResponse(
+        return template_response(
+            request,
             "list.html",
             {
-                "request": request,
                 "list": obs_list,
                 "observations": [],
                 "error": "Provide an iNaturalist user ID, username, or project ID/slug.",

@@ -7,6 +7,7 @@ Project continuity docs:
 - `docs/PROJECT_MEMORY.md` (dated decision/history log for future sessions)
 - `docs/KVM4_COUNTY_PIPELINE_ROADMAP.md` (staged plan for KVM4 + county-product pipeline)
 - `docs/GITHUB_ACTIONS_DEPLOY.md` (GitHub Actions deploy setup + troubleshooting)
+- `docs/R2_ADSENSE_TRANSITION_PLAN.md` (object-storage + monetization rollout plan)
 
 ## Current flow
 
@@ -121,6 +122,33 @@ EXPORT_PUBLIC_DOWNLOADS_ENABLED=true
 PUBLIC_REFRESH_INTERVAL_DAYS=7
 PUBLIC_STATE_CODES=AL
 ```
+
+Example Cloudflare R2 publish mode (S3-compatible backend):
+
+```env
+EXPORT_PUBLISH_ENABLED=true
+EXPORT_PUBLISH_BACKEND=s3
+EXPORT_PUBLISH_BUCKET=mydnaobv-downloads
+EXPORT_PUBLISH_PREFIX=mydnaobv
+EXPORT_PUBLISH_S3_ENDPOINT=https://<accountid>.r2.cloudflarestorage.com
+EXPORT_PUBLISH_S3_REGION=auto
+EXPORT_PUBLISH_S3_ACCESS_KEY_ID=<r2-access-key-id>
+EXPORT_PUBLISH_S3_SECRET_ACCESS_KEY=<r2-secret-access-key>
+EXPORT_PUBLISH_BASE_URL=https://downloads.dna.mrdbid.com/mydnaobv
+EXPORT_PUBLIC_DOWNLOADS_ENABLED=true
+```
+
+AdSense public-page gating:
+
+```env
+ADSENSE_ENABLED=true
+ADSENSE_CLIENT_ID=ca-pub-1234567890123456
+# Optional fixed banner slot; leave empty for Auto Ads only.
+ADSENSE_BANNER_SLOT=
+```
+
+- Ads are rendered on public template responses only (`/` in current app).
+- Admin and authenticated pages do not include the AdSense script.
 
 Recommended staged-throughput timing profile (keeps iNaturalist guardrails unchanged):
 

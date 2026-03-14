@@ -63,3 +63,77 @@ def test_publish_job_artifacts_reports_misconfiguration(tmp_path, monkeypatch):
     warning = publish_module.publish_job_artifacts(job, artifacts, Path(tmp_path / "exports"))
     assert warning is not None
     assert "missing" in warning
+
+
+def test_publish_job_artifacts_s3_uploads_expected_keys(tmp_path, monkeypatch):
+    class FakeS3:
+        def __init__(self):
+            self.upload_calls: list[tuple[str, str, str]] = []
+            self.put_calls: list[tuple[str, str, bytes]] = []
+
+        def upload_file(self, filename, bucket, key):
+            self.upload_calls.append((filename, bucket, key))
+
+        def put_object(self, Bucket, Key, Body, ContentType):
+            assert ContentType == "application/json"
+            self.put_calls.append((Bucket, Key, Body))
+
+    fake = FakeS3()
+    cfg = replace(
+        publish_module.export_config,
+        publish_enabled=True,
+        publish_backend="s3",
+        publish_base_url="https://downloads.example.org/mydnaobv",
+        publish_bucket="dna-downloads",
+        publish_prefix="mydnaobv",
+        publish_s3_endpoint="https://example.r2.cloudflarestorage.com",
+        publish_s3_access_key_id="key",
+        publish_s3_secret_access_key="secret",
+    )
+    monkeypatch.setattr(publish_module, "export_config", cfg)
+    monkeypatch.setattr(publish_module, "_s3_client", lambda: fake)
+
+    storage_root = tmp_path / "exports"
+    source_dir = storage_root / "job_2" / "final"
+    source_dir.mkdir(parents=True, exist_ok=True)
+    (source_dir / "all_observations.pdf").write_bytes(b"pdf-bytes")
+
+    job = SimpleNamespace(id=2, list_id=7, status="ready")
+    artifacts = [
+        SimpleNamespace(
+            id=201,
+            kind="merged_pdf",
+            part_number=None,
+            relative_path="job_2/final/all_observations.pdf",
+        )
+    ]
+
+    warning = publish_module.publish_job_artifacts(job, artifacts, storage_root)
+    assert warning is None
+    assert fake.upload_calls == [
+        (str(source_dir / "all_observations.pdf"), "dna-downloads", "mydnaobv/list_7/job_2/all_observations.pdf"),
+        (str(source_dir / "all_observations.pdf"), "dna-downloads", "mydnaobv/list_7/latest/all_observations.pdf"),
+    ]
+    assert len(fake.put_calls) == 2
+
+
+def test_latest_artifact_exists_s3_returns_true_when_enabled(monkeypatch):
+    cfg = replace(
+        publish_module.export_config,
+        publish_enabled=True,
+        publish_backend="s3",
+        publish_base_url="https://downloads.example.org/mydnaobv",
+        publish_bucket="dna-downloads",
+        publish_s3_endpoint="https://example.r2.cloudflarestorage.com",
+        publish_s3_access_key_id="key",
+        publish_s3_secret_access_key="secret",
+    )
+    monkeypatch.setattr(publish_module, "export_config", cfg)
+
+    artifact = SimpleNamespace(
+        id=301,
+        kind="merged_pdf",
+        part_number=None,
+        relative_path="job_3/final/all_observations.pdf",
+    )
+    assert publish_module.latest_artifact_exists(5, artifact) is True
