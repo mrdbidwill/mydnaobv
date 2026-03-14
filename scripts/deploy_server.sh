@@ -85,9 +85,11 @@ if [[ "${ALLOW_DIRTY}" != "1" ]]; then
 fi
 
 log "Fetching latest ${BRANCH}"
-run_with_retry "${GIT_ATTEMPTS}" "${GIT_RETRY_DELAY_SECONDS}" git fetch origin "${BRANCH}"
+run_with_retry "${GIT_ATTEMPTS}" "${GIT_RETRY_DELAY_SECONDS}" \
+  git fetch origin "+refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}"
 git checkout "${BRANCH}"
-run_with_retry "${GIT_ATTEMPTS}" "${GIT_RETRY_DELAY_SECONDS}" git pull --ff-only origin "${BRANCH}"
+run_with_retry "${GIT_ATTEMPTS}" "${GIT_RETRY_DELAY_SECONDS}" \
+  git merge --ff-only "refs/remotes/origin/${BRANCH}"
 
 if [[ ! -d "${VENV_DIR}" ]]; then
   log "Creating virtual environment at ${VENV_DIR}"
