@@ -126,14 +126,14 @@ if command -v curl >/dev/null 2>&1; then
   health_ok=0
   for attempt in $(seq 1 "${HEALTHCHECK_ATTEMPTS}"); do
     if [[ -n "${HEALTHCHECK_HOST_HEADER}" ]]; then
-      if curl --fail --silent --show-error --max-time 20 \
+      if curl --location --fail --silent --show-error --max-time 20 \
         -H "Host: ${HEALTHCHECK_HOST_HEADER}" \
         "${HEALTHCHECK_URL}" >/dev/null; then
         health_ok=1
         break
       fi
     else
-      if curl --fail --silent --show-error --max-time 20 "${HEALTHCHECK_URL}" >/dev/null; then
+      if curl --location --fail --silent --show-error --max-time 20 "${HEALTHCHECK_URL}" >/dev/null; then
         health_ok=1
         break
       fi

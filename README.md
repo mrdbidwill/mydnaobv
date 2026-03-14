@@ -241,7 +241,7 @@ APP_DIR=/opt/mydnaobv/app BRANCH=main SERVICE_NAME=mydnaobv ./scripts/deploy_ser
 From your local machine over SSH:
 
 ```bash
-HOST=dna.mrdbid.com USER_NAME=mydnaobv APP_DIR=/opt/mydnaobv/app BRANCH=main SERVICE_NAME=mydnaobv ./scripts/deploy_remote.sh
+HOST=dna.mrdbid.com USER_NAME=mydnaobv APP_DIR=/opt/mydnaobv/app BRANCH=main SERVICE_NAME=mydnaobv HEALTHCHECK_HOST_HEADER=dna.mrdbid.com ./scripts/deploy_remote.sh
 ```
 
 Optional flags:

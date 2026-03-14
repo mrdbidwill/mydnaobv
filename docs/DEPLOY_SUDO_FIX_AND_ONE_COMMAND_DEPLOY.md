@@ -26,6 +26,7 @@ USER_NAME=mydnaobv \
 APP_DIR=/opt/mydnaobv/app \
 BRANCH=main \
 SERVICE_NAME=mydnaobv \
+HEALTHCHECK_HOST_HEADER=dna.mrdbid.com \
 ./scripts/deploy_remote.sh
 ```
 
