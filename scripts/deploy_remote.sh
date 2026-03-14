@@ -28,6 +28,12 @@ if [[ -z "${HOST}" ]]; then
   exit 1
 fi
 
+# For common nginx vhost setups, local health checks to 127.0.0.1 require
+# a Host header to route correctly. Default it to HOST if not provided.
+if [[ -z "${HEALTHCHECK_HOST_HEADER}" && "${HEALTHCHECK_URL}" =~ ^http://127\.0\.0\.1(/|$) ]]; then
+  HEALTHCHECK_HOST_HEADER="${HOST}"
+fi
+
 log() {
   printf '[deploy-remote] %s\n' "$*"
 }
