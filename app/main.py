@@ -46,6 +46,11 @@ PUBLIC_COUNTY_PAGE_SIZE = 24
 PUBLIC_REFRESH_INTERVAL_DAYS = max(1, settings.public_refresh_interval_days)
 
 
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon() -> RedirectResponse:
+    return RedirectResponse(url="/static/images/mrdbid_logo.svg", status_code=307)
+
+
 def template_response(
     request: Request,
     template_name: str,
