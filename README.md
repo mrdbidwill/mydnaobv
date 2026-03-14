@@ -247,10 +247,26 @@ HOST=dna.mrdbid.com USER_NAME=mydnaobv APP_DIR=/opt/mydnaobv/app BRANCH=main SER
 Optional flags:
 - `RUN_TESTS=1` to run tests during deploy
 - `SYSTEMCTL_USE_SUDO=0` if service user can restart without sudo
+- `EXPECTED_HOST_IP=85.31.233.192` to enforce DNS resolves to origin (helps catch accidental Cloudflare proxying on SSH host)
+- `PRECHECK_DNS=1` (default) to validate DNS before SSH deploy
+- `PRECHECK_SSH=1` (default) to validate key-based SSH login before deploy
+- `PRECHECK_SUDO=1` (default) to validate non-interactive sudo for service restart/status
 - `HEALTHCHECK_URL=http://127.0.0.1/` to override health endpoint
 - `HEALTHCHECK_HOST_HEADER=dna.mrdbid.com` when local vhost routing needs a Host header
 - `ALLOW_UNTRACKED=1` allows local untracked files on server (default)
 - `ALLOW_DIRTY=1` to bypass clean-worktree protection (not recommended)
+
+For one-command non-interactive deploys with `SYSTEMCTL_USE_SUDO=1`, grant limited sudo:
+
+```bash
+SYSTEMCTL="$(command -v systemctl)"
+cat > /etc/sudoers.d/mydnaobv-systemctl <<EOF
+Defaults:mydnaobv !requiretty
+mydnaobv ALL=(root) NOPASSWD: ${SYSTEMCTL} restart mydnaobv, ${SYSTEMCTL} status mydnaobv, ${SYSTEMCTL} is-active mydnaobv
+EOF
+chmod 440 /etc/sudoers.d/mydnaobv-systemctl
+visudo -cf /etc/sudoers.d/mydnaobv-systemctl
+```
 
 GitHub Actions deploy:
 

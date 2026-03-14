@@ -29,7 +29,11 @@ log() {
 
 run_systemctl() {
   if [[ "${SYSTEMCTL_USE_SUDO}" == "1" ]]; then
-    sudo systemctl "$@"
+    if ! sudo -n systemctl "$@"; then
+      log "systemctl via sudo failed for command: systemctl $*"
+      log "Ensure deploy user has NOPASSWD sudo for required service commands."
+      exit 1
+    fi
   else
     systemctl "$@"
   fi

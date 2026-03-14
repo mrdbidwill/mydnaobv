@@ -118,6 +118,9 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - keep manual deploy path as known-good fallback while GitHub Actions deploy workflow is noisy/failing.
   - keep service-user ownership/permissions aligned for export working directories.
   - keep conservative photo/export limits until backlog and runtime metrics are consistently healthy.
+  - keep `dna.mrdbid.com` as Cloudflare `DNS only` (gray cloud) because proxied mode breaks SSH/admin access to port 22.
+  - ensure operator SSH public key remains present in `/opt/mydnaobv/.ssh/authorized_keys` (the account home for `mydnaobv`).
+  - keep limited passwordless sudo for deploy user on `systemctl restart/status mydnaobv` so non-interactive deploy scripts do not fail on sudo prompts.
 - Future improvements after any VPS plan upgrade:
   - execute Phase 4 work for safe parallel workers and queue locking.
   - retune cadence/chunk/timeout settings incrementally with metric checks after each change.
