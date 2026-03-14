@@ -49,7 +49,10 @@ if [[ "${PRECHECK_DNS}" == "1" ]]; then
   if ! command -v dig >/dev/null 2>&1; then
     log "Skipping DNS precheck: dig not found."
   else
-    mapfile -t resolved_ips < <(dig +short A "${HOST}" | awk 'NF')
+    resolved_ips=()
+    while IFS= read -r ip; do
+      [[ -n "${ip}" ]] && resolved_ips+=("${ip}")
+    done < <(dig +short A "${HOST}" | awk 'NF')
     if [[ "${#resolved_ips[@]}" -eq 0 ]]; then
       log "DNS precheck failed: no A records for ${HOST}."
       exit 1
@@ -94,7 +97,7 @@ fi
 if [[ "${PRECHECK_SUDO}" == "1" && "${SYSTEMCTL_USE_SUDO}" == "1" ]]; then
   log "Checking non-interactive sudo for systemctl ${SERVICE_NAME}"
   ssh "${ssh_opts_arr[@]}" "${USER_NAME}@${HOST}" \
-    "sudo -n systemctl status '${SERVICE_NAME}' --no-pager >/dev/null 2>&1; rc=\$?; if [ \"\$rc\" -eq 0 ] || [ \"\$rc\" -eq 3 ]; then exit 0; fi; exit \$rc"
+    "sudo -n systemctl is-active --quiet '${SERVICE_NAME}'; rc=\$?; test \$rc -eq 0 -o \$rc -eq 3"
 fi
 
 ssh "${ssh_opts_arr[@]}" "${USER_NAME}@${HOST}" \
