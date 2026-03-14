@@ -1,9 +1,14 @@
 # KVM4 + County Pipeline Roadmap
 
-Last updated: March 8, 2026
+Last updated: March 14, 2026
 
 ## Objective
 Reduce large-export turnaround time and move to a curated, prebuilt county-product model that protects shared VPS resources.
+
+## 2026-03-14 Sync Note
+- After R2 cutover, KVM4 priority is compute/runtime headroom (CPU/RAM/concurrency), not image disk pressure.
+- Keep treating `waiting_quota` and `partial_ready` as expected under heavy loads unless metrics/logs indicate true failure.
+- Post-upgrade work should focus on Phase 4 parallel worker safety and incremental tuning with metric checkpoints.
 
 ## Phase 1 (Now): KVM4 Readiness Without Architecture Rewrite
 - Keep the current queue/worker model.
