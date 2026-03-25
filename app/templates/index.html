@@ -121,5 +121,63 @@
         </div>
       {% endif %}
     </div>
+
+    <div class="card">
+      <h3>Project Downloads</h3>
+      <p class="muted">Project-wide PDFs are listed here when the latest build is available.</p>
+      {% if project_rows and project_rows|length > 0 %}
+        <table>
+          <thead>
+            <tr>
+              <th>Project</th>
+              <th>Refresh</th>
+              <th>Status</th>
+              <th>Observation List</th>
+              <th>Project File</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in project_rows %}
+              {% set list = row.list %}
+              <tr>
+                <td>
+                  {{ list.title }}
+                  <div class="muted">{{ list.inat_project_id if list.inat_project_id else "" }}</div>
+                </td>
+                <td>
+                  {{ row.last_refreshed_label }}
+                  <div class="muted">
+                    {% if row.refresh_due %}
+                      Refresh due (target {{ row.next_refresh_label }})
+                    {% else %}
+                      Next refresh by {{ row.next_refresh_label }}
+                    {% endif %}
+                  </div>
+                </td>
+                <td>{{ row.status_label }}</td>
+                <td>
+                  {% if row.index_download_url %}
+                    <a class="btn secondary" href="{{ row.index_download_url }}" target="_blank" rel="noreferrer">Download Observation PDF</a>
+                  {% else %}
+                    <span class="muted">Not ready yet</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if row.county_download_url %}
+                    <a class="btn secondary" href="{{ row.county_download_url }}" target="_blank" rel="noreferrer">Download {{ row.county_download_label }}</a>
+                  {% else %}
+                    <span class="muted">Not ready yet</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <div class="empty">
+          <strong>No project downloads are public yet.</strong>
+        </div>
+      {% endif %}
+    </div>
   </div>
 {% endblock %}

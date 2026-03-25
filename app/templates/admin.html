@@ -194,6 +194,7 @@
               <th>Project ID/Slug</th>
               <th>Last Sync</th>
               <th>Latest Build</th>
+              <th>Public</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -215,6 +216,7 @@
                     Not built
                   {% endif %}
                 </td>
+                <td>{{ "Yes" if list.is_public_download else "No" }}</td>
                 <td>
                   <form method="post" action="/admin/lists/{{ list.id }}/sync" style="display:inline;">
                     <input type="hidden" name="page" value="{{ page }}" />
@@ -225,6 +227,11 @@
                     <input type="hidden" name="page" value="{{ page }}" />
                     <input type="hidden" name="state_code" value="{{ state_code }}" />
                     <button class="btn" type="submit">Rebuild</button>
+                  </form>
+                  <form method="post" action="/admin/lists/{{ list.id }}/toggle-public" style="display:inline;">
+                    <input type="hidden" name="page" value="{{ page }}" />
+                    <input type="hidden" name="state_code" value="{{ state_code }}" />
+                    <button class="btn secondary" type="submit">{{ "Hide" if list.is_public_download else "Show" }}</button>
                   </form>
                   <form method="post" action="/admin/lists/{{ list.id }}/delete" style="display:inline;" onsubmit="return confirm('Delete this project list and all cached/export data?');">
                     <input type="hidden" name="page" value="{{ page }}" />

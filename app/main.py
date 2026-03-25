@@ -270,6 +270,68 @@ def load_public_county_rows(
     return catalog, pages, current_page, state_options, normalized_state
 
 
+def load_public_project_rows(db: Session) -> list[dict[str, object]]:
+    project_lists = (
+        db.query(models.ObservationList)
+        .filter(
+            models.ObservationList.product_type == "project",
+            models.ObservationList.is_public_download.is_(True),
+        )
+        .order_by(models.ObservationList.title.asc(), models.ObservationList.id.asc())
+        .all()
+    )
+
+    out: list[dict[str, object]] = []
+    for obs_list in project_lists:
+        latest_jobs = list_jobs_for_list(db, obs_list.id, limit=1)
+        latest_job = latest_jobs[0] if latest_jobs else None
+        latest_ready = latest_completed_job_for_list(db, obs_list.id)
+
+        county_artifact = None
+        index_artifact = None
+        county_download_url = None
+        county_download_label = None
+        index_download_url = None
+        status_label = "Not built"
+
+        if latest_job:
+            status_label = latest_job.status
+        if latest_ready:
+            artifacts = list_artifacts_for_job(db, latest_ready.id)
+            county_artifact = _preferred_county_file_artifact(artifacts)
+            index_artifact = _artifact_by_kind(artifacts, "observations_index_pdf")
+            if county_artifact and index_artifact:
+                status_label = "Ready"
+            elif county_artifact:
+                status_label = "Project file ready"
+            elif index_artifact:
+                status_label = "Observation index ready"
+
+            county_download_url = _artifact_public_url(obs_list.id, county_artifact)
+            if county_artifact:
+                county_download_label = "Project PDF" if county_artifact.kind == "merged_pdf" else "Project ZIP"
+            index_download_url = _artifact_public_url(obs_list.id, index_artifact)
+
+        refresh_data = _refresh_summary(obs_list.last_sync_at)
+        out.append(
+            {
+                "list": obs_list,
+                "latest_job": latest_job,
+                "county_artifact": county_artifact,
+                "index_artifact": index_artifact,
+                "status_label": status_label,
+                "county_download_url": county_download_url,
+                "county_download_label": county_download_label,
+                "index_download_url": index_download_url,
+                "last_refreshed_label": refresh_data["last_refreshed_label"],
+                "next_refresh_label": refresh_data["next_refresh_label"],
+                "refresh_due": refresh_data["is_due"],
+            }
+        )
+
+    return out
+
+
 def utc_now_naive() -> datetime:
     # DB columns are timestamp without timezone; persist UTC clock time as naive.
     return datetime.now(UTC).replace(tzinfo=None)
@@ -430,6 +492,7 @@ def index(
         page,
         state_code,
     )
+    project_rows = load_public_project_rows(db)
 
     return template_response(
         request,
@@ -437,6 +500,7 @@ def index(
         {
             "app_name": settings.app_name,
             "rows": rows,
+            "project_rows": project_rows,
             "page": current_page,
             "pages": pages,
             "state_options": state_options,
@@ -638,7 +702,7 @@ def public_download_latest_artifact(
     obs_list = db.query(models.ObservationList).filter_by(id=list_id).first()
     if not obs_list:
         raise HTTPException(status_code=404, detail="List not found")
-    if obs_list.product_type != "county" or not obs_list.is_public_download:
+    if obs_list.product_type not in ("county", "project") or not obs_list.is_public_download:
         raise HTTPException(status_code=404, detail="Not found")
 
     latest_job = latest_completed_job_for_list(db, list_id)
@@ -934,6 +998,9 @@ def admin_seed_and_build_projects(
             .first()
         )
         if existing:
+            if not existing.is_public_download:
+                existing.is_public_download = True
+                db.flush()
             reused_existing += 1
             target_lists.append(existing)
             continue
@@ -958,7 +1025,7 @@ def admin_seed_and_build_projects(
             product_type="project",
             state_code=None,
             county_name=None,
-            is_public_download=False,
+            is_public_download=True,
             inat_place_id=None,
             place_query=None,
             inat_dna_field_id=settings.inat_dna_field_id,
