@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 import shutil
 from typing import Optional
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, urlparse
 from fastapi import FastAPI, Request, Form, Depends, Query, HTTPException, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
@@ -44,6 +44,7 @@ OBS_PAGE_SIZE = 15
 ADMIN_PAGE_SIZE = 25
 PUBLIC_COUNTY_PAGE_SIZE = 24
 PUBLIC_REFRESH_INTERVAL_DAYS = max(1, settings.public_refresh_interval_days)
+DEFAULT_PROJECT_BUILD_IDS = "124358\n184305\n132913\n251751"
 
 
 @app.get("/favicon.ico", include_in_schema=False)
@@ -335,6 +336,50 @@ def parse_project_filter(inat_project_id_raw: str) -> tuple[Optional[str], Optio
     return project_id, None
 
 
+def _normalize_project_seed_token(raw_line: str) -> str:
+    token = (raw_line or "").strip()
+    if not token:
+        return ""
+
+    if token.lower().startswith("project #"):
+        token = token.split("#", 1)[1].strip()
+
+    if token.startswith("http://") or token.startswith("https://"):
+        parsed = urlparse(token)
+        query_project = parse_qs(parsed.query).get("project_id")
+        if query_project:
+            token = (query_project[0] or "").strip()
+        else:
+            parts = [part for part in parsed.path.split("/") if part]
+            if len(parts) >= 2 and parts[0] == "projects":
+                token = parts[1].strip()
+
+    return token.strip().strip(",;")
+
+
+def parse_project_seed_values(raw: str) -> tuple[list[str], Optional[str]]:
+    values: list[str] = []
+    seen: set[str] = set()
+
+    for line in (raw or "").replace(",", "\n").splitlines():
+        candidate = _normalize_project_seed_token(line)
+        if not candidate:
+            continue
+        parsed, error = parse_project_filter(candidate)
+        if error:
+            return [], f"Invalid project ID/slug '{candidate}': {error}"
+        if not parsed:
+            continue
+        if parsed in seen:
+            continue
+        seen.add(parsed)
+        values.append(parsed)
+
+    if not values:
+        return [], "Provide at least one iNaturalist project ID/slug (one per line)."
+    return values, None
+
+
 def require_admin(credentials: HTTPBasicCredentials = Depends(security)):
     username_ok = secrets.compare_digest(credentials.username, settings.admin_username)
     password_ok = secrets.compare_digest(credentials.password, settings.admin_password)
@@ -624,18 +669,18 @@ def admin_page(
     _: bool = Depends(require_admin),
 ):
     normalized_state = normalize_state_code(state_code or "") or ""
-    base_query = db.query(models.ObservationList).filter(
+    county_query = db.query(models.ObservationList).filter(
         models.ObservationList.product_type == "county",
     )
     if normalized_state:
-        base_query = base_query.filter(models.ObservationList.state_code == normalized_state)
+        county_query = county_query.filter(models.ObservationList.state_code == normalized_state)
 
-    total = base_query.count()
+    total = county_query.count()
     pages = max(1, (total + ADMIN_PAGE_SIZE - 1) // ADMIN_PAGE_SIZE)
     current_page = min(page, pages)
 
     lists = (
-        base_query
+        county_query
         .order_by(
             models.ObservationList.state_code.asc().nullslast(),
             models.ObservationList.county_name.asc().nullslast(),
@@ -643,6 +688,13 @@ def admin_page(
         )
         .offset((current_page - 1) * ADMIN_PAGE_SIZE)
         .limit(ADMIN_PAGE_SIZE)
+        .all()
+    )
+
+    project_lists = (
+        db.query(models.ObservationList)
+        .filter(models.ObservationList.product_type == "project")
+        .order_by(models.ObservationList.title.asc(), models.ObservationList.id.asc())
         .all()
     )
 
@@ -667,6 +719,24 @@ def admin_page(
                 continue
         ready_download_url_by_list[obs_list.id] = (
             f"/public/lists/{obs_list.id}/artifacts/{chosen.id}/download"
+        )
+
+    project_latest_job_by_list: dict[int, models.ExportJob] = {}
+    project_ready_download_url_by_list: dict[int, str] = {}
+    for obs_list in project_lists:
+        recent_jobs = list_jobs_for_list(db, obs_list.id, limit=1)
+        if recent_jobs:
+            project_latest_job_by_list[obs_list.id] = recent_jobs[0]
+
+        latest_ready = latest_completed_job_for_list(db, obs_list.id)
+        if not latest_ready:
+            continue
+        artifacts = list_artifacts_for_job(db, latest_ready.id)
+        chosen = _preferred_county_file_artifact(artifacts)
+        if not chosen:
+            continue
+        project_ready_download_url_by_list[obs_list.id] = (
+            f"/lists/{obs_list.id}/exports/{latest_ready.id}/artifacts/{chosen.id}/download"
         )
 
     state_rows = (
@@ -701,8 +771,12 @@ def admin_page(
             "present_state_options": present_state_options,
             "default_state_code": "AL",
             "default_project_id": settings.inat_default_project_id or "",
+            "default_project_build_ids": DEFAULT_PROJECT_BUILD_IDS,
             "latest_job_by_list": latest_job_by_list,
             "ready_download_url_by_list": ready_download_url_by_list,
+            "project_lists": project_lists,
+            "project_latest_job_by_list": project_latest_job_by_list,
+            "project_ready_download_url_by_list": project_ready_download_url_by_list,
         },
     )
 
@@ -822,6 +896,106 @@ def admin_seed_project_counties(
         f"created {created}, skipped existing {skipped_existing}, total counties {len(county_rows)}. "
         f"Build queue: queued {queued}, already active/up-to-date {skipped_queue_existing}."
     )
+    return RedirectResponse(url=f"/admin?notice={quote(notice)}", status_code=303)
+
+
+@app.post("/admin/projects/build")
+def admin_seed_and_build_projects(
+    project_ids: str = Form(...),
+    description_prefix: str = Form(default=""),
+    db: Session = Depends(get_db),
+    _: bool = Depends(require_admin),
+):
+    seed_values, seed_error = parse_project_seed_values(project_ids)
+    if seed_error:
+        return RedirectResponse(url=f"/admin?error={quote(seed_error)}", status_code=303)
+
+    description_prefix_clean = (description_prefix or "").strip()
+    created = 0
+    reused_existing = 0
+    queued = 0
+    reused_queue = 0
+    errors: list[str] = []
+    target_lists: list[models.ObservationList] = []
+
+    for project_value in seed_values:
+        try:
+            canonical_project_id, _, project_title = resolve_project_filter(project_value)
+        except Exception as exc:
+            errors.append(f"{project_value}: {exc}")
+            continue
+
+        existing = (
+            db.query(models.ObservationList)
+            .filter(
+                models.ObservationList.product_type == "project",
+                models.ObservationList.inat_project_id == canonical_project_id,
+            )
+            .first()
+        )
+        if existing:
+            reused_existing += 1
+            target_lists.append(existing)
+            continue
+
+        title_main = project_title or f"Project {canonical_project_id}"
+        title = f"{title_main} — iNaturalist Project {canonical_project_id}"
+        description_parts = [
+            "Auto-generated project list.",
+            f"Project: {canonical_project_id}.",
+        ]
+        if project_title:
+            description_parts.append(f"Project title: {project_title}.")
+        if description_prefix_clean:
+            description_parts.insert(0, description_prefix_clean)
+
+        obs_list = models.ObservationList(
+            title=title,
+            description=" ".join(description_parts),
+            inat_user_id=None,
+            inat_username=None,
+            inat_project_id=canonical_project_id,
+            product_type="project",
+            state_code=None,
+            county_name=None,
+            is_public_download=False,
+            inat_place_id=None,
+            place_query=None,
+            inat_dna_field_id=settings.inat_dna_field_id,
+            taxon_filter=None,
+        )
+        db.add(obs_list)
+        db.flush()
+        created += 1
+        target_lists.append(obs_list)
+
+    db.commit()
+
+    for obs_list in target_lists:
+        _, was_queued, _ = enqueue_export_job_for_list(
+            db,
+            obs_list=obs_list,
+            requested_by="admin-project-seed",
+            only_if_stale=False,
+            force_sync=True,
+        )
+        if was_queued:
+            queued += 1
+        else:
+            reused_queue += 1
+
+    if errors and not target_lists:
+        return RedirectResponse(
+            url=f"/admin?error={quote('Project build failed: ' + '; '.join(errors))}",
+            status_code=303,
+        )
+
+    notice = (
+        f"Project build request complete: submitted {len(seed_values)}, created {created}, "
+        f"reused existing {reused_existing}. Queue: queued {queued}, already active/reused {reused_queue}."
+    )
+    if errors:
+        notice += f" Skipped {len(errors)} invalid/unresolved project entries."
     return RedirectResponse(url=f"/admin?notice={quote(notice)}", status_code=303)
 
 
@@ -958,7 +1132,7 @@ def admin_delete_list(
     db.query(models.ObservationList).filter_by(id=list_id).delete(synchronize_session=False)
     db.commit()
     state_q = normalize_state_code(state_code or "") or ""
-    query_bits = [f"page={max(1, page)}", "notice=County+list+deleted."]
+    query_bits = [f"page={max(1, page)}", "notice=List+deleted."]
     if state_q:
         query_bits.insert(1, f"state_code={state_q}")
     return RedirectResponse(url=f"/admin?{'&'.join(query_bits)}", status_code=303)

@@ -26,6 +26,19 @@ from app.services.list_sync import sync_list_observations
 
 ACTIVE_JOB_STATUSES = ("queued", "running", "waiting_quota")
 FINISHED_JOB_STATUSES = ("ready", "partial_ready", "failed", "canceled")
+GENUS_QUALIFIER_TOKENS = {
+    "cf",
+    "aff",
+    "nr",
+    "sp",
+    "spp",
+    "complex",
+    "group",
+    "sect",
+    "subsp",
+    "var",
+    "forma",
+}
 
 
 def utc_now_naive() -> datetime:
@@ -38,6 +51,38 @@ def normalize_naive_utc(value: datetime | None) -> datetime | None:
     if value.tzinfo is None:
         return value
     return value.astimezone(UTC).replace(tzinfo=None)
+
+
+def _normalized_title_for_observation(obs: models.Observation) -> str:
+    for candidate in (obs.scientific_name, obs.taxon_name, obs.species_guess, obs.common_name):
+        if candidate and candidate.strip():
+            return candidate.strip()
+    return ""
+
+
+def _extract_genus_key(text: str) -> str:
+    if not text:
+        return ""
+    for raw_token in text.split():
+        token = re.sub(r"[^A-Za-z-]", "", raw_token).strip("-").lower()
+        if not token:
+            continue
+        if token in GENUS_QUALIFIER_TOKENS:
+            continue
+        return token
+    return ""
+
+
+def _observation_genus_sort_key(obs: models.Observation) -> tuple[str, str, int]:
+    title = _normalized_title_for_observation(obs)
+    genus = _extract_genus_key(title)
+    # Push no-genus rows to the end while keeping deterministic tie-breaks.
+    genus_bucket = genus or "zzzzzzzz"
+    return (
+        genus_bucket,
+        title.lower(),
+        int(obs.inat_observation_id or 0),
+    )
 
 
 def enqueue_export_job(
@@ -317,9 +362,9 @@ def _phase_plan(db: Session, job: models.ExportJob) -> bool:
     observations = (
         db.query(models.Observation)
         .filter(models.Observation.list_id == job.list_id)
-        .order_by(models.Observation.observed_at.desc().nullslast(), models.Observation.id.asc())
         .all()
     )
+    observations.sort(key=_observation_genus_sort_key)
     observation_ids = [obs.id for obs in observations]
     photos_by_observation: dict[int, list[models.ObservationPhoto]] = {}
     if observation_ids:
@@ -604,9 +649,9 @@ def _phase_finalize(db: Session, job: models.ExportJob) -> bool:
     observations = (
         db.query(models.Observation)
         .filter(models.Observation.list_id == job.list_id)
-        .order_by(models.Observation.observed_at.desc().nullslast(), models.Observation.id.asc())
         .all()
     )
+    observations.sort(key=_observation_genus_sort_key)
     index_pdf_path = docs_dir / index_pdf_name
     render_observation_index_pdf(
         output_path=index_pdf_path,

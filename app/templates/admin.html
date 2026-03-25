@@ -37,6 +37,22 @@
     </div>
 
     <div class="card">
+      <h3>Seed And Build Projects</h3>
+      <p class="muted">Creates one list per iNaturalist project ID/slug, then queues sync+export builds with the same worker throttles used for county products.</p>
+      <form method="post" action="/admin/projects/build" class="grid">
+        <label>
+          Project IDs or slugs (one per line)
+          <textarea class="input" name="project_ids" rows="6" placeholder="124358&#10;184305&#10;132913&#10;251751" required>{{ default_project_build_ids }}</textarea>
+        </label>
+        <label>
+          Optional description prefix
+          <input class="input" type="text" name="description_prefix" placeholder="e.g., AMS project build batch 2026-03-25" />
+        </label>
+        <button class="btn" type="submit">Seed projects + queue builds</button>
+      </form>
+    </div>
+
+    <div class="card">
       <h3>Process State Counties</h3>
       <p class="muted">Queue fresh sync+export builds for existing county lists in a state (optionally one project only).</p>
       <form method="post" action="/admin/states/build" class="grid">
@@ -164,6 +180,65 @@
       {% else %}
         <div class="empty">
           <strong>No county products found.</strong>
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <h3>Project Products</h3>
+      {% if project_lists and project_lists|length > 0 %}
+        <table>
+          <thead>
+            <tr>
+              <th>Project List</th>
+              <th>Project ID/Slug</th>
+              <th>Last Sync</th>
+              <th>Latest Build</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for list in project_lists %}
+              {% set latest_job = project_latest_job_by_list.get(list.id) %}
+              <tr>
+                <td><a href="/lists/{{ list.id }}">{{ list.title }}</a></td>
+                <td>{{ list.inat_project_id if list.inat_project_id else "" }}</td>
+                <td>{{ list.last_sync_at if list.last_sync_at else "Not synced" }}</td>
+                <td>
+                  {% if latest_job %}
+                    {{ latest_job.status }}<br>
+                    <span class="muted">Job #{{ latest_job.id }}</span>
+                    {% if project_ready_download_url_by_list.get(list.id) %}
+                      <br><a href="{{ project_ready_download_url_by_list.get(list.id) }}" target="_blank" rel="noreferrer">Latest file</a>
+                    {% endif %}
+                  {% else %}
+                    Not built
+                  {% endif %}
+                </td>
+                <td>
+                  <form method="post" action="/admin/lists/{{ list.id }}/sync" style="display:inline;">
+                    <input type="hidden" name="page" value="{{ page }}" />
+                    <input type="hidden" name="state_code" value="{{ state_code }}" />
+                    <button class="btn" type="submit">Sync now</button>
+                  </form>
+                  <form method="post" action="/admin/lists/{{ list.id }}/queue" style="display:inline;">
+                    <input type="hidden" name="page" value="{{ page }}" />
+                    <input type="hidden" name="state_code" value="{{ state_code }}" />
+                    <button class="btn" type="submit">Rebuild</button>
+                  </form>
+                  <form method="post" action="/admin/lists/{{ list.id }}/delete" style="display:inline;" onsubmit="return confirm('Delete this project list and all cached/export data?');">
+                    <input type="hidden" name="page" value="{{ page }}" />
+                    <input type="hidden" name="state_code" value="{{ state_code }}" />
+                    <button class="btn secondary" type="submit">Delete</button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <div class="empty">
+          <strong>No project products found.</strong>
         </div>
       {% endif %}
     </div>
