@@ -101,6 +101,18 @@ def _format_observed_at(value: datetime | None) -> str:
     return value.astimezone(UTC).strftime("%Y-%m-%d")
 
 
+def _set_pdf_metadata(
+    c: canvas.Canvas,
+    *,
+    title: str,
+    subject: str,
+) -> None:
+    c.setTitle(title)
+    c.setSubject(subject)
+    c.setCreator("myDNAobv")
+    c.setAuthor("myDNAobv")
+
+
 def render_part_pdf(
     output_path: Path,
     items: list[models.ExportItem],
@@ -108,6 +120,11 @@ def render_part_pdf(
 ) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     c = canvas.Canvas(str(output_path), pagesize=letter)
+    _set_pdf_metadata(
+        c,
+        title=f"{output_path.stem}",
+        subject="County guide part export",
+    )
 
     for item in items:
         c.setFont("Helvetica-Bold", 13)
@@ -162,6 +179,11 @@ def render_empty_county_guide_pdf(
 ) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     c = canvas.Canvas(str(output_path), pagesize=letter)
+    _set_pdf_metadata(
+        c,
+        title=f"{list_title} - County Guide",
+        subject="County guide export",
+    )
 
     c.setFont("Helvetica-Bold", 15)
     c.drawString(MARGIN, TEXT_TOP, "County Guide")
@@ -196,6 +218,11 @@ def render_observation_index_pdf(
 ) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     c = canvas.Canvas(str(output_path), pagesize=letter)
+    _set_pdf_metadata(
+        c,
+        title=f"{list_title} - Observations Index",
+        subject="DNA-confirmed observations index",
+    )
 
     page_no = 1
 
