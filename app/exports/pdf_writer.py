@@ -133,6 +133,10 @@ def render_part_pdf(
         c.setFont("Helvetica", 10)
         y = TEXT_TOP - 18
         y = _draw_wrapped(c, f"Observation: {item.inat_url}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
+        if item.observation_taxon_name:
+            y = _draw_wrapped(c, f"Observation taxon: {item.observation_taxon_name}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
+        if item.community_taxon_name:
+            y = _draw_wrapped(c, f"Community taxon: {item.community_taxon_name}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
         if item.observed_at:
             y = _draw_wrapped(c, f"Observed at: {item.observed_at.isoformat()}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
 
@@ -247,7 +251,14 @@ def render_observation_index_pdf(
     y = start_page()
 
     for idx, obs in enumerate(observations, start=1):
-        title = obs.scientific_name or obs.species_guess or obs.taxon_name or f"Observation {obs.inat_observation_id}"
+        title = (
+            obs.observation_taxon_name
+            or obs.scientific_name
+            or obs.species_guess
+            or obs.taxon_name
+            or f"Observation {obs.inat_observation_id}"
+        )
+        community_taxon = obs.community_taxon_name or obs.taxon_name or "Not available"
         common = obs.common_name or "Not provided"
         observer = obs.user_name or "Unknown observer"
         observed_text = _format_observed_at(obs.observed_at)
@@ -260,6 +271,7 @@ def render_observation_index_pdf(
         c.setFont("Helvetica-Bold", 11)
         y = _draw_wrapped(c, f"{idx}. {title}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
         c.setFont("Helvetica", 10)
+        y = _draw_wrapped(c, f"Community taxon: {community_taxon}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
         y = _draw_wrapped(c, f"Observed: {observed_text} | Observer: {observer}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
         y = _draw_wrapped(c, f"Common name: {common}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
         y = _draw_link_line(c, "iNaturalist", obs.inat_url, MARGIN, y, PAGE_WIDTH - (MARGIN * 2))

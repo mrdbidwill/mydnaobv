@@ -31,6 +31,12 @@ def sync_list_observations(db: Session, obs_list: models.ObservationList) -> int
             existing.species_guess = obs.species_guess
             existing.scientific_name = obs.scientific_name
             existing.common_name = obs.common_name
+            existing.observation_taxon_id = obs.observation_taxon_id
+            existing.observation_taxon_name = obs.observation_taxon_name
+            existing.observation_taxon_rank = obs.observation_taxon_rank
+            existing.community_taxon_id = obs.community_taxon_id
+            existing.community_taxon_name = obs.community_taxon_name
+            existing.community_taxon_rank = obs.community_taxon_rank
             existing.user_name = obs.user_name
             existing.observed_at = obs.observed_at
             existing.inat_url = obs.inat_url
@@ -46,6 +52,12 @@ def sync_list_observations(db: Session, obs_list: models.ObservationList) -> int
                 species_guess=obs.species_guess,
                 scientific_name=obs.scientific_name,
                 common_name=obs.common_name,
+                observation_taxon_id=obs.observation_taxon_id,
+                observation_taxon_name=obs.observation_taxon_name,
+                observation_taxon_rank=obs.observation_taxon_rank,
+                community_taxon_id=obs.community_taxon_id,
+                community_taxon_name=obs.community_taxon_name,
+                community_taxon_rank=obs.community_taxon_rank,
                 user_name=obs.user_name,
                 observed_at=obs.observed_at,
                 inat_url=obs.inat_url,

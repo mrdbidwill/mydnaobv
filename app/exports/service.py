@@ -54,7 +54,14 @@ def normalize_naive_utc(value: datetime | None) -> datetime | None:
 
 
 def _normalized_title_for_observation(obs: models.Observation) -> str:
-    for candidate in (obs.scientific_name, obs.taxon_name, obs.species_guess, obs.common_name):
+    for candidate in (
+        obs.observation_taxon_name,
+        obs.scientific_name,
+        obs.taxon_name,
+        obs.community_taxon_name,
+        obs.species_guess,
+        obs.common_name,
+    ):
         if candidate and candidate.strip():
             return candidate.strip()
     return ""
@@ -394,7 +401,9 @@ def _phase_plan(db: Session, job: models.ExportJob) -> bool:
                     observation_id=obs.id,
                     sequence=sequence,
                     inat_observation_id=obs.inat_observation_id,
-                    item_title=obs.scientific_name or obs.species_guess or obs.taxon_name,
+                    item_title=obs.observation_taxon_name or obs.scientific_name or obs.species_guess or obs.taxon_name,
+                    observation_taxon_name=obs.observation_taxon_name or obs.scientific_name,
+                    community_taxon_name=obs.community_taxon_name or obs.taxon_name,
                     observed_at=obs.observed_at,
                     inat_url=obs.inat_url,
                     image_url=None,
@@ -412,7 +421,7 @@ def _phase_plan(db: Session, job: models.ExportJob) -> bool:
             decision = evaluate_license(candidate["license_code"])
             item_status = "pending" if decision.allowed else "skipped"
             skip_reason = None if decision.allowed else f"license:{decision.reason}"
-            title = obs.scientific_name or obs.species_guess or obs.taxon_name
+            title = obs.observation_taxon_name or obs.scientific_name or obs.species_guess or obs.taxon_name
             if export_config.include_all_photos and total_candidates > 1:
                 title = f"{title or f'Observation {obs.inat_observation_id}'} (photo {idx}/{total_candidates})"
 
@@ -423,6 +432,8 @@ def _phase_plan(db: Session, job: models.ExportJob) -> bool:
                     sequence=sequence,
                     inat_observation_id=obs.inat_observation_id,
                     item_title=title,
+                    observation_taxon_name=obs.observation_taxon_name or obs.scientific_name,
+                    community_taxon_name=obs.community_taxon_name or obs.taxon_name,
                     observed_at=obs.observed_at,
                     inat_url=obs.inat_url,
                     image_url=candidate["url"],

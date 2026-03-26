@@ -127,6 +127,17 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - retune cadence/chunk/timeout settings incrementally with metric checks after each change.
   - separate web and worker process capacity if sustained concurrency increases.
 
+## 2026-03-26
+- Taxonomy credibility update for DNA-driven reevaluation:
+  - Added explicit separation of `observation_taxon` (observer-side identification) and `community_taxon` in cached observation data.
+  - Sync logic now derives observer-side taxon from iNaturalist `identifications` (prefers observer current identification) instead of relying only on aggregate taxon fields.
+  - PDF export ordering now prioritizes genus from `observation_taxon` so outputs reflect post-DNA reevaluation intent.
+  - PDF pages/index now print `community_taxon` per observation for transparent side-by-side review.
+- Data model/migration update:
+  - `observations`: added `observation_taxon_id/name/rank` and `community_taxon_id/name/rank`.
+  - `export_items`: added `observation_taxon_name` and `community_taxon_name` for render-time labeling.
+  - Added migration `f7c1e2d3a4b5_add_observation_vs_community_taxon_fields.py`.
+
 ## Routine Update Rule
 On each major decision or architecture change:
 1. Add one dated entry in this file.

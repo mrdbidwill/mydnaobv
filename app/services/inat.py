@@ -13,6 +13,12 @@ class InatObservation:
         species_guess: Optional[str],
         scientific_name: Optional[str],
         common_name: Optional[str],
+        observation_taxon_id: Optional[int],
+        observation_taxon_name: Optional[str],
+        observation_taxon_rank: Optional[str],
+        community_taxon_id: Optional[int],
+        community_taxon_name: Optional[str],
+        community_taxon_rank: Optional[str],
         user_name: Optional[str],
         observed_at: Optional[datetime],
         inat_url: str,
@@ -27,6 +33,12 @@ class InatObservation:
         self.species_guess = species_guess
         self.scientific_name = scientific_name
         self.common_name = common_name
+        self.observation_taxon_id = observation_taxon_id
+        self.observation_taxon_name = observation_taxon_name
+        self.observation_taxon_rank = observation_taxon_rank
+        self.community_taxon_id = community_taxon_id
+        self.community_taxon_name = community_taxon_name
+        self.community_taxon_rank = community_taxon_rank
         self.user_name = user_name
         self.observed_at = observed_at
         self.inat_url = inat_url
@@ -98,6 +110,128 @@ def _parse_observed_at(obs: dict) -> Optional[datetime]:
         except ValueError:
             continue
     return None
+
+
+def _coerce_int(value: Any) -> Optional[int]:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if text.isdigit():
+            return int(text)
+    return None
+
+
+def _extract_taxon_summary(taxon: Any) -> tuple[Optional[int], Optional[str], Optional[str], Optional[str]]:
+    if not isinstance(taxon, dict):
+        return None, None, None, None
+    taxon_id = _coerce_int(taxon.get("id"))
+    taxon_name = str(taxon.get("name") or "").strip() or None
+    taxon_rank = str(taxon.get("rank") or "").strip() or None
+    common_name = str(taxon.get("preferred_common_name") or taxon.get("common_name") or "").strip() or None
+    return taxon_id, taxon_name, taxon_rank, common_name
+
+
+def _pick_observation_taxon_from_identifications(
+    identifications: Any,
+    observer_user_id: Optional[int],
+) -> tuple[Optional[int], Optional[str], Optional[str], Optional[str]]:
+    if not isinstance(identifications, list):
+        return None, None, None, None
+
+    def taxon_from_ident(predicate) -> tuple[Optional[int], Optional[str], Optional[str], Optional[str]]:
+        for ident in identifications:
+            if not isinstance(ident, dict):
+                continue
+            if not predicate(ident):
+                continue
+            taxon_id, taxon_name, taxon_rank, common_name = _extract_taxon_summary(ident.get("taxon"))
+            if taxon_name:
+                return taxon_id, taxon_name, taxon_rank, common_name
+        return None, None, None, None
+
+    def ident_user_id(ident: dict) -> Optional[int]:
+        user = ident.get("user")
+        if not isinstance(user, dict):
+            return None
+        return _coerce_int(user.get("id"))
+
+    pick_order = (
+        lambda i: observer_user_id is not None and bool(i.get("current")) and bool(i.get("own_observation")) and ident_user_id(i) == observer_user_id,
+        lambda i: observer_user_id is not None and bool(i.get("current")) and ident_user_id(i) == observer_user_id,
+        lambda i: observer_user_id is not None and bool(i.get("own_observation")) and ident_user_id(i) == observer_user_id,
+        lambda i: bool(i.get("current")),
+    )
+
+    for predicate in pick_order:
+        picked = taxon_from_ident(predicate)
+        if picked[1]:
+            return picked
+    return None, None, None, None
+
+
+def _extract_taxa(obs: dict, detail: Optional[dict] = None) -> dict[str, Optional[str] | Optional[int]]:
+    observer_user_id = _coerce_int(((obs.get("user") or {}).get("id")))
+
+    obs_taxon_id, obs_taxon_name, obs_taxon_rank, obs_common_name = _pick_observation_taxon_from_identifications(
+        obs.get("identifications"),
+        observer_user_id,
+    )
+    if not obs_taxon_name and detail:
+        obs_taxon_id, obs_taxon_name, obs_taxon_rank, obs_common_name = _pick_observation_taxon_from_identifications(
+            detail.get("identifications"),
+            observer_user_id,
+        )
+
+    comm_taxon_id = _coerce_int(obs.get("community_taxon_id"))
+    comm_taxon_obj = obs.get("community_taxon") if isinstance(obs.get("community_taxon"), dict) else None
+    if not comm_taxon_obj and detail:
+        detail_comm = detail.get("community_taxon")
+        if isinstance(detail_comm, dict):
+            comm_taxon_obj = detail_comm
+        if comm_taxon_id is None:
+            comm_taxon_id = _coerce_int(detail.get("community_taxon_id"))
+
+    # Fallback: when community_taxon object is missing, use the main taxon object if IDs match.
+    if not comm_taxon_obj:
+        taxon_obj = obs.get("taxon") if isinstance(obs.get("taxon"), dict) else None
+        taxon_id = _coerce_int((taxon_obj or {}).get("id"))
+        if taxon_obj and (comm_taxon_id is None or taxon_id == comm_taxon_id):
+            comm_taxon_obj = taxon_obj
+            if comm_taxon_id is None:
+                comm_taxon_id = taxon_id
+        elif detail and isinstance(detail.get("taxon"), dict):
+            detail_taxon = detail.get("taxon")
+            detail_taxon_id = _coerce_int((detail_taxon or {}).get("id"))
+            if comm_taxon_id is None or detail_taxon_id == comm_taxon_id:
+                comm_taxon_obj = detail_taxon
+                if comm_taxon_id is None:
+                    comm_taxon_id = detail_taxon_id
+
+    comm_taxon_id_from_obj, comm_taxon_name, comm_taxon_rank, comm_common_name = _extract_taxon_summary(comm_taxon_obj)
+    if comm_taxon_id is None:
+        comm_taxon_id = comm_taxon_id_from_obj
+
+    # Final fallback if observer taxon is unavailable.
+    if not obs_taxon_name:
+        obs_taxon_id, obs_taxon_name, obs_taxon_rank, obs_common_name = _extract_taxon_summary(obs.get("taxon"))
+    if not obs_taxon_name and detail:
+        obs_taxon_id, obs_taxon_name, obs_taxon_rank, obs_common_name = _extract_taxon_summary(detail.get("taxon"))
+    if not obs_taxon_name:
+        obs_taxon_name = str(obs.get("species_guess") or "").strip() or None
+
+    if obs_common_name is None:
+        obs_common_name = comm_common_name
+
+    return {
+        "observation_taxon_id": obs_taxon_id,
+        "observation_taxon_name": obs_taxon_name,
+        "observation_taxon_rank": obs_taxon_rank,
+        "community_taxon_id": comm_taxon_id,
+        "community_taxon_name": comm_taxon_name,
+        "community_taxon_rank": comm_taxon_rank,
+        "observation_common_name": obs_common_name,
+    }
 
 
 def _fetch_observation_detail(client: httpx.Client, base: str, obs_id: int) -> Optional[dict]:
@@ -605,11 +739,7 @@ def fetch_observations_for_list(obs_list: models.ObservationList) -> Iterable[In
                 if inat_id is None:
                     continue
 
-                taxon = obs.get("taxon") or {}
-                taxon_name = taxon.get("name") or obs.get("taxon_name")
                 species_guess = obs.get("species_guess")
-                scientific_name = taxon.get("name") or obs.get("scientific_name")
-                common_name = (taxon.get("preferred_common_name") or taxon.get("common_name"))
                 user = obs.get("user") or {}
                 user_name = user.get("name") or user.get("login")
                 inat_url = obs.get("uri") or obs.get("url") or f"https://www.inaturalist.org/observations/{inat_id}"
@@ -638,6 +768,34 @@ def fetch_observations_for_list(obs_list: models.ObservationList) -> Iterable[In
                     if detail:
                         photo_entries = _extract_photo_entries(detail)
 
+                taxa = _extract_taxa(obs, detail=detail)
+                observation_taxon_name = taxa["observation_taxon_name"]
+                observation_common_name = taxa["observation_common_name"]
+                community_taxon_name = taxa["community_taxon_name"]
+
+                # Keep legacy fields populated for backwards compatibility with existing templates/export code.
+                scientific_name = (
+                    str(observation_taxon_name).strip()
+                    if observation_taxon_name
+                    else (str(obs.get("scientific_name") or "").strip() or None)
+                )
+                taxon_name = (
+                    str(community_taxon_name).strip()
+                    if community_taxon_name
+                    else (str(obs.get("taxon_name") or "").strip() or None)
+                )
+                common_name = (
+                    str(observation_common_name).strip()
+                    if observation_common_name
+                    else None
+                )
+                if common_name is None:
+                    taxon_obj = obs.get("taxon") or {}
+                    common_name = (
+                        str(taxon_obj.get("preferred_common_name") or taxon_obj.get("common_name") or "").strip()
+                        or None
+                    )
+
                 if photo_entries:
                     photo_url = photo_entries[0].photo_url
                     photo_license_code = photo_entries[0].photo_license_code
@@ -656,6 +814,12 @@ def fetch_observations_for_list(obs_list: models.ObservationList) -> Iterable[In
                     species_guess=species_guess,
                     scientific_name=scientific_name,
                     common_name=common_name,
+                    observation_taxon_id=taxa["observation_taxon_id"],
+                    observation_taxon_name=taxa["observation_taxon_name"],
+                    observation_taxon_rank=taxa["observation_taxon_rank"],
+                    community_taxon_id=taxa["community_taxon_id"],
+                    community_taxon_name=taxa["community_taxon_name"],
+                    community_taxon_rank=taxa["community_taxon_rank"],
                     user_name=user_name,
                     observed_at=observed_at,
                     inat_url=inat_url,

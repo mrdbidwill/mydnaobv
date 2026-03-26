@@ -86,6 +86,9 @@ This project now supports a modular, queue-based PDF export pipeline for offline
 - Large jobs are limited to an overnight window.
 - If merge pressure is high, output degrades gracefully to split PDFs + ZIP.
 - Every completed job includes `observations_index.pdf` for linked record review.
+- Taxonomy logic for sequencing reevaluation:
+  - PDF ordering uses observer-side identification (`observation_taxon`) genus when available.
+  - PDFs still print `community_taxon` for each observation as a separate line for comparison.
 - Queue requests use a stale detector: no new job is created when list data has not changed since the latest completed export.
 - Public list creation and browsing remain unchanged.
 - Heavy export controls live on authenticated admin page: `/admin`.
