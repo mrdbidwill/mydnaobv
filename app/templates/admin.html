@@ -125,7 +125,18 @@
                 <td>{{ list.last_sync_at if list.last_sync_at else "Not synced" }}</td>
                 <td>
                   {% if latest_job %}
-                    {{ latest_job.status }}<br>
+                    {% if latest_job.status == "waiting_quota" %}
+                      <strong>Paused by quota</strong><br>
+                      <span class="muted">Status: waiting_quota</span><br>
+                      {% if latest_job.next_run_at %}
+                        <span class="muted">Next retry: {{ latest_job.next_run_at }}</span><br>
+                      {% endif %}
+                      {% if latest_job.message %}
+                        <span class="muted">{{ latest_job.message }}</span><br>
+                      {% endif %}
+                    {% else %}
+                      {{ latest_job.status }}<br>
+                    {% endif %}
                     <span class="muted">Job #{{ latest_job.id }}</span>
                     {% if ready_download_url_by_list.get(list.id) %}
                       <br><a href="{{ ready_download_url_by_list.get(list.id) }}" target="_blank" rel="noreferrer">Latest file</a>
@@ -207,7 +218,18 @@
                 <td>{{ list.last_sync_at if list.last_sync_at else "Not synced" }}</td>
                 <td>
                   {% if latest_job %}
-                    {{ latest_job.status }}<br>
+                    {% if latest_job.status == "waiting_quota" %}
+                      <strong>Paused by quota</strong><br>
+                      <span class="muted">Status: waiting_quota</span><br>
+                      {% if latest_job.next_run_at %}
+                        <span class="muted">Next retry: {{ latest_job.next_run_at }}</span><br>
+                      {% endif %}
+                      {% if latest_job.message %}
+                        <span class="muted">{{ latest_job.message }}</span><br>
+                      {% endif %}
+                    {% else %}
+                      {{ latest_job.status }}<br>
+                    {% endif %}
                     <span class="muted">Job #{{ latest_job.id }}</span>
                     {% if project_ready_download_url_by_list.get(list.id) %}
                       <br><a href="{{ project_ready_download_url_by_list.get(list.id) }}" target="_blank" rel="noreferrer">Latest file</a>
