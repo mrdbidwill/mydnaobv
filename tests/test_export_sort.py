@@ -1,5 +1,7 @@
 from app import models
+from app.core.config import settings
 from app.exports.service import _extract_genus_key, _observation_genus_sort_key, _preferred_taxon_title
+from app.exports.pdf_writer import _observation_index_title
 
 
 def test_extract_genus_key_skips_common_qualifiers():
@@ -64,3 +66,14 @@ def test_sort_key_can_use_taxon_source():
     ]
     sorted_obs = sorted(observations, key=lambda obs: _observation_genus_sort_key(obs, sort_source="taxon"))
     assert [obs.inat_observation_id for obs in sorted_obs] == [2, 1]
+
+
+def test_observation_index_title_prefers_taxon_when_source_is_taxon(monkeypatch):
+    obs = models.Observation(
+        list_id=1,
+        inat_observation_id=11,
+        taxon_name="Mycena",
+        observation_taxon_name="Agaricomycetes",
+    )
+    monkeypatch.setattr(settings, "export_sort_taxon_source", "taxon")
+    assert _observation_index_title(obs) == "Mycena"

@@ -8,6 +8,7 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 
 from app import models
+from app.core.config import settings
 from app.exports.policy import build_attribution_line
 
 
@@ -18,6 +19,30 @@ IMAGE_TOP = PAGE_HEIGHT - 200
 IMAGE_BOTTOM = 120
 IMAGE_LEFT = MARGIN
 IMAGE_RIGHT = PAGE_WIDTH - MARGIN
+
+
+def _observation_index_title(obs: models.Observation) -> str:
+    source = (settings.export_sort_taxon_source or "").strip().lower()
+    if source in {"taxon", "inat_taxon"}:
+        ordered = (
+            obs.taxon_name,
+            obs.observation_taxon_name,
+            obs.scientific_name,
+            obs.species_guess,
+            obs.community_taxon_name,
+        )
+    else:
+        ordered = (
+            obs.observation_taxon_name,
+            obs.scientific_name,
+            obs.species_guess,
+            obs.taxon_name,
+            obs.community_taxon_name,
+        )
+    for candidate in ordered:
+        if candidate and candidate.strip():
+            return candidate.strip()
+    return f"Observation {obs.inat_observation_id}"
 
 
 def _draw_wrapped(c: canvas.Canvas, text: str, x: float, y: float, width: float, line_height: float = 14.0) -> float:
@@ -251,13 +276,7 @@ def render_observation_index_pdf(
     y = start_page()
 
     for idx, obs in enumerate(observations, start=1):
-        title = (
-            obs.observation_taxon_name
-            or obs.scientific_name
-            or obs.species_guess
-            or obs.taxon_name
-            or f"Observation {obs.inat_observation_id}"
-        )
+        title = _observation_index_title(obs)
         current_taxon = obs.taxon_name or "Not available"
         observation_taxon = obs.observation_taxon_name or obs.scientific_name or "Not available"
         community_taxon = obs.community_taxon_name or "Not available"
