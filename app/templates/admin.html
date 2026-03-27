@@ -14,7 +14,7 @@
 
     <div class="card">
       <h3>Seed And Build Counties</h3>
-      <p class="muted">Creates missing county lists for a state/project, then queues full builds for the matching counties.</p>
+      <p class="muted">Creates any missing county lists for one state + one project, then queues a full sync and PDF rebuild for every matching county list.</p>
       <form method="post" action="/admin/projects/county-seed" class="grid">
         <label>
           iNaturalist project ID or slug
@@ -38,7 +38,7 @@
 
     <div class="card">
       <h3>Seed And Build Projects</h3>
-      <p class="muted">Creates one list per iNaturalist project ID/slug, then queues sync+export builds with the same worker throttles used for county products.</p>
+      <p class="muted">Creates or reuses one list per project ID/slug, marks it for public downloads, then queues full sync and PDF rebuild jobs for those project lists.</p>
       <form method="post" action="/admin/projects/build" class="grid">
         <label>
           Project IDs or slugs (one per line)
@@ -54,7 +54,7 @@
 
     <div class="card">
       <h3>Process State Counties</h3>
-      <p class="muted">Queue fresh sync+export builds for existing county lists in a state (optionally one project only).</p>
+      <p class="muted">Queues fresh full sync + PDF rebuild jobs for existing county lists in the selected state (optionally filtered to one project).</p>
       <form method="post" action="/admin/states/build" class="grid">
         <label>
           State
@@ -74,6 +74,7 @@
 
     <div class="card">
       <h3>County Products</h3>
+      <p class="muted">Action help: <strong>Sync now</strong> refreshes cached iNaturalist observations only. <strong>Rebuild</strong> queues a full sync plus new PDF/ZIP export job.</p>
       <form method="get" action="/admin" style="margin-bottom: 10px; display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap;">
         <label class="muted" for="admin-state-filter">State</label>
         <select id="admin-state-filter" class="input" name="state_code" style="width: 200px;">
@@ -197,6 +198,7 @@
 
     <div class="card">
       <h3>Project Products</h3>
+      <p class="muted">Action help: <strong>Sync now</strong> refreshes cached iNaturalist observations only. <strong>Rebuild</strong> queues a full sync plus new PDF/ZIP export job.</p>
       {% if project_lists and project_lists|length > 0 %}
         <table>
           <thead>

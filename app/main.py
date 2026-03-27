@@ -693,6 +693,37 @@ def download_export_artifact_by_job(
     return FileResponse(path=str(artifact_path), filename=artifact_path.name)
 
 
+@app.get("/admin/jobs/{job_id}/artifacts/{artifact_id}/download")
+def admin_download_export_artifact_by_job(
+    job_id: int,
+    artifact_id: int,
+    db: Session = Depends(get_db),
+    _: bool = Depends(require_admin),
+):
+    if not settings.enable_pdf_exports:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    job = db.query(models.ExportJob).filter_by(id=job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Export job not found")
+
+    artifact = get_artifact_for_job(db, job_id=job.id, artifact_id=artifact_id)
+    if not artifact:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+
+    artifact_path = artifact_abspath(artifact)
+    if artifact_path.exists() and artifact_path.is_file():
+        return FileResponse(path=str(artifact_path), filename=artifact_path.name)
+
+    # Fallback to published latest URL when local retention cleanup removed job files.
+    if latest_artifact_exists(job.list_id, artifact):
+        published_url = published_latest_url(job.list_id, artifact)
+        if published_url:
+            return RedirectResponse(url=published_url, status_code=307)
+
+    raise HTTPException(status_code=404, detail="File not available")
+
+
 @app.get("/public/lists/{list_id}/artifacts/{artifact_id}/download")
 def public_download_latest_artifact(
     list_id: int,
@@ -776,13 +807,8 @@ def admin_page(
         chosen = _preferred_county_file_artifact(artifacts)
         if not chosen:
             continue
-        if latest_artifact_exists(obs_list.id, chosen):
-            latest_url = published_latest_url(obs_list.id, chosen)
-            if latest_url:
-                ready_download_url_by_list[obs_list.id] = latest_url
-                continue
         ready_download_url_by_list[obs_list.id] = (
-            f"/public/lists/{obs_list.id}/artifacts/{chosen.id}/download"
+            f"/admin/jobs/{latest_ready.id}/artifacts/{chosen.id}/download"
         )
 
     project_latest_job_by_list: dict[int, models.ExportJob] = {}
@@ -800,7 +826,7 @@ def admin_page(
         if not chosen:
             continue
         project_ready_download_url_by_list[obs_list.id] = (
-            f"/lists/{obs_list.id}/exports/{latest_ready.id}/artifacts/{chosen.id}/download"
+            f"/admin/jobs/{latest_ready.id}/artifacts/{chosen.id}/download"
         )
 
     state_rows = (
