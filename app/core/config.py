@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     export_include_all_photos: bool = Field(default=False, alias="EXPORT_INCLUDE_ALL_PHOTOS")
     export_max_photos_per_observation: int = Field(default=1, alias="EXPORT_MAX_PHOTOS_PER_OBSERVATION")
     export_request_interval_seconds: float = Field(default=2.0, alias="EXPORT_REQUEST_INTERVAL_SECONDS")
+    export_sort_taxon_source: str = Field(default="observation", alias="EXPORT_SORT_TAXON_SOURCE")
     export_max_api_requests_per_day: int = Field(default=6000, alias="EXPORT_MAX_API_REQUESTS_PER_DAY")
     export_max_media_mb_per_hour: int = Field(default=3072, alias="EXPORT_MAX_MEDIA_MB_PER_HOUR")
     export_max_media_mb_per_day: int = Field(default=15360, alias="EXPORT_MAX_MEDIA_MB_PER_DAY")

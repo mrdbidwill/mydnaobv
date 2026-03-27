@@ -212,9 +212,19 @@ def _extract_taxa(obs: dict, detail: Optional[dict] = None) -> dict[str, Optiona
     if comm_taxon_id is None:
         comm_taxon_id = comm_taxon_id_from_obj
 
+    # Current iNaturalist taxon (aggregate/current taxon used by API and site).
+    current_taxon_id, current_taxon_name, current_taxon_rank, _ = _extract_taxon_summary(obs.get("taxon"))
+    if not current_taxon_name and detail:
+        current_taxon_id, current_taxon_name, current_taxon_rank, _ = _extract_taxon_summary(detail.get("taxon"))
+
     # Final fallback if observer taxon is unavailable.
     if not obs_taxon_name:
-        obs_taxon_id, obs_taxon_name, obs_taxon_rank, obs_common_name = _extract_taxon_summary(obs.get("taxon"))
+        obs_taxon_id, obs_taxon_name, obs_taxon_rank, obs_common_name = (
+            current_taxon_id,
+            current_taxon_name,
+            current_taxon_rank,
+            obs_common_name,
+        )
     if not obs_taxon_name and detail:
         obs_taxon_id, obs_taxon_name, obs_taxon_rank, obs_common_name = _extract_taxon_summary(detail.get("taxon"))
     if not obs_taxon_name:
@@ -224,6 +234,9 @@ def _extract_taxa(obs: dict, detail: Optional[dict] = None) -> dict[str, Optiona
         obs_common_name = comm_common_name
 
     return {
+        "current_taxon_id": current_taxon_id,
+        "current_taxon_name": current_taxon_name,
+        "current_taxon_rank": current_taxon_rank,
         "observation_taxon_id": obs_taxon_id,
         "observation_taxon_name": obs_taxon_name,
         "observation_taxon_rank": obs_taxon_rank,
@@ -780,8 +793,8 @@ def fetch_observations_for_list(obs_list: models.ObservationList) -> Iterable[In
                     else (str(obs.get("scientific_name") or "").strip() or None)
                 )
                 taxon_name = (
-                    str(community_taxon_name).strip()
-                    if community_taxon_name
+                    str(taxa["current_taxon_name"]).strip()
+                    if taxa["current_taxon_name"]
                     else (str(obs.get("taxon_name") or "").strip() or None)
                 )
                 common_name = (

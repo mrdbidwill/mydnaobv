@@ -24,6 +24,8 @@ def test_extract_taxa_prefers_observer_current_identification_for_observation_ta
     }
 
     out = _extract_taxa(obs)
+    assert out["current_taxon_id"] == 100
+    assert out["current_taxon_name"] == "Communityus oldus"
     assert out["observation_taxon_id"] == 102
     assert out["observation_taxon_name"] == "Observer taxon"
     assert out["community_taxon_id"] == 100
@@ -39,5 +41,6 @@ def test_extract_taxa_falls_back_to_species_guess_when_no_identification_taxon()
     }
 
     out = _extract_taxa(obs)
+    assert out["current_taxon_name"] is None
     assert out["observation_taxon_name"] == "Fallback species guess"
     assert out["community_taxon_name"] is None

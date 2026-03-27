@@ -14,6 +14,7 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app import models
+from app.core.config import settings
 from app.exports.config import export_config
 from app.exports.publish import cleanup_published_job, publish_job_artifacts
 from app.exports.pdf_writer import (
@@ -53,15 +54,34 @@ def normalize_naive_utc(value: datetime | None) -> datetime | None:
     return value.astimezone(UTC).replace(tzinfo=None)
 
 
-def _normalized_title_for_observation(obs: models.Observation) -> str:
-    for candidate in (
-        obs.observation_taxon_name,
-        obs.scientific_name,
-        obs.taxon_name,
-        obs.community_taxon_name,
-        obs.species_guess,
-        obs.common_name,
-    ):
+def _resolved_sort_source(value: str | None = None) -> str:
+    source = (value or settings.export_sort_taxon_source or "").strip().lower()
+    if source in {"taxon", "inat_taxon"}:
+        return "taxon"
+    return "observation"
+
+
+def _preferred_taxon_title(obs: models.Observation, sort_source: str | None = None) -> str:
+    source = _resolved_sort_source(sort_source)
+    if source == "taxon":
+        ordered = (
+            obs.taxon_name,
+            obs.observation_taxon_name,
+            obs.scientific_name,
+            obs.community_taxon_name,
+            obs.species_guess,
+            obs.common_name,
+        )
+    else:
+        ordered = (
+            obs.observation_taxon_name,
+            obs.scientific_name,
+            obs.taxon_name,
+            obs.community_taxon_name,
+            obs.species_guess,
+            obs.common_name,
+        )
+    for candidate in ordered:
         if candidate and candidate.strip():
             return candidate.strip()
     return ""
@@ -80,8 +100,11 @@ def _extract_genus_key(text: str) -> str:
     return ""
 
 
-def _observation_genus_sort_key(obs: models.Observation) -> tuple[str, str, int]:
-    title = _normalized_title_for_observation(obs)
+def _observation_genus_sort_key(
+    obs: models.Observation,
+    sort_source: str | None = None,
+) -> tuple[str, str, int]:
+    title = _preferred_taxon_title(obs, sort_source=sort_source)
     genus = _extract_genus_key(title)
     # Push no-genus rows to the end while keeping deterministic tie-breaks.
     genus_bucket = genus or "zzzzzzzz"
@@ -401,9 +424,9 @@ def _phase_plan(db: Session, job: models.ExportJob) -> bool:
                     observation_id=obs.id,
                     sequence=sequence,
                     inat_observation_id=obs.inat_observation_id,
-                    item_title=obs.observation_taxon_name or obs.scientific_name or obs.species_guess or obs.taxon_name,
+                    item_title=_preferred_taxon_title(obs),
                     observation_taxon_name=obs.observation_taxon_name or obs.scientific_name,
-                    community_taxon_name=obs.community_taxon_name or obs.taxon_name,
+                    community_taxon_name=obs.community_taxon_name,
                     observed_at=obs.observed_at,
                     inat_url=obs.inat_url,
                     image_url=None,
@@ -421,7 +444,7 @@ def _phase_plan(db: Session, job: models.ExportJob) -> bool:
             decision = evaluate_license(candidate["license_code"])
             item_status = "pending" if decision.allowed else "skipped"
             skip_reason = None if decision.allowed else f"license:{decision.reason}"
-            title = obs.observation_taxon_name or obs.scientific_name or obs.species_guess or obs.taxon_name
+            title = _preferred_taxon_title(obs)
             if export_config.include_all_photos and total_candidates > 1:
                 title = f"{title or f'Observation {obs.inat_observation_id}'} (photo {idx}/{total_candidates})"
 
@@ -433,7 +456,7 @@ def _phase_plan(db: Session, job: models.ExportJob) -> bool:
                     inat_observation_id=obs.inat_observation_id,
                     item_title=title,
                     observation_taxon_name=obs.observation_taxon_name or obs.scientific_name,
-                    community_taxon_name=obs.community_taxon_name or obs.taxon_name,
+                    community_taxon_name=obs.community_taxon_name,
                     observed_at=obs.observed_at,
                     inat_url=obs.inat_url,
                     image_url=candidate["url"],
@@ -948,6 +971,12 @@ def _upsert_artifact(
 
 
 def _build_readme_text(job: models.ExportJob) -> str:
+    sort_source = _resolved_sort_source()
+    sort_line = (
+        "- Sorting mode: genus from iNaturalist current taxon (`taxon`).\n"
+        if sort_source == "taxon"
+        else "- Sorting mode: genus from observer-side taxon (`observation_taxon`).\n"
+    )
     mode_line = (
         f"- Export mode: include all photos (max {max(1, min(export_config.max_photos_per_observation, 8))} per observation).\n"
         if export_config.include_all_photos
@@ -967,6 +996,7 @@ def _build_readme_text(job: models.ExportJob) -> str:
         "Why there are multiple files:\n"
         "- Large exports are split into smaller PDFs to keep the server stable.\n"
         + mode_line +
+        sort_line +
         "- PDFs are readable offline. External iNaturalist links require internet access.\n"
         "\n"
         "License and attribution notice:\n"

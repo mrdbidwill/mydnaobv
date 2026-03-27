@@ -867,6 +867,7 @@ def admin_page(
             "project_lists": project_lists,
             "project_latest_job_by_list": project_latest_job_by_list,
             "project_ready_download_url_by_list": project_ready_download_url_by_list,
+            "export_sort_taxon_source": (settings.export_sort_taxon_source or "observation").strip().lower(),
         },
     )
 

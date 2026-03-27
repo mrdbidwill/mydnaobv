@@ -258,7 +258,9 @@ def render_observation_index_pdf(
             or obs.taxon_name
             or f"Observation {obs.inat_observation_id}"
         )
-        community_taxon = obs.community_taxon_name or obs.taxon_name or "Not available"
+        current_taxon = obs.taxon_name or "Not available"
+        observation_taxon = obs.observation_taxon_name or obs.scientific_name or "Not available"
+        community_taxon = obs.community_taxon_name or "Not available"
         common = obs.common_name or "Not provided"
         observer = obs.user_name or "Unknown observer"
         observed_text = _format_observed_at(obs.observed_at)
@@ -271,6 +273,8 @@ def render_observation_index_pdf(
         c.setFont("Helvetica-Bold", 11)
         y = _draw_wrapped(c, f"{idx}. {title}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
         c.setFont("Helvetica", 10)
+        y = _draw_wrapped(c, f"iNaturalist taxon: {current_taxon}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
+        y = _draw_wrapped(c, f"Observation taxon: {observation_taxon}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
         y = _draw_wrapped(c, f"Community taxon: {community_taxon}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
         y = _draw_wrapped(c, f"Observed: {observed_text} | Observer: {observer}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
         y = _draw_wrapped(c, f"Common name: {common}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))

@@ -138,6 +138,17 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - `export_items`: added `observation_taxon_name` and `community_taxon_name` for render-time labeling.
   - Added migration `f7c1e2d3a4b5_add_observation_vs_community_taxon_fields.py`.
 
+## 2026-03-27
+- Added configurable sort-source toggle for genus ordering in export jobs:
+  - New env var: `EXPORT_SORT_TAXON_SOURCE` (`observation` default, or `taxon`).
+  - `observation`: uses observer-side taxon for ordering.
+  - `taxon`: uses iNaturalist current taxon (`taxon`) for ordering.
+- iNaturalist sync mapping updated:
+  - `observations.taxon_name` now stores iNaturalist current taxon (`taxon`) instead of community fallback.
+  - Separate `observation_taxon_*` and `community_taxon_*` remain unchanged for auditability.
+- Observation index PDF labeling expanded:
+  - now prints `iNaturalist taxon`, `Observation taxon`, and `Community taxon` per row.
+
 ## Routine Update Rule
 On each major decision or architecture change:
 1. Add one dated entry in this file.
