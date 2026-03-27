@@ -86,6 +86,7 @@ This project now supports a modular, queue-based PDF export pipeline for offline
 - Large jobs are limited to an overnight window.
 - If merge pressure is high, output degrades gracefully to split PDFs + ZIP.
 - Every completed job includes `observations_index.pdf` for linked record review.
+- Every completed job also includes a genera summary text file (`*_genera_count.txt`) with numbered counts such as `1. Agaricales (4)`.
 - Taxonomy logic for sequencing reevaluation:
   - PDF ordering is configurable via `EXPORT_SORT_TAXON_SOURCE`:
     - `observation` (default): genus from observer-side identification (`observation_taxon`).

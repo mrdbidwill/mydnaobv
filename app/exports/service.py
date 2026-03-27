@@ -100,6 +100,20 @@ def _extract_genus_key(text: str) -> str:
     return ""
 
 
+def _extract_genus_label(text: str) -> str:
+    if not text:
+        return ""
+    for raw_token in text.split():
+        cleaned = re.sub(r"[^A-Za-z-]", "", raw_token).strip("-")
+        token = cleaned.lower()
+        if not token:
+            continue
+        if token in GENUS_QUALIFIER_TOKENS:
+            continue
+        return cleaned if cleaned else token
+    return ""
+
+
 def _observation_genus_sort_key(
     obs: models.Observation,
     sort_source: str | None = None,
@@ -113,6 +127,30 @@ def _observation_genus_sort_key(
         title.lower(),
         int(obs.inat_observation_id or 0),
     )
+
+
+def _build_genera_count_lines(
+    observations: list[models.Observation],
+    sort_source: str | None = None,
+) -> list[str]:
+    counts: dict[str, int] = {}
+    labels: dict[str, str] = {}
+
+    for obs in observations:
+        title = _preferred_taxon_title(obs, sort_source=sort_source)
+        key = _extract_genus_key(title)
+        if not key:
+            continue
+        counts[key] = counts.get(key, 0) + 1
+        if key not in labels:
+            label = _extract_genus_label(title)
+            labels[key] = label if label else key
+
+    lines: list[str] = []
+    for idx, key in enumerate(sorted(counts.keys()), start=1):
+        label = labels.get(key, key)
+        lines.append(f"{idx}. {label} ({counts[key]})")
+    return lines
 
 
 def enqueue_export_job(
@@ -679,6 +717,7 @@ def _phase_finalize(db: Session, job: models.ExportJob) -> bool:
     filename_prefix = _filename_prefix_for_list(obs_list, job.list_id)
     index_pdf_name = f"{filename_prefix}_observations_index.pdf"
     county_pdf_name = f"{filename_prefix}_all_observations.pdf"
+    genera_count_name = f"{filename_prefix}_genera_count.txt"
     zip_name = f"{filename_prefix}_observation_export_parts.zip"
     observations = (
         db.query(models.Observation)
@@ -693,6 +732,12 @@ def _phase_finalize(db: Session, job: models.ExportJob) -> bool:
         observations=observations,
     )
     _upsert_artifact(db, job.id, "observations_index_pdf", _relative_to_storage(index_pdf_path), None)
+
+    genera_count_path = docs_dir / genera_count_name
+    genera_lines = _build_genera_count_lines(observations)
+    genera_count_text = "\n".join(genera_lines) + ("\n" if genera_lines else "")
+    genera_count_path.write_text(genera_count_text, encoding="utf-8")
+    _upsert_artifact(db, job.id, "genera_count", _relative_to_storage(genera_count_path), None)
 
     merged_created = False
     used_placeholder_county_guide = False
@@ -726,6 +771,7 @@ def _phase_finalize(db: Session, job: models.ExportJob) -> bool:
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.write(readme_path, arcname="README_FIRST.txt")
         zf.write(index_pdf_path, arcname=index_pdf_name)
+        zf.write(genera_count_path, arcname=genera_count_name)
         for part in parts:
             part_path = _storage_root() / part.relative_path
             arcname = f"parts/{Path(part.relative_path).name}"

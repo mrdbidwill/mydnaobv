@@ -228,14 +228,17 @@ def load_public_county_rows(
         latest_job = latest_completed_job_for_list(db, obs_list.id)
         county_artifact = None
         index_artifact = None
+        genera_artifact = None
         county_download_url = None
         county_download_label = None
         index_download_url = None
+        genera_download_url = None
         status_label = "Not built"
         if latest_job:
             artifacts = list_artifacts_for_job(db, latest_job.id)
             county_artifact = _preferred_county_file_artifact(artifacts)
             index_artifact = _artifact_by_kind(artifacts, "observations_index_pdf")
+            genera_artifact = _artifact_by_kind(artifacts, "genera_count")
             status_label = latest_job.status
             if county_artifact and index_artifact:
                 status_label = "Ready"
@@ -248,6 +251,7 @@ def load_public_county_rows(
             if county_artifact:
                 county_download_label = "County PDF" if county_artifact.kind == "merged_pdf" else "County ZIP"
             index_download_url = _artifact_public_url(obs_list.id, index_artifact)
+            genera_download_url = _artifact_public_url(obs_list.id, genera_artifact)
 
         refresh_data = _refresh_summary(obs_list.last_sync_at)
 
@@ -257,10 +261,12 @@ def load_public_county_rows(
                 "latest_job": latest_job,
                 "county_artifact": county_artifact,
                 "index_artifact": index_artifact,
+                "genera_artifact": genera_artifact,
                 "status_label": status_label,
                 "county_download_url": county_download_url,
                 "county_download_label": county_download_label,
                 "index_download_url": index_download_url,
+                "genera_download_url": genera_download_url,
                 "last_refreshed_label": refresh_data["last_refreshed_label"],
                 "next_refresh_label": refresh_data["next_refresh_label"],
                 "refresh_due": refresh_data["is_due"],
@@ -289,9 +295,11 @@ def load_public_project_rows(db: Session) -> list[dict[str, object]]:
 
         county_artifact = None
         index_artifact = None
+        genera_artifact = None
         county_download_url = None
         county_download_label = None
         index_download_url = None
+        genera_download_url = None
         status_label = "Not built"
 
         if latest_job:
@@ -300,6 +308,7 @@ def load_public_project_rows(db: Session) -> list[dict[str, object]]:
             artifacts = list_artifacts_for_job(db, latest_ready.id)
             county_artifact = _preferred_county_file_artifact(artifacts)
             index_artifact = _artifact_by_kind(artifacts, "observations_index_pdf")
+            genera_artifact = _artifact_by_kind(artifacts, "genera_count")
             if county_artifact and index_artifact:
                 status_label = "Ready"
             elif county_artifact:
@@ -311,6 +320,7 @@ def load_public_project_rows(db: Session) -> list[dict[str, object]]:
             if county_artifact:
                 county_download_label = "Project PDF" if county_artifact.kind == "merged_pdf" else "Project ZIP"
             index_download_url = _artifact_public_url(obs_list.id, index_artifact)
+            genera_download_url = _artifact_public_url(obs_list.id, genera_artifact)
 
         refresh_data = _refresh_summary(obs_list.last_sync_at)
         out.append(
@@ -319,10 +329,12 @@ def load_public_project_rows(db: Session) -> list[dict[str, object]]:
                 "latest_job": latest_job,
                 "county_artifact": county_artifact,
                 "index_artifact": index_artifact,
+                "genera_artifact": genera_artifact,
                 "status_label": status_label,
                 "county_download_url": county_download_url,
                 "county_download_label": county_download_label,
                 "index_download_url": index_download_url,
+                "genera_download_url": genera_download_url,
                 "last_refreshed_label": refresh_data["last_refreshed_label"],
                 "next_refresh_label": refresh_data["next_refresh_label"],
                 "refresh_due": refresh_data["is_due"],
@@ -743,7 +755,7 @@ def public_download_latest_artifact(
     artifact = get_artifact_for_job(db, job_id=latest_job.id, artifact_id=artifact_id)
     if not artifact:
         raise HTTPException(status_code=404, detail="Artifact not found")
-    if artifact.kind not in ("merged_pdf", "zip", "observations_index_pdf"):
+    if artifact.kind not in ("merged_pdf", "zip", "observations_index_pdf", "genera_count"):
         raise HTTPException(status_code=404, detail="Artifact not public")
 
     artifact_path = artifact_abspath(artifact)

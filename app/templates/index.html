@@ -59,6 +59,7 @@
               <th>Status</th>
               <th>Observation List</th>
               <th>County File</th>
+              <th>Genera Count</th>
             </tr>
           </thead>
           <tbody>
@@ -91,6 +92,13 @@
                 <td>
                   {% if row.county_download_url %}
                     <a class="btn secondary" href="{{ row.county_download_url }}" target="_blank" rel="noreferrer">Download {{ row.county_download_label }}</a>
+                  {% else %}
+                    <span class="muted">Not ready yet</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if row.genera_download_url %}
+                    <a class="btn secondary" href="{{ row.genera_download_url }}" target="_blank" rel="noreferrer">Download Genera Count</a>
                   {% else %}
                     <span class="muted">Not ready yet</span>
                   {% endif %}
@@ -134,6 +142,7 @@
               <th>Status</th>
               <th>Observation List</th>
               <th>Project File</th>
+              <th>Genera Count</th>
             </tr>
           </thead>
           <tbody>
@@ -165,6 +174,13 @@
                 <td>
                   {% if row.county_download_url %}
                     <a class="btn secondary" href="{{ row.county_download_url }}" target="_blank" rel="noreferrer">Download {{ row.county_download_label }}</a>
+                  {% else %}
+                    <span class="muted">Not ready yet</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if row.genera_download_url %}
+                    <a class="btn secondary" href="{{ row.genera_download_url }}" target="_blank" rel="noreferrer">Download Genera Count</a>
                   {% else %}
                     <span class="muted">Not ready yet</span>
                   {% endif %}

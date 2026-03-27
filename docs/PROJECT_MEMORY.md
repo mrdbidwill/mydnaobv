@@ -148,6 +148,10 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - Separate `observation_taxon_*` and `community_taxon_*` remain unchanged for auditability.
 - Observation index PDF labeling expanded:
   - now prints `iNaturalist taxon`, `Observation taxon`, and `Community taxon` per row.
+- Added per-export genera summary artifact for both county and project lists:
+  - new file: `*_genera_count.txt`
+  - contents are numbered alphabetical genus-style tokens with observation counts (e.g., `1. Agaricales (4)`).
+  - included in ZIP output and public download routing.
 
 ## Routine Update Rule
 On each major decision or architecture change:

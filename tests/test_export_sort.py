@@ -1,6 +1,11 @@
 from app import models
 from app.core.config import settings
-from app.exports.service import _extract_genus_key, _observation_genus_sort_key, _preferred_taxon_title
+from app.exports.service import (
+    _build_genera_count_lines,
+    _extract_genus_key,
+    _observation_genus_sort_key,
+    _preferred_taxon_title,
+)
 from app.exports.pdf_writer import _observation_index_title
 
 
@@ -77,3 +82,18 @@ def test_observation_index_title_prefers_taxon_when_source_is_taxon(monkeypatch)
     )
     monkeypatch.setattr(settings, "export_sort_taxon_source", "taxon")
     assert _observation_index_title(obs) == "Mycena"
+
+
+def test_build_genera_count_lines_counts_and_orders():
+    observations = [
+        models.Observation(list_id=1, inat_observation_id=1, observation_taxon_name="Agaricales"),
+        models.Observation(list_id=1, inat_observation_id=2, observation_taxon_name="Ascomycota"),
+        models.Observation(list_id=1, inat_observation_id=3, observation_taxon_name="Agaricales"),
+        models.Observation(list_id=1, inat_observation_id=4, observation_taxon_name="cf. Ascomycota"),
+        models.Observation(list_id=1, inat_observation_id=5, observation_taxon_name="  "),
+    ]
+    lines = _build_genera_count_lines(observations, sort_source="observation")
+    assert lines == [
+        "1. Agaricales (2)",
+        "2. Ascomycota (2)",
+    ]
