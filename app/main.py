@@ -1,12 +1,13 @@
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+import re
 import shutil
 from typing import Optional
 from urllib.parse import parse_qs, quote, urlparse
 from fastapi import FastAPI, Request, Form, Depends, Query, HTTPException, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
@@ -47,6 +48,19 @@ PUBLIC_COUNTY_PAGE_SIZE = 24
 PUBLIC_REFRESH_INTERVAL_DAYS = max(1, settings.public_refresh_interval_days)
 DEFAULT_PROJECT_BUILD_IDS = "124358\n184305\n132913\n251751"
 CATALOG_PAGE_SIZE = max(10, min(settings.catalog_page_size, 200))
+GENUS_QUALIFIER_TOKENS = {
+    "cf",
+    "aff",
+    "nr",
+    "sp",
+    "spp",
+    "complex",
+    "group",
+    "sect",
+    "subsp",
+    "var",
+    "forma",
+}
 
 
 @app.get("/favicon.ico", include_in_schema=False)
@@ -111,6 +125,75 @@ def parse_optional_date(raw: str | None) -> tuple[Optional[date], Optional[str]]
         return date.fromisoformat(text), None
     except ValueError:
         return None, "Use YYYY-MM-DD date format."
+
+
+def _extract_genus_label_from_text(value: str | None) -> Optional[str]:
+    text = (value or "").strip()
+    if not text:
+        return None
+    for raw_token in text.split():
+        cleaned = re.sub(r"[^A-Za-z-]", "", raw_token).strip("-")
+        if not cleaned:
+            continue
+        if cleaned.lower() in GENUS_QUALIFIER_TOKENS:
+            continue
+        return cleaned
+    return None
+
+
+def _catalog_genus_label(
+    taxon_name: str | None,
+    species_guess: str | None,
+    community_taxon_name: str | None,
+    genus_key: str | None,
+) -> Optional[str]:
+    for value in (taxon_name, species_guess, community_taxon_name, genus_key):
+        label = _extract_genus_label_from_text(value)
+        if label:
+            return label
+    return None
+
+
+def _build_catalog_filtered_query(
+    db: Session,
+    source_id: int,
+    genus: str,
+    query: str,
+    from_date: Optional[date],
+    to_date: Optional[date],
+) -> tuple[object, Optional[models.CatalogSource]]:
+    filtered_query = db.query(models.CatalogObservation)
+    selected_source = None
+    if source_id > 0:
+        selected_source = db.query(models.CatalogSource).filter_by(id=source_id).first()
+        filtered_query = filtered_query.join(
+            models.CatalogObservationProject,
+            models.CatalogObservationProject.observation_id == models.CatalogObservation.id,
+        ).filter(models.CatalogObservationProject.source_id == source_id)
+
+    cleaned_genus = (genus or "").strip().lower()
+    if cleaned_genus:
+        filtered_query = filtered_query.filter(models.CatalogObservation.genus_key.like(f"{cleaned_genus}%"))
+
+    cleaned_query = (query or "").strip()
+    if cleaned_query:
+        needle = f"%{cleaned_query}%"
+        filtered_query = filtered_query.filter(
+            or_(
+                models.CatalogObservation.taxon_name.ilike(needle),
+                models.CatalogObservation.species_guess.ilike(needle),
+                models.CatalogObservation.community_taxon_name.ilike(needle),
+                models.CatalogObservation.place_guess.ilike(needle),
+                models.CatalogObservation.user_login.ilike(needle),
+            )
+        )
+
+    if from_date:
+        filtered_query = filtered_query.filter(models.CatalogObservation.observed_on_date >= from_date)
+    if to_date:
+        filtered_query = filtered_query.filter(models.CatalogObservation.observed_on_date <= to_date)
+
+    return filtered_query, selected_source
 
 
 def _preferred_county_file_artifact(artifacts: list[models.ExportArtifact]) -> models.ExportArtifact | None:
@@ -575,36 +658,14 @@ def catalog_page(
     to_date, to_error = parse_optional_date(date_to)
     date_error = from_error or to_error
 
-    filtered_query = db.query(models.CatalogObservation)
-    selected_source = None
-    if source_id > 0:
-        selected_source = db.query(models.CatalogSource).filter_by(id=source_id).first()
-        filtered_query = filtered_query.join(
-            models.CatalogObservationProject,
-            models.CatalogObservationProject.observation_id == models.CatalogObservation.id,
-        ).filter(models.CatalogObservationProject.source_id == source_id)
-
-    cleaned_genus = (genus or "").strip().lower()
-    if cleaned_genus:
-        filtered_query = filtered_query.filter(models.CatalogObservation.genus_key.like(f"{cleaned_genus}%"))
-
-    cleaned_query = (query or "").strip()
-    if cleaned_query:
-        needle = f"%{cleaned_query}%"
-        filtered_query = filtered_query.filter(
-            or_(
-                models.CatalogObservation.taxon_name.ilike(needle),
-                models.CatalogObservation.species_guess.ilike(needle),
-                models.CatalogObservation.community_taxon_name.ilike(needle),
-                models.CatalogObservation.place_guess.ilike(needle),
-                models.CatalogObservation.user_login.ilike(needle),
-            )
-        )
-
-    if from_date:
-        filtered_query = filtered_query.filter(models.CatalogObservation.observed_on_date >= from_date)
-    if to_date:
-        filtered_query = filtered_query.filter(models.CatalogObservation.observed_on_date <= to_date)
+    filtered_query, selected_source = _build_catalog_filtered_query(
+        db,
+        source_id,
+        genus,
+        query,
+        from_date,
+        to_date,
+    )
 
     total = filtered_query.count()
 
@@ -706,6 +767,84 @@ def catalog_page(
             "memberships_by_obs": memberships_by_obs,
         },
         show_ads=True,
+    )
+
+
+@app.get("/catalog/genera-count")
+def catalog_genera_count(
+    source_id: int = Query(default=0, ge=0),
+    genus: str = Query(default=""),
+    query: str = Query(default=""),
+    date_from: str = Query(default=""),
+    date_to: str = Query(default=""),
+    db: Session = Depends(get_db),
+):
+    ensure_data_catalog_enabled()
+
+    from_date, from_error = parse_optional_date(date_from)
+    to_date, to_error = parse_optional_date(date_to)
+    if from_error or to_error:
+        raise HTTPException(status_code=400, detail=from_error or to_error)
+
+    filtered_query, selected_source = _build_catalog_filtered_query(
+        db,
+        source_id,
+        genus,
+        query,
+        from_date,
+        to_date,
+    )
+
+    rows = (
+        filtered_query
+        .with_entities(
+            models.CatalogObservation.taxon_name,
+            models.CatalogObservation.species_guess,
+            models.CatalogObservation.community_taxon_name,
+            models.CatalogObservation.genus_key,
+        )
+        .all()
+    )
+
+    counts_by_genus: dict[str, int] = {}
+    labels_by_genus: dict[str, str] = {}
+    total_observations = 0
+    for taxon_name, species_guess, community_taxon_name, genus_key in rows:
+        total_observations += 1
+        label = _catalog_genus_label(taxon_name, species_guess, community_taxon_name, genus_key)
+        if not label:
+            continue
+        key = label.lower()
+        labels_by_genus.setdefault(key, label)
+        counts_by_genus[key] = counts_by_genus.get(key, 0) + 1
+
+    sorted_items = sorted(counts_by_genus.items(), key=lambda item: (labels_by_genus[item[0]].lower(), item[0]))
+    source_label = (
+        (selected_source.project_title or selected_source.project_id).strip()
+        if selected_source and (selected_source.project_title or selected_source.project_id)
+        else "All sources"
+    )
+
+    lines = [
+        "Catalog Genera Count",
+        f"Source filter: {source_label}",
+        f"Filters: genus='{genus or ''}', query='{query or ''}', date_from='{date_from or ''}', date_to='{date_to or ''}'",
+        f"Total observations considered: {total_observations}",
+        f"Total unique genera: {len(sorted_items)}",
+        "",
+    ]
+    for idx, (key, count) in enumerate(sorted_items, start=1):
+        lines.append(f"{idx}. {labels_by_genus[key]} ({count})")
+
+    filename = "catalog_genera_count.txt"
+    if selected_source and selected_source.project_id:
+        slug = re.sub(r"[^a-z0-9-]+", "-", selected_source.project_id.lower()).strip("-")
+        if slug:
+            filename = f"{slug}_catalog_genera_count.txt"
+
+    return PlainTextResponse(
+        "\n".join(lines),
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

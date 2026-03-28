@@ -64,7 +64,10 @@
     </div>
 
     <div class="card">
-      <h3>Catalog Results</h3>
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
+        <h3 style="margin: 0;">Catalog Results</h3>
+        <a class="btn secondary" href="/catalog/genera-count?source_id={{ selected_source_id }}&genus={{ genus }}&query={{ query }}&date_from={{ date_from }}&date_to={{ date_to }}">Download Genera Count</a>
+      </div>
       <p class="muted">Duplicates have been removed by iNaturalist <code>observation.id</code>.</p>
 
       {% if rows and rows|length > 0 %}

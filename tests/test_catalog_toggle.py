@@ -1,7 +1,7 @@
 import pytest
 from fastapi import HTTPException
 
-from app.main import ensure_data_catalog_enabled, normalize_catalog_sort, settings
+from app.main import _catalog_genus_label, ensure_data_catalog_enabled, normalize_catalog_sort, settings
 
 
 def test_normalize_catalog_sort_defaults_on_unknown():
@@ -30,3 +30,9 @@ def test_ensure_data_catalog_enabled_raises_when_disabled(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         ensure_data_catalog_enabled()
     assert exc.value.status_code == 404
+
+
+def test_catalog_genus_label_prefers_taxon_and_falls_back():
+    assert _catalog_genus_label("Agaricus campestris", None, None, None) == "Agaricus"
+    assert _catalog_genus_label(None, "cf. Trametes versicolor", None, None) == "Trametes"
+    assert _catalog_genus_label(None, None, None, "boletus") == "boletus"
