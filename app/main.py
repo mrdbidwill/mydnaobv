@@ -100,7 +100,16 @@ def normalize_index_sort(sort: str | None) -> str:
 
 def normalize_catalog_sort(sort: str | None) -> str:
     candidate = (sort or "").strip().lower()
-    if candidate in ("observed_desc", "observed_asc", "genus_asc", "taxon_asc", "place_asc", "updated_desc"):
+    if candidate in (
+        "observed_desc",
+        "observed_asc",
+        "genus_asc",
+        "taxon_asc",
+        "community_taxon_asc",
+        "observed_taxon_asc",
+        "place_asc",
+        "updated_desc",
+    ):
         return candidate
     return "observed_desc"
 
@@ -759,6 +768,18 @@ def catalog_page(
     elif normalized_sort == "taxon_asc":
         base_query = base_query.order_by(
             models.CatalogObservation.taxon_name.asc().nullslast(),
+            models.CatalogObservation.observed_on_date.desc().nullslast(),
+            models.CatalogObservation.inat_observation_id.desc(),
+        )
+    elif normalized_sort == "community_taxon_asc":
+        base_query = base_query.order_by(
+            models.CatalogObservation.community_taxon_name.asc().nullslast(),
+            models.CatalogObservation.observed_on_date.desc().nullslast(),
+            models.CatalogObservation.inat_observation_id.desc(),
+        )
+    elif normalized_sort == "observed_taxon_asc":
+        base_query = base_query.order_by(
+            models.CatalogObservation.species_guess.asc().nullslast(),
             models.CatalogObservation.observed_on_date.desc().nullslast(),
             models.CatalogObservation.inat_observation_id.desc(),
         )

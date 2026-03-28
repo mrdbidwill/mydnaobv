@@ -30,8 +30,10 @@
             <select class="input" name="sort">
               <option value="observed_desc" {% if sort == "observed_desc" %}selected{% endif %}>Observed date (newest)</option>
               <option value="observed_asc" {% if sort == "observed_asc" %}selected{% endif %}>Observed date (oldest)</option>
-              <option value="genus_asc" {% if sort == "genus_asc" %}selected{% endif %}>Genus A to Z</option>
-              <option value="taxon_asc" {% if sort == "taxon_asc" %}selected{% endif %}>Taxon A to Z</option>
+              <option value="taxon_asc" {% if sort == "taxon_asc" %}selected{% endif %}>iNaturalist taxon A to Z</option>
+              <option value="community_taxon_asc" {% if sort == "community_taxon_asc" %}selected{% endif %}>iNaturalist community_taxon A to Z</option>
+              <option value="observed_taxon_asc" {% if sort == "observed_taxon_asc" %}selected{% endif %}>iNaturalist species_guess A to Z</option>
+              <option value="genus_asc" {% if sort == "genus_asc" %}selected{% endif %}>Genus key (fallback) A to Z</option>
               <option value="updated_desc" {% if sort == "updated_desc" %}selected{% endif %}>iNaturalist updated (newest)</option>
             </select>
           </label>
@@ -156,10 +158,15 @@
                   {% endif %}
                 </td>
                 <td>
-                  {{ row.taxon_name if row.taxon_name else (row.species_guess if row.species_guess else "Unknown") }}
+                  {% if row.taxon_name %}
+                    <strong>Taxon:</strong> {{ row.taxon_name }}
+                  {% else %}
+                    <strong>Taxon:</strong> Unknown
+                  {% endif %}
                   <div class="muted">
-                    {{ row.taxon_rank if row.taxon_rank else "" }}
-                    {% if row.community_taxon_name %}<br>Community: {{ row.community_taxon_name }}{% endif %}
+                    {% if row.taxon_rank %}rank: {{ row.taxon_rank }}{% endif %}
+                    <br><strong>species_guess:</strong> {{ row.species_guess if row.species_guess else "Unknown" }}
+                    <br><strong>community_taxon:</strong> {{ row.community_taxon_name if row.community_taxon_name else "Unknown" }}
                   </div>
                 </td>
                 <td>

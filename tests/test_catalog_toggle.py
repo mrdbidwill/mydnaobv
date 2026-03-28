@@ -20,6 +20,8 @@ def test_normalize_catalog_sort_accepts_known_values():
     assert normalize_catalog_sort("observed_asc") == "observed_asc"
     assert normalize_catalog_sort("genus_asc") == "genus_asc"
     assert normalize_catalog_sort("taxon_asc") == "taxon_asc"
+    assert normalize_catalog_sort("community_taxon_asc") == "community_taxon_asc"
+    assert normalize_catalog_sort("observed_taxon_asc") == "observed_taxon_asc"
     assert normalize_catalog_sort("place_asc") == "place_asc"
     assert normalize_catalog_sort("updated_desc") == "updated_desc"
 
