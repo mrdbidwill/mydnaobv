@@ -1,5 +1,6 @@
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+import re
 import shutil
 from typing import Optional
 from urllib.parse import parse_qs, quote, urlparse
@@ -47,6 +48,19 @@ PUBLIC_COUNTY_PAGE_SIZE = 24
 PUBLIC_REFRESH_INTERVAL_DAYS = max(1, settings.public_refresh_interval_days)
 DEFAULT_PROJECT_BUILD_IDS = "124358\n184305\n132913\n251751"
 CATALOG_PAGE_SIZE = max(10, min(settings.catalog_page_size, 200))
+GENUS_QUALIFIER_TOKENS = {
+    "cf",
+    "aff",
+    "nr",
+    "sp",
+    "spp",
+    "complex",
+    "group",
+    "sect",
+    "subsp",
+    "var",
+    "forma",
+}
 
 
 @app.get("/favicon.ico", include_in_schema=False)
@@ -102,6 +116,32 @@ def parse_optional_date(raw: str | None) -> tuple[Optional[date], Optional[str]]
         return date.fromisoformat(text), None
     except ValueError:
         return None, "Use YYYY-MM-DD date format."
+
+
+def _extract_genus_token(value: str | None) -> Optional[str]:
+    text = (value or "").strip()
+    if not text:
+        return None
+    for raw_token in text.split():
+        token = re.sub(r"[^A-Za-z-]", "", raw_token).strip("-").lower()
+        if not token:
+            continue
+        if token in GENUS_QUALIFIER_TOKENS:
+            continue
+        return token
+    return None
+
+
+def _distinct_genus_count(filtered_query, column) -> int:
+    values = (
+        filtered_query
+        .with_entities(column)
+        .filter(column.isnot(None))
+        .distinct()
+        .all()
+    )
+    genera = {_extract_genus_token(value) for (value,) in values}
+    return len([item for item in genera if item])
 
 
 def _preferred_county_file_artifact(artifacts: list[models.ExportArtifact]) -> models.ExportArtifact | None:
@@ -566,23 +606,23 @@ def catalog_page(
     to_date, to_error = parse_optional_date(date_to)
     date_error = from_error or to_error
 
-    base_query = db.query(models.CatalogObservation)
+    filtered_query = db.query(models.CatalogObservation)
     selected_source = None
     if source_id > 0:
         selected_source = db.query(models.CatalogSource).filter_by(id=source_id).first()
-        base_query = base_query.join(
+        filtered_query = filtered_query.join(
             models.CatalogObservationProject,
             models.CatalogObservationProject.observation_id == models.CatalogObservation.id,
         ).filter(models.CatalogObservationProject.source_id == source_id)
 
     cleaned_genus = (genus or "").strip().lower()
     if cleaned_genus:
-        base_query = base_query.filter(models.CatalogObservation.genus_key.like(f"{cleaned_genus}%"))
+        filtered_query = filtered_query.filter(models.CatalogObservation.genus_key.like(f"{cleaned_genus}%"))
 
     cleaned_query = (query or "").strip()
     if cleaned_query:
         needle = f"%{cleaned_query}%"
-        base_query = base_query.filter(
+        filtered_query = filtered_query.filter(
             or_(
                 models.CatalogObservation.taxon_name.ilike(needle),
                 models.CatalogObservation.species_guess.ilike(needle),
@@ -593,9 +633,44 @@ def catalog_page(
         )
 
     if from_date:
-        base_query = base_query.filter(models.CatalogObservation.observed_on_date >= from_date)
+        filtered_query = filtered_query.filter(models.CatalogObservation.observed_on_date >= from_date)
     if to_date:
-        base_query = base_query.filter(models.CatalogObservation.observed_on_date <= to_date)
+        filtered_query = filtered_query.filter(models.CatalogObservation.observed_on_date <= to_date)
+
+    total = filtered_query.count()
+    unique_taxa_count = (
+        filtered_query
+        .with_entities(models.CatalogObservation.taxon_name)
+        .filter(models.CatalogObservation.taxon_name.isnot(None))
+        .distinct()
+        .count()
+    )
+    unique_observers_count = (
+        filtered_query
+        .with_entities(models.CatalogObservation.user_login)
+        .filter(models.CatalogObservation.user_login.isnot(None))
+        .distinct()
+        .count()
+    )
+    unique_places_count = (
+        filtered_query
+        .with_entities(models.CatalogObservation.place_guess)
+        .filter(models.CatalogObservation.place_guess.isnot(None))
+        .distinct()
+        .count()
+    )
+    with_images_count = filtered_query.filter(models.CatalogObservation.photo_count > 0).count()
+    observed_span = filtered_query.with_entities(
+        func.min(models.CatalogObservation.observed_on_date),
+        func.max(models.CatalogObservation.observed_on_date),
+    ).one()
+    observed_date_min = observed_span[0]
+    observed_date_max = observed_span[1]
+    unique_taxon_genera_count = _distinct_genus_count(filtered_query, models.CatalogObservation.taxon_name)
+    unique_observed_genera_count = _distinct_genus_count(filtered_query, models.CatalogObservation.species_guess)
+    unique_community_genera_count = _distinct_genus_count(filtered_query, models.CatalogObservation.community_taxon_name)
+
+    base_query = filtered_query
 
     if normalized_sort == "observed_asc":
         base_query = base_query.order_by(
@@ -630,8 +705,6 @@ def catalog_page(
             models.CatalogObservation.observed_on_date.desc().nullslast(),
             models.CatalogObservation.inat_observation_id.desc(),
         )
-
-    total = base_query.count()
     pages = max(1, (total + CATALOG_PAGE_SIZE - 1) // CATALOG_PAGE_SIZE)
     current_page = min(page, pages)
     rows = (
@@ -681,6 +754,17 @@ def catalog_page(
             "sort": normalized_sort,
             "date_error": date_error,
             "memberships_by_obs": memberships_by_obs,
+            "summary": {
+                "unique_taxa_count": unique_taxa_count,
+                "unique_taxon_genera_count": unique_taxon_genera_count,
+                "unique_observed_genera_count": unique_observed_genera_count,
+                "unique_community_genera_count": unique_community_genera_count,
+                "unique_observers_count": unique_observers_count,
+                "unique_places_count": unique_places_count,
+                "with_images_count": with_images_count,
+                "observed_date_min": observed_date_min,
+                "observed_date_max": observed_date_max,
+            },
         },
         show_ads=True,
     )

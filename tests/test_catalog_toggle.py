@@ -1,7 +1,7 @@
 import pytest
 from fastapi import HTTPException
 
-from app.main import ensure_data_catalog_enabled, normalize_catalog_sort, settings
+from app.main import _extract_genus_token, ensure_data_catalog_enabled, normalize_catalog_sort, settings
 
 
 def test_normalize_catalog_sort_defaults_on_unknown():
@@ -29,3 +29,7 @@ def test_ensure_data_catalog_enabled_raises_when_disabled(monkeypatch):
         ensure_data_catalog_enabled()
     assert exc.value.status_code == 404
 
+
+def test_extract_genus_token_skips_qualifier_tokens():
+    assert _extract_genus_token("cf. Agaricus campestris") == "agaricus"
+    assert _extract_genus_token("sp. Trametes") == "trametes"
