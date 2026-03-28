@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="grid">
+    <div class="card">
+      <h2>Observation Data Catalog</h2>
+      <p class="muted">Text-first catalog synced from selected iNaturalist projects. Images are linked directly to iNaturalist.</p>
+      <a class="btn secondary" href="/">Back to downloads</a>
+    </div>
+
+    <div class="card">
+      <h3>Filters</h3>
+      {% if date_error %}
+        <p style="color: #b42318; margin-top: 10px;">{{ date_error }}</p>
+      {% endif %}
+      <form method="get" action="/catalog" class="grid">
+        <div class="row">
+          <label>
+            Project source
+            <select class="input" name="source_id">
+              <option value="0" {% if selected_source_id == 0 %}selected{% endif %}>All sources</option>
+              {% for source in sources %}
+                <option value="{{ source.id }}" {% if source.id == selected_source_id %}selected{% endif %}>
+                  {{ source.project_title if source.project_title else source.project_id }}
+                </option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>
+            Sort
+            <select class="input" name="sort">
+              <option value="observed_desc" {% if sort == "observed_desc" %}selected{% endif %}>Observed date (newest)</option>
+              <option value="observed_asc" {% if sort == "observed_asc" %}selected{% endif %}>Observed date (oldest)</option>
+              <option value="genus_asc" {% if sort == "genus_asc" %}selected{% endif %}>Genus A to Z</option>
+              <option value="taxon_asc" {% if sort == "taxon_asc" %}selected{% endif %}>Taxon A to Z</option>
+              <option value="place_asc" {% if sort == "place_asc" %}selected{% endif %}>Location A to Z</option>
+              <option value="updated_desc" {% if sort == "updated_desc" %}selected{% endif %}>iNaturalist updated (newest)</option>
+            </select>
+          </label>
+        </div>
+        <div class="row">
+          <label>
+            Genus starts with
+            <input class="input" type="text" name="genus" value="{{ genus }}" placeholder="e.g., agar" />
+          </label>
+          <label>
+            Search text (taxon, place, observer)
+            <input class="input" type="text" name="query" value="{{ query }}" placeholder="e.g., Trametes or Jefferson" />
+          </label>
+        </div>
+        <div class="row">
+          <label>
+            Date from
+            <input class="input" type="date" name="date_from" value="{{ date_from }}" />
+          </label>
+          <label>
+            Date to
+            <input class="input" type="date" name="date_to" value="{{ date_to }}" />
+          </label>
+        </div>
+        <input type="hidden" name="page" value="1" />
+        <button class="btn" type="submit">Apply filters</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h3>Catalog Results</h3>
+      <p class="muted">{{ total }} observations matched.</p>
+      {% if rows and rows|length > 0 %}
+        <table>
+          <thead>
+            <tr>
+              <th>Observation</th>
+              <th>Taxon</th>
+              <th>Observed</th>
+              <th>Location</th>
+              <th>Sources</th>
+              <th>Image</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+              <tr>
+                <td>
+                  #{{ row.inat_observation_id }}<br>
+                  {% if row.uri %}
+                    <a class="btn secondary" href="{{ row.uri }}" target="_blank" rel="noreferrer">Open observation</a>
+                  {% endif %}
+                </td>
+                <td>
+                  {{ row.taxon_name if row.taxon_name else (row.species_guess if row.species_guess else "Unknown") }}
+                  <div class="muted">
+                    {{ row.taxon_rank if row.taxon_rank else "" }}
+                    {% if row.community_taxon_name %}<br>Community: {{ row.community_taxon_name }}{% endif %}
+                  </div>
+                </td>
+                <td>
+                  {{ row.observed_on if row.observed_on else "Unknown" }}
+                  <div class="muted">{{ row.quality_grade if row.quality_grade else "" }}</div>
+                </td>
+                <td>
+                  {{ row.place_guess if row.place_guess else "Unknown" }}
+                  <div class="muted">{{ row.location if row.location else "" }}</div>
+                </td>
+                <td>
+                  {% set memberships = memberships_by_obs.get(row.id, []) %}
+                  {% if memberships and memberships|length > 0 %}
+                    {{ memberships | join(", ") }}
+                  {% else %}
+                    <span class="muted">None</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if row.primary_photo_url %}
+                    <a class="btn secondary" href="{{ row.primary_photo_url }}" target="_blank" rel="noreferrer">Open image</a>
+                    <div class="muted">{{ row.photo_count }} image(s)</div>
+                  {% else %}
+                    <span class="muted">No image URL</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+        <div style="margin-top: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          {% if page > 1 %}
+            <a class="btn secondary" href="/catalog?page={{ page - 1 }}&source_id={{ selected_source_id }}&genus={{ genus }}&query={{ query }}&date_from={{ date_from }}&date_to={{ date_to }}&sort={{ sort }}">Previous</a>
+          {% endif %}
+          {% if page < pages %}
+            <a class="btn secondary" href="/catalog?page={{ page + 1 }}&source_id={{ selected_source_id }}&genus={{ genus }}&query={{ query }}&date_from={{ date_from }}&date_to={{ date_to }}&sort={{ sort }}">Next</a>
+          {% endif %}
+          <span class="muted">Page {{ page }} of {{ pages }}</span>
+        </div>
+      {% else %}
+        <div class="empty">
+          <strong>No observations matched this filter.</strong>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

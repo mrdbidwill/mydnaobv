@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Optional
-from sqlalchemy import String, Integer, DateTime, ForeignKey, UniqueConstraint, Text, BigInteger, Boolean
+from sqlalchemy import String, Integer, DateTime, Date, Float, ForeignKey, UniqueConstraint, Text, BigInteger, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db import Base
 
@@ -170,3 +170,79 @@ class ExportArtifact(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
 
     job: Mapped[ExportJob] = relationship("ExportJob", back_populates="artifacts")
+
+
+class CatalogSource(Base):
+    __tablename__ = "catalog_sources"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    project_numeric_id: Mapped[Optional[int]] = mapped_column(Integer, index=True, nullable=True)
+    project_title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
+    last_sync_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_sync_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    observation_links: Mapped[list["CatalogObservationProject"]] = relationship(
+        "CatalogObservationProject",
+        back_populates="source",
+        uselist=True,
+    )
+
+
+class CatalogObservation(Base):
+    __tablename__ = "catalog_observations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    inat_observation_id: Mapped[int] = mapped_column(Integer, unique=True, index=True)
+    uri: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    taxon_id: Mapped[Optional[int]] = mapped_column(Integer, index=True, nullable=True)
+    taxon_name: Mapped[Optional[str]] = mapped_column(String(255), index=True, nullable=True)
+    taxon_rank: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    community_taxon_id: Mapped[Optional[int]] = mapped_column(Integer, index=True, nullable=True)
+    community_taxon_name: Mapped[Optional[str]] = mapped_column(String(255), index=True, nullable=True)
+    community_taxon_rank: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    species_guess: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    user_login: Mapped[Optional[str]] = mapped_column(String(255), index=True, nullable=True)
+    quality_grade: Mapped[Optional[str]] = mapped_column(String(64), index=True, nullable=True)
+    observed_on: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    observed_on_date: Mapped[Optional[date]] = mapped_column(Date, index=True, nullable=True)
+    observed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    inat_created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, index=True, nullable=True)
+    inat_updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, index=True, nullable=True)
+    place_guess: Mapped[Optional[str]] = mapped_column(String(255), index=True, nullable=True)
+    location: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    latitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    geoprivacy: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    genus_key: Mapped[Optional[str]] = mapped_column(String(128), index=True, nullable=True)
+    primary_photo_url: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    primary_photo_license_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    primary_photo_attribution: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    photo_count: Mapped[int] = mapped_column(Integer, default=0)
+    raw_payload: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
+
+    source_links: Mapped[list["CatalogObservationProject"]] = relationship(
+        "CatalogObservationProject",
+        back_populates="observation",
+        uselist=True,
+    )
+
+
+class CatalogObservationProject(Base):
+    __tablename__ = "catalog_observation_projects"
+    __table_args__ = (
+        UniqueConstraint("source_id", "observation_id", name="uq_catalog_source_observation"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source_id: Mapped[int] = mapped_column(ForeignKey("catalog_sources.id"), index=True)
+    observation_id: Mapped[int] = mapped_column(ForeignKey("catalog_observations.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
+
+    source: Mapped[CatalogSource] = relationship("CatalogSource", back_populates="observation_links")
+    observation: Mapped[CatalogObservation] = relationship("CatalogObservation", back_populates="source_links")

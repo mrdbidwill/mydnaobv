@@ -5,6 +5,9 @@
       <h2>Admin County Build Control</h2>
       <p class="muted">All heavy operations are admin-controlled. Sync and export work remain throttled by worker limits to protect VPS resources and iNaturalist API/media capacity.</p>
       <p class="muted">Current genus sort source: <strong>{{ "iNaturalist current taxon (taxon)" if export_sort_taxon_source == "taxon" else "observer-side taxon (observation_taxon)" }}</strong>. Set `EXPORT_SORT_TAXON_SOURCE` to switch.</p>
+      {% if data_catalog_enabled %}
+        <a class="btn secondary" href="/admin/catalog" style="margin-top: 6px;">Open Data Catalog Admin</a>
+      {% endif %}
       {% if notice %}
         <p style="color: #1f6f43; margin-top: 10px;">{{ notice }}</p>
       {% endif %}

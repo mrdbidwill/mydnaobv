@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="grid">
+    <div class="card">
+      <h2>Admin Data Catalog</h2>
+      <p class="muted">Manage iNaturalist project sources for text-only catalog sync. Existing PDF/export pipelines are unchanged.</p>
+      <a class="btn secondary" href="/admin">Back to admin</a>
+      {% if notice %}
+        <p style="color: #1f6f43; margin-top: 10px;">{{ notice }}</p>
+      {% endif %}
+      {% if error %}
+        <p style="color: #b42318; margin-top: 10px;">{{ error }}</p>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <h3>Add Source</h3>
+      <form method="post" action="/admin/catalog/sources" class="grid">
+        <label>
+          iNaturalist project ID or slug
+          <input class="input" type="text" name="project_id_or_slug" placeholder="e.g., 251751 or alabama-first-provisionals" required />
+        </label>
+        <button class="btn" type="submit">Add source</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h3>Catalog Sources</h3>
+      <p class="muted">Sync now pulls text metadata only and stores raw iNaturalist payload for future field expansion.</p>
+      <form method="post" action="/admin/catalog/sources/sync-all" style="margin-bottom: 10px;">
+        <button class="btn secondary" type="submit">Sync all active sources</button>
+      </form>
+      {% if sources and sources|length > 0 %}
+        <table>
+          <thead>
+            <tr>
+              <th>Project</th>
+              <th>Status</th>
+              <th>Last Sync</th>
+              <th>Observations</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for source in sources %}
+              <tr>
+                <td>
+                  {{ source.project_title if source.project_title else source.project_id }}
+                  <div class="muted">{{ source.project_id }}</div>
+                </td>
+                <td>{{ "active" if source.is_active else "inactive" }}</td>
+                <td>
+                  {{ source.last_sync_at if source.last_sync_at else "Never" }}
+                  {% if source.last_sync_message %}
+                    <div class="muted">{{ source.last_sync_message }}</div>
+                  {% endif %}
+                </td>
+                <td>{{ observation_count_by_source.get(source.id, 0) }}</td>
+                <td>
+                  <form method="post" action="/admin/catalog/sources/{{ source.id }}/sync" style="display:inline;">
+                    <button class="btn secondary" type="submit">Sync now</button>
+                  </form>
+                  <form method="post" action="/admin/catalog/sources/{{ source.id }}/delete" style="display:inline; margin-left: 6px;">
+                    <button class="btn secondary" type="submit">Delete</button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <div class="empty">
+          <strong>No catalog sources configured.</strong>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

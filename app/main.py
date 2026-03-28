@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 import shutil
 from typing import Optional
@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 import secrets
 
@@ -30,6 +30,7 @@ from app.services.inat import estimate_total_observations
 from app.services.inat import resolve_project_filter
 from app.services.list_sync import sync_list_observations
 from app.services.us_counties import STATE_OPTIONS, fetch_counties_for_state, normalize_state_code
+from app.services.catalog import normalize_project_id, sync_catalog_source
 
 
 templates = Jinja2Templates(directory="app/templates")
@@ -45,6 +46,7 @@ ADMIN_PAGE_SIZE = 25
 PUBLIC_COUNTY_PAGE_SIZE = 24
 PUBLIC_REFRESH_INTERVAL_DAYS = max(1, settings.public_refresh_interval_days)
 DEFAULT_PROJECT_BUILD_IDS = "124358\n184305\n132913\n251751"
+CATALOG_PAGE_SIZE = max(10, min(settings.catalog_page_size, 200))
 
 
 @app.get("/favicon.ico", include_in_schema=False)
@@ -78,6 +80,28 @@ def normalize_index_sort(sort: str | None) -> str:
     if candidate in ("title_asc", "created_desc"):
         return candidate
     return "title_asc"
+
+
+def normalize_catalog_sort(sort: str | None) -> str:
+    candidate = (sort or "").strip().lower()
+    if candidate in ("observed_desc", "observed_asc", "genus_asc", "taxon_asc", "place_asc", "updated_desc"):
+        return candidate
+    return "observed_desc"
+
+
+def ensure_data_catalog_enabled() -> None:
+    if not settings.enable_data_catalog:
+        raise HTTPException(status_code=404, detail="Not found")
+
+
+def parse_optional_date(raw: str | None) -> tuple[Optional[date], Optional[str]]:
+    text = (raw or "").strip()
+    if not text:
+        return None, None
+    try:
+        return date.fromisoformat(text), None
+    except ValueError:
+        return None, "Use YYYY-MM-DD date format."
 
 
 def _preferred_county_file_artifact(artifacts: list[models.ExportArtifact]) -> models.ExportArtifact | None:
@@ -511,6 +535,7 @@ def index(
         "index.html",
         {
             "app_name": settings.app_name,
+            "data_catalog_enabled": settings.enable_data_catalog,
             "rows": rows,
             "project_rows": project_rows,
             "page": current_page,
@@ -519,6 +544,332 @@ def index(
             "state_code": normalized_state,
         },
         show_ads=True,
+    )
+
+
+@app.get("/catalog")
+def catalog_page(
+    request: Request,
+    page: int = Query(default=1, ge=1),
+    source_id: int = Query(default=0, ge=0),
+    genus: str = Query(default=""),
+    query: str = Query(default=""),
+    date_from: str = Query(default=""),
+    date_to: str = Query(default=""),
+    sort: str = Query(default="observed_desc"),
+    db: Session = Depends(get_db),
+):
+    ensure_data_catalog_enabled()
+
+    normalized_sort = normalize_catalog_sort(sort)
+    from_date, from_error = parse_optional_date(date_from)
+    to_date, to_error = parse_optional_date(date_to)
+    date_error = from_error or to_error
+
+    base_query = db.query(models.CatalogObservation)
+    selected_source = None
+    if source_id > 0:
+        selected_source = db.query(models.CatalogSource).filter_by(id=source_id).first()
+        base_query = base_query.join(
+            models.CatalogObservationProject,
+            models.CatalogObservationProject.observation_id == models.CatalogObservation.id,
+        ).filter(models.CatalogObservationProject.source_id == source_id)
+
+    cleaned_genus = (genus or "").strip().lower()
+    if cleaned_genus:
+        base_query = base_query.filter(models.CatalogObservation.genus_key.like(f"{cleaned_genus}%"))
+
+    cleaned_query = (query or "").strip()
+    if cleaned_query:
+        needle = f"%{cleaned_query}%"
+        base_query = base_query.filter(
+            or_(
+                models.CatalogObservation.taxon_name.ilike(needle),
+                models.CatalogObservation.species_guess.ilike(needle),
+                models.CatalogObservation.community_taxon_name.ilike(needle),
+                models.CatalogObservation.place_guess.ilike(needle),
+                models.CatalogObservation.user_login.ilike(needle),
+            )
+        )
+
+    if from_date:
+        base_query = base_query.filter(models.CatalogObservation.observed_on_date >= from_date)
+    if to_date:
+        base_query = base_query.filter(models.CatalogObservation.observed_on_date <= to_date)
+
+    if normalized_sort == "observed_asc":
+        base_query = base_query.order_by(
+            models.CatalogObservation.observed_on_date.asc().nullslast(),
+            models.CatalogObservation.inat_observation_id.asc(),
+        )
+    elif normalized_sort == "genus_asc":
+        base_query = base_query.order_by(
+            models.CatalogObservation.genus_key.asc().nullslast(),
+            models.CatalogObservation.observed_on_date.desc().nullslast(),
+            models.CatalogObservation.inat_observation_id.desc(),
+        )
+    elif normalized_sort == "taxon_asc":
+        base_query = base_query.order_by(
+            models.CatalogObservation.taxon_name.asc().nullslast(),
+            models.CatalogObservation.observed_on_date.desc().nullslast(),
+            models.CatalogObservation.inat_observation_id.desc(),
+        )
+    elif normalized_sort == "place_asc":
+        base_query = base_query.order_by(
+            models.CatalogObservation.place_guess.asc().nullslast(),
+            models.CatalogObservation.observed_on_date.desc().nullslast(),
+            models.CatalogObservation.inat_observation_id.desc(),
+        )
+    elif normalized_sort == "updated_desc":
+        base_query = base_query.order_by(
+            models.CatalogObservation.inat_updated_at.desc().nullslast(),
+            models.CatalogObservation.inat_observation_id.desc(),
+        )
+    else:
+        base_query = base_query.order_by(
+            models.CatalogObservation.observed_on_date.desc().nullslast(),
+            models.CatalogObservation.inat_observation_id.desc(),
+        )
+
+    total = base_query.count()
+    pages = max(1, (total + CATALOG_PAGE_SIZE - 1) // CATALOG_PAGE_SIZE)
+    current_page = min(page, pages)
+    rows = (
+        base_query
+        .offset((current_page - 1) * CATALOG_PAGE_SIZE)
+        .limit(CATALOG_PAGE_SIZE)
+        .all()
+    )
+
+    sources = (
+        db.query(models.CatalogSource)
+        .order_by(models.CatalogSource.project_title.asc().nullslast(), models.CatalogSource.project_id.asc())
+        .all()
+    )
+    by_source_id = {source.id: source for source in sources}
+
+    memberships_by_obs: dict[int, list[str]] = {}
+    if rows:
+        obs_ids = [row.id for row in rows]
+        memberships = (
+            db.query(models.CatalogObservationProject)
+            .filter(models.CatalogObservationProject.observation_id.in_(obs_ids))
+            .all()
+        )
+        for membership in memberships:
+            source_row = by_source_id.get(membership.source_id)
+            if not source_row:
+                continue
+            label = (source_row.project_title or source_row.project_id or "").strip() or source_row.project_id
+            memberships_by_obs.setdefault(membership.observation_id, []).append(label)
+
+    return template_response(
+        request,
+        "catalog.html",
+        {
+            "rows": rows,
+            "page": current_page,
+            "pages": pages,
+            "total": total,
+            "sources": sources,
+            "selected_source_id": source_id,
+            "selected_source": selected_source,
+            "genus": genus,
+            "query": query,
+            "date_from": date_from,
+            "date_to": date_to,
+            "sort": normalized_sort,
+            "date_error": date_error,
+            "memberships_by_obs": memberships_by_obs,
+        },
+        show_ads=True,
+    )
+
+
+@app.get("/admin/catalog")
+def admin_catalog_page(
+    request: Request,
+    notice: Optional[str] = Query(default=None),
+    error: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    _: bool = Depends(require_admin),
+):
+    ensure_data_catalog_enabled()
+
+    sources = (
+        db.query(models.CatalogSource)
+        .order_by(models.CatalogSource.project_title.asc().nullslast(), models.CatalogSource.project_id.asc())
+        .all()
+    )
+    counts = dict(
+        db.query(
+            models.CatalogObservationProject.source_id,
+            func.count(models.CatalogObservationProject.id),
+        )
+        .group_by(models.CatalogObservationProject.source_id)
+        .all()
+    )
+    return template_response(
+        request,
+        "admin_catalog.html",
+        {
+            "notice": notice,
+            "error": error,
+            "sources": sources,
+            "observation_count_by_source": counts,
+        },
+    )
+
+
+@app.post("/admin/catalog/sources")
+def admin_catalog_add_source(
+    project_id_or_slug: str = Form(...),
+    db: Session = Depends(get_db),
+    _: bool = Depends(require_admin),
+):
+    ensure_data_catalog_enabled()
+
+    token = (project_id_or_slug or "").strip()
+    if not token:
+        return RedirectResponse(
+            url="/admin/catalog?error=Provide+an+iNaturalist+project+ID+or+slug.",
+            status_code=303,
+        )
+
+    try:
+        canonical, numeric_id, title = normalize_project_id(token)
+    except Exception as exc:
+        return RedirectResponse(
+            url=f"/admin/catalog?error={quote(str(exc))}",
+            status_code=303,
+        )
+
+    existing = db.query(models.CatalogSource).filter_by(project_id=canonical).first()
+    if existing:
+        existing.project_numeric_id = numeric_id
+        existing.project_title = title or existing.project_title
+        existing.is_active = True
+        existing.updated_at = utc_now_naive()
+        db.commit()
+        return RedirectResponse(
+            url=f"/admin/catalog?notice={quote(f'Source {canonical} already existed; reactivated.')}",
+            status_code=303,
+        )
+
+    db.add(
+        models.CatalogSource(
+            project_id=canonical,
+            project_numeric_id=numeric_id,
+            project_title=title,
+            is_active=True,
+        )
+    )
+    db.commit()
+    return RedirectResponse(
+        url=f"/admin/catalog?notice={quote(f'Added source {canonical}.')}",
+        status_code=303,
+    )
+
+
+@app.post("/admin/catalog/sources/{source_id}/sync")
+def admin_catalog_sync_source(
+    source_id: int,
+    db: Session = Depends(get_db),
+    _: bool = Depends(require_admin),
+):
+    ensure_data_catalog_enabled()
+
+    source = db.query(models.CatalogSource).filter_by(id=source_id).first()
+    if not source:
+        return RedirectResponse(url="/admin/catalog?error=Catalog+source+not+found.", status_code=303)
+    if not source.is_active:
+        return RedirectResponse(url="/admin/catalog?error=Catalog+source+is+inactive.", status_code=303)
+
+    try:
+        summary = sync_catalog_source(db, source, max_pages=settings.catalog_sync_max_pages)
+    except Exception as exc:
+        db.rollback()
+        return RedirectResponse(
+            url=f"/admin/catalog?error={quote(f'Sync failed for {source.project_id}: {exc}')}",
+            status_code=303,
+        )
+
+    message = (
+        f"Synced {source.project_id}: scanned {summary['scanned']}, inserted {summary['inserted']}, "
+        f"updated {summary['updated']}, linked {summary['linked']}, removed links {summary['removed_links']}."
+    )
+    return RedirectResponse(url=f"/admin/catalog?notice={quote(message)}", status_code=303)
+
+
+@app.post("/admin/catalog/sources/sync-all")
+def admin_catalog_sync_all_sources(
+    db: Session = Depends(get_db),
+    _: bool = Depends(require_admin),
+):
+    ensure_data_catalog_enabled()
+
+    sources = (
+        db.query(models.CatalogSource)
+        .filter(models.CatalogSource.is_active.is_(True))
+        .order_by(models.CatalogSource.id.asc())
+        .all()
+    )
+    if not sources:
+        return RedirectResponse(url="/admin/catalog?error=No+active+catalog+sources+found.", status_code=303)
+
+    synced = 0
+    failed = 0
+    for source in sources:
+        try:
+            sync_catalog_source(db, source, max_pages=settings.catalog_sync_max_pages)
+            synced += 1
+        except Exception:
+            db.rollback()
+            failed += 1
+            continue
+
+    return RedirectResponse(
+        url=f"/admin/catalog?notice={quote(f'Sync-all finished: synced {synced}, failed {failed}.')}",
+        status_code=303,
+    )
+
+
+@app.post("/admin/catalog/sources/{source_id}/delete")
+def admin_catalog_delete_source(
+    source_id: int,
+    db: Session = Depends(get_db),
+    _: bool = Depends(require_admin),
+):
+    ensure_data_catalog_enabled()
+
+    source = db.query(models.CatalogSource).filter_by(id=source_id).first()
+    if not source:
+        return RedirectResponse(url="/admin/catalog?error=Catalog+source+not+found.", status_code=303)
+
+    source_label = source.project_id
+    db.query(models.CatalogObservationProject).filter_by(source_id=source.id).delete(synchronize_session=False)
+    db.delete(source)
+
+    orphan_ids = (
+        db.query(models.CatalogObservation.id)
+        .outerjoin(
+            models.CatalogObservationProject,
+            models.CatalogObservationProject.observation_id == models.CatalogObservation.id,
+        )
+        .filter(models.CatalogObservationProject.id.is_(None))
+        .all()
+    )
+    removed_orphans = 0
+    if orphan_ids:
+        removed_orphans = len(orphan_ids)
+        db.query(models.CatalogObservation).filter(
+            models.CatalogObservation.id.in_([row[0] for row in orphan_ids])
+        ).delete(synchronize_session=False)
+
+    db.commit()
+    return RedirectResponse(
+        url=f"/admin/catalog?notice={quote(f'Deleted source {source_label}; removed {removed_orphans} orphan observations.')}",
+        status_code=303,
     )
 
 
@@ -862,6 +1213,7 @@ def admin_page(
         request,
         "admin.html",
         {
+            "data_catalog_enabled": settings.enable_data_catalog,
             "lists": lists,
             "page": current_page,
             "pages": pages,

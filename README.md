@@ -21,6 +21,25 @@ Project continuity docs:
 - Export queue/worker remains throttled to protect VPS and iNaturalist limits.
 - Legacy `/exports` now redirects to `/admin`.
 
+## Data-only catalog feature
+
+This is a separate feature from the county/project PDF pipeline.
+
+- Public catalog: `/catalog`
+  - Text-first observation list with filters and sorting (genus/date/location/text).
+  - Images are linked to iNaturalist URLs (not downloaded/stored by this feature).
+- Admin catalog controls: `/admin/catalog`
+  - Add project source by iNaturalist project ID/slug.
+  - Sync one source or all active sources.
+  - Delete source and auto-clean orphaned deduplicated observations.
+- Storage model:
+  - `catalog_observations`: one row per iNaturalist observation ID (deduplicated globally).
+  - `catalog_sources`: tracked project sources.
+  - `catalog_observation_projects`: many-to-many source membership links.
+  - `raw_payload` keeps full iNaturalist JSON so fields can be promoted later without data loss.
+- Feature flag:
+  - `ENABLE_DATA_CATALOG=true|false` controls `/catalog` and `/admin/catalog*`.
+
 ## Quick start
 
 Prerequisites (local development):
