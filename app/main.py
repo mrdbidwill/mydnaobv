@@ -1,4 +1,6 @@
+from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
+from itertools import combinations
 from pathlib import Path
 import re
 import shutil
@@ -142,6 +144,77 @@ def _distinct_genus_count(filtered_query, column) -> int:
     )
     genera = {_extract_genus_token(value) for (value,) in values}
     return len([item for item in genera if item])
+
+
+def _source_display_label(source: models.CatalogSource) -> str:
+    label = (source.project_title or source.project_id or "").strip()
+    if label:
+        return label
+    return f"Source {source.id}"
+
+
+def _build_project_overlap_summary(
+    links: list[tuple[int, int]],
+    source_label_by_id: dict[int, str],
+) -> dict[str, object]:
+    source_ids_by_obs: dict[int, set[int]] = defaultdict(set)
+    for observation_id, source_id in links:
+        source_ids_by_obs[observation_id].add(source_id)
+
+    per_source_duplicate_counts: dict[int, int] = defaultdict(int)
+    pair_counts: dict[tuple[int, int], int] = defaultdict(int)
+    exact_combo_counts: dict[tuple[int, ...], int] = defaultdict(int)
+
+    total_multi_project_observations = 0
+    for source_ids in source_ids_by_obs.values():
+        if len(source_ids) < 2:
+            continue
+        total_multi_project_observations += 1
+        combo_key = tuple(sorted(source_ids))
+        exact_combo_counts[combo_key] += 1
+        for source_id in combo_key:
+            per_source_duplicate_counts[source_id] += 1
+        for left, right in combinations(combo_key, 2):
+            pair_counts[(left, right)] += 1
+
+    per_source_rows = [
+        {
+            "source_id": source_id,
+            "project_label": source_label_by_id.get(source_id, f"Source {source_id}"),
+            "duplicate_count": count,
+        }
+        for source_id, count in per_source_duplicate_counts.items()
+    ]
+    per_source_rows.sort(key=lambda row: (-row["duplicate_count"], row["project_label"].lower()))
+
+    pair_rows = [
+        {
+            "source_ids": pair,
+            "pair_label": " + ".join(source_label_by_id.get(source_id, f"Source {source_id}") for source_id in pair),
+            "count": count,
+        }
+        for pair, count in pair_counts.items()
+    ]
+    pair_rows.sort(key=lambda row: (-row["count"], row["pair_label"].lower()))
+
+    exact_rows = [
+        {
+            "source_ids": combo,
+            "combo_label": " + ".join(
+                source_label_by_id.get(source_id, f"Source {source_id}") for source_id in combo
+            ),
+            "count": count,
+        }
+        for combo, count in exact_combo_counts.items()
+    ]
+    exact_rows.sort(key=lambda row: (len(row["source_ids"]), -row["count"], row["combo_label"].lower()))
+
+    return {
+        "total_multi_project_observations": total_multi_project_observations,
+        "per_source_rows": per_source_rows,
+        "pair_rows": pair_rows,
+        "exact_rows": exact_rows,
+    }
 
 
 def _preferred_county_file_artifact(artifacts: list[models.ExportArtifact]) -> models.ExportArtifact | None:
@@ -720,6 +793,16 @@ def catalog_page(
         .all()
     )
     by_source_id = {source.id: source for source in sources}
+    source_label_by_id = {source.id: _source_display_label(source) for source in sources}
+
+    all_links = (
+        db.query(
+            models.CatalogObservationProject.observation_id,
+            models.CatalogObservationProject.source_id,
+        )
+        .all()
+    )
+    overlap_summary = _build_project_overlap_summary(all_links, source_label_by_id)
 
     memberships_by_obs: dict[int, list[str]] = {}
     if rows:
@@ -733,7 +816,7 @@ def catalog_page(
             source_row = by_source_id.get(membership.source_id)
             if not source_row:
                 continue
-            label = (source_row.project_title or source_row.project_id or "").strip() or source_row.project_id
+            label = source_label_by_id.get(source_row.id, _source_display_label(source_row))
             memberships_by_obs.setdefault(membership.observation_id, []).append(label)
 
     return template_response(
@@ -753,6 +836,7 @@ def catalog_page(
             "date_to": date_to,
             "sort": normalized_sort,
             "date_error": date_error,
+            "overlap_summary": overlap_summary,
             "memberships_by_obs": memberships_by_obs,
             "summary": {
                 "unique_taxa_count": unique_taxa_count,
