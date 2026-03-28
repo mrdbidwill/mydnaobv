@@ -700,10 +700,10 @@ def catalog_page(
     date_from: str = Query(default=""),
     date_to: str = Query(default=""),
     sort: str = Query(default="observed_desc"),
-    dna_only: bool = Query(default=False),
     db: Session = Depends(get_db),
 ):
     ensure_data_catalog_enabled()
+    dna_only = True
 
     normalized_sort = normalize_catalog_sort(sort)
     from_date, from_error = parse_optional_date(date_from)
@@ -899,10 +899,10 @@ def catalog_genera_count(
     query: str = Query(default=""),
     date_from: str = Query(default=""),
     date_to: str = Query(default=""),
-    dna_only: bool = Query(default=False),
     db: Session = Depends(get_db),
 ):
     ensure_data_catalog_enabled()
+    dna_only = True
 
     from_date, from_error = parse_optional_date(date_from)
     to_date, to_error = parse_optional_date(date_to)
