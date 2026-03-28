@@ -1,7 +1,7 @@
 import pytest
 from fastapi import HTTPException
 
-from app.main import _catalog_genus_label, _payload_has_dna_its, ensure_data_catalog_enabled, normalize_catalog_sort, settings
+from app.main import _alpha_initial, _catalog_genus_label, _payload_has_dna_its, ensure_data_catalog_enabled, normalize_catalog_sort, settings
 
 
 def test_normalize_catalog_sort_defaults_on_unknown():
@@ -36,6 +36,11 @@ def test_catalog_genus_label_prefers_taxon_and_falls_back():
     assert _catalog_genus_label("Agaricus campestris", None, None, None) == "Agaricus"
     assert _catalog_genus_label(None, "cf. Trametes versicolor", None, None) == "Trametes"
     assert _catalog_genus_label(None, None, None, "boletus") == "boletus"
+
+
+def test_alpha_initial_handles_letters_and_non_letters():
+    assert _alpha_initial("Agaricus") == "A"
+    assert _alpha_initial(" 9-lives ") == "#"
 
 
 def test_payload_has_dna_its_true_when_field_id_2330_has_value():

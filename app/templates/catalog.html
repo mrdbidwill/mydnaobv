@@ -74,6 +74,33 @@
       <p class="muted">Duplicates have been removed by iNaturalist <code>observation.id</code>.</p>
 
       {% if rows and rows|length > 0 %}
+        {% if alpha_page_links and alpha_page_links|length > 0 %}
+          <div style="margin-top: 8px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+            <span class="muted">Alphabetical page links:</span>
+            {% for item in alpha_page_links %}
+              {% if item.page %}
+                {% if item.is_current %}
+                  <strong>{{ item.letter }}</strong>
+                {% else %}
+                  <a class="btn secondary" style="padding: 6px 10px;" href="/catalog?page={{ item.page }}&source_id={{ selected_source_id }}&genus={{ genus }}&query={{ query }}&date_from={{ date_from }}&date_to={{ date_to }}&sort={{ sort }}">{{ item.letter }}</a>
+                {% endif %}
+              {% else %}
+                <span class="muted">{{ item.letter }}</span>
+              {% endif %}
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        <div style="margin-top: 12px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          {% if page > 1 %}
+            <a class="btn secondary" href="/catalog?page={{ page - 1 }}&source_id={{ selected_source_id }}&genus={{ genus }}&query={{ query }}&date_from={{ date_from }}&date_to={{ date_to }}&sort={{ sort }}">Previous</a>
+          {% endif %}
+          {% if page < pages %}
+            <a class="btn secondary" href="/catalog?page={{ page + 1 }}&source_id={{ selected_source_id }}&genus={{ genus }}&query={{ query }}&date_from={{ date_from }}&date_to={{ date_to }}&sort={{ sort }}">Next</a>
+          {% endif %}
+          <span class="muted">Page {{ page }} of {{ pages }}</span>
+        </div>
+
         <table>
           <thead>
             <tr>
