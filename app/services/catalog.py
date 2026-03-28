@@ -249,6 +249,8 @@ def sync_catalog_source(
                         )
                     )
                     linked += 1
+                # Persist link rows before any cleanup query/delete runs.
+                db.flush()
 
             total = data.get("total_results")
             if isinstance(total, int):
@@ -277,6 +279,9 @@ def sync_catalog_source(
         f"Synced {scanned} observations; inserted {inserted}, updated {updated}, "
         f"linked {linked}, removed links {removed_links}."
     )
+
+    # Ensure pending observation/link changes are in DB before orphan detection.
+    db.flush()
 
     # Remove orphaned observations with no source links.
     orphan_ids = (

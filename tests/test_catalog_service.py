@@ -1,4 +1,10 @@
 from app.services.catalog import flatten_observation_payload
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from app import models
+from app.db import Base
+from app.services import catalog as catalog_service
 
 
 def test_flatten_observation_payload_extracts_key_fields():
@@ -46,3 +52,76 @@ def test_flatten_observation_payload_fallbacks_to_species_guess_for_genus():
     out = flatten_observation_payload(obs)
     assert out is not None
     assert out["genus_key"] == "agaricus"
+
+
+def test_sync_catalog_source_persists_links_before_orphan_cleanup(monkeypatch):
+    class _FakeResponse:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self._payload
+
+    class _FakeClient:
+        def __init__(self, *args, **kwargs):
+            self._calls = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def get(self, url, params=None):
+            self._calls += 1
+            page = int((params or {}).get("page", 1))
+            if page == 1:
+                return _FakeResponse(
+                    {
+                        "total_results": 2,
+                        "results": [
+                            {
+                                "id": 1001,
+                                "uri": "https://www.inaturalist.org/observations/1001",
+                                "taxon": {"id": 1, "name": "Agaricus campestris", "rank": "species"},
+                                "species_guess": "Agaricus campestris",
+                                "photos": [],
+                            },
+                            {
+                                "id": 1002,
+                                "uri": "https://www.inaturalist.org/observations/1002",
+                                "taxon": {"id": 2, "name": "Boletus edulis", "rank": "species"},
+                                "species_guess": "Boletus edulis",
+                                "photos": [],
+                            },
+                        ],
+                    }
+                )
+            return _FakeResponse({"total_results": 2, "results": []})
+
+    monkeypatch.setattr(catalog_service.httpx, "Client", _FakeClient)
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(engine)
+
+    db = TestingSession()
+    try:
+        source = models.CatalogSource(project_id="test-project", is_active=True)
+        db.add(source)
+        db.commit()
+        db.refresh(source)
+
+        summary = catalog_service.sync_catalog_source(db, source, max_pages=2)
+        assert summary["inserted"] == 2
+        assert summary["linked"] == 2
+
+        link_count = db.query(models.CatalogObservationProject).filter_by(source_id=source.id).count()
+        obs_count = db.query(models.CatalogObservation).count()
+        assert link_count == 2
+        assert obs_count == 2
+    finally:
+        db.close()
