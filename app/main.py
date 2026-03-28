@@ -191,6 +191,20 @@ def _payload_has_dna_its(raw_payload: str | None) -> bool:
     return False
 
 
+def _catalog_alpha_value(row: models.CatalogObservation, normalized_sort: str) -> str | None:
+    if normalized_sort == "taxon_asc":
+        return row.taxon_name
+    if normalized_sort == "community_taxon_asc":
+        return row.community_taxon_name
+    if normalized_sort == "observed_taxon_asc":
+        return row.species_guess
+    if normalized_sort == "genus_asc":
+        return row.genus_key
+    if normalized_sort == "place_asc":
+        return row.place_guess
+    return None
+
+
 def _build_catalog_filtered_query(
     db: Session,
     source_id: int,
@@ -686,6 +700,7 @@ def catalog_page(
     date_from: str = Query(default=""),
     date_to: str = Query(default=""),
     sort: str = Query(default="observed_desc"),
+    dna_only: bool = Query(default=False),
     db: Session = Depends(get_db),
 ):
     ensure_data_catalog_enabled()
@@ -703,8 +718,6 @@ def catalog_page(
         from_date,
         to_date,
     )
-
-    total = filtered_query.count()
 
     base_query = filtered_query
 
@@ -755,48 +768,82 @@ def catalog_page(
         )
 
     alpha_page_links: list[dict[str, object]] = []
-    alpha_column = None
-    if normalized_sort == "taxon_asc":
-        alpha_column = models.CatalogObservation.taxon_name
-    elif normalized_sort == "community_taxon_asc":
-        alpha_column = models.CatalogObservation.community_taxon_name
-    elif normalized_sort == "observed_taxon_asc":
-        alpha_column = models.CatalogObservation.species_guess
-    elif normalized_sort == "genus_asc":
-        alpha_column = models.CatalogObservation.genus_key
-    elif normalized_sort == "place_asc":
-        alpha_column = models.CatalogObservation.place_guess
+    if dna_only:
+        ordered_rows = base_query.all()
+        filtered_rows = [row for row in ordered_rows if _payload_has_dna_its(row.raw_payload)]
+        total = len(filtered_rows)
+        pages = max(1, (total + CATALOG_PAGE_SIZE - 1) // CATALOG_PAGE_SIZE)
+        current_page = min(page, pages)
+        start = (current_page - 1) * CATALOG_PAGE_SIZE
+        rows = filtered_rows[start : start + CATALOG_PAGE_SIZE]
 
-    if alpha_column is not None:
-        ordered_values = base_query.with_entities(alpha_column).all()
-        letter_to_page: dict[str, int] = {}
-        for idx, (value,) in enumerate(ordered_values, start=1):
-            letter = _alpha_initial(value)
-            if letter not in letter_to_page:
-                letter_to_page[letter] = ((idx - 1) // CATALOG_PAGE_SIZE) + 1
+        alpha_enabled = normalized_sort in {
+            "taxon_asc",
+            "community_taxon_asc",
+            "observed_taxon_asc",
+            "genus_asc",
+            "place_asc",
+        }
+        if alpha_enabled:
+            letter_to_page: dict[str, int] = {}
+            for idx, row in enumerate(filtered_rows, start=1):
+                letter = _alpha_initial(_catalog_alpha_value(row, normalized_sort))
+                if letter not in letter_to_page:
+                    letter_to_page[letter] = ((idx - 1) // CATALOG_PAGE_SIZE) + 1
 
-        for letter in list("ABCDEFGHIJKLMNOPQRSTUVWXYZ") + ["#"]:
-            target_page = letter_to_page.get(letter)
-            alpha_page_links.append(
-                {
-                    "letter": letter,
-                    "page": target_page,
-                    "is_current": target_page is not None and int(target_page) == int(page),
-                }
-            )
+            for letter in list("ABCDEFGHIJKLMNOPQRSTUVWXYZ") + ["#"]:
+                target_page = letter_to_page.get(letter)
+                alpha_page_links.append(
+                    {
+                        "letter": letter,
+                        "page": target_page,
+                        "is_current": target_page is not None and int(target_page) == int(current_page),
+                    }
+                )
+    else:
+        total = filtered_query.count()
+        alpha_column = None
+        if normalized_sort == "taxon_asc":
+            alpha_column = models.CatalogObservation.taxon_name
+        elif normalized_sort == "community_taxon_asc":
+            alpha_column = models.CatalogObservation.community_taxon_name
+        elif normalized_sort == "observed_taxon_asc":
+            alpha_column = models.CatalogObservation.species_guess
+        elif normalized_sort == "genus_asc":
+            alpha_column = models.CatalogObservation.genus_key
+        elif normalized_sort == "place_asc":
+            alpha_column = models.CatalogObservation.place_guess
 
-    pages = max(1, (total + CATALOG_PAGE_SIZE - 1) // CATALOG_PAGE_SIZE)
-    current_page = min(page, pages)
-    if alpha_page_links:
-        for item in alpha_page_links:
-            target_page = item.get("page")
-            item["is_current"] = target_page is not None and int(target_page) == int(current_page)
-    rows = (
-        base_query
-        .offset((current_page - 1) * CATALOG_PAGE_SIZE)
-        .limit(CATALOG_PAGE_SIZE)
-        .all()
-    )
+        if alpha_column is not None:
+            ordered_values = base_query.with_entities(alpha_column).all()
+            letter_to_page: dict[str, int] = {}
+            for idx, (value,) in enumerate(ordered_values, start=1):
+                letter = _alpha_initial(value)
+                if letter not in letter_to_page:
+                    letter_to_page[letter] = ((idx - 1) // CATALOG_PAGE_SIZE) + 1
+
+            for letter in list("ABCDEFGHIJKLMNOPQRSTUVWXYZ") + ["#"]:
+                target_page = letter_to_page.get(letter)
+                alpha_page_links.append(
+                    {
+                        "letter": letter,
+                        "page": target_page,
+                        "is_current": target_page is not None and int(target_page) == int(page),
+                    }
+                )
+
+        pages = max(1, (total + CATALOG_PAGE_SIZE - 1) // CATALOG_PAGE_SIZE)
+        current_page = min(page, pages)
+        if alpha_page_links:
+            for item in alpha_page_links:
+                target_page = item.get("page")
+                item["is_current"] = target_page is not None and int(target_page) == int(current_page)
+        rows = (
+            base_query
+            .offset((current_page - 1) * CATALOG_PAGE_SIZE)
+            .limit(CATALOG_PAGE_SIZE)
+            .all()
+        )
 
     sources = (
         db.query(models.CatalogSource)
@@ -836,6 +883,7 @@ def catalog_page(
             "date_from": date_from,
             "date_to": date_to,
             "sort": normalized_sort,
+            "dna_only": dna_only,
             "date_error": date_error,
             "memberships_by_obs": memberships_by_obs,
             "alpha_page_links": alpha_page_links,

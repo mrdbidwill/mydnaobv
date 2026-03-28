@@ -58,6 +58,10 @@
             <input class="input" type="date" name="date_to" value="{{ date_to }}" />
           </label>
         </div>
+        <label style="display: inline-flex; align-items: center; gap: 8px;">
+          <input type="checkbox" name="dna_only" value="true" {% if dna_only %}checked{% endif %} />
+          DNA Barcode ITS only
+        </label>
         <input type="hidden" name="page" value="1" />
         <button class="btn" type="submit">Apply filters</button>
       </form>
@@ -67,11 +71,14 @@
       <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
         <h3 style="margin: 0;">Catalog Results</h3>
         <div style="display: inline-flex; gap: 6px; flex-wrap: wrap;">
-          <a class="btn secondary" href="/catalog/genera-count?source_id={{ selected_source_id }}&genus={{ genus }}&query={{ query }}&date_from={{ date_from }}&date_to={{ date_to }}">Download Genera Count</a>
+          <a class="btn secondary" href="/catalog/genera-count?source_id={{ selected_source_id }}&genus={{ genus }}&query={{ query }}&date_from={{ date_from }}&date_to={{ date_to }}{% if dna_only %}&dna_only=true{% endif %}">Download Genera Count</a>
           <a class="btn secondary" href="/catalog/genera-count?source_id={{ selected_source_id }}&genus={{ genus }}&query={{ query }}&date_from={{ date_from }}&date_to={{ date_to }}&dna_only=true">Download DNA ITS Genera Count</a>
         </div>
       </div>
       <p class="muted">Duplicates have been removed by iNaturalist <code>observation.id</code>.</p>
+      {% if dna_only %}
+        <p class="muted">Filter active: DNA Barcode ITS only.</p>
+      {% endif %}
 
       {% if rows and rows|length > 0 %}
         {% if alpha_page_links and alpha_page_links|length > 0 %}
@@ -82,7 +89,7 @@
                 {% if item.is_current %}
                   <strong>{{ item.letter }}</strong>
                 {% else %}
-                  <a class="btn secondary" style="padding: 6px 10px;" href="/catalog?page={{ item.page }}&source_id={{ selected_source_id }}&genus={{ genus }}&query={{ query }}&date_from={{ date_from }}&date_to={{ date_to }}&sort={{ sort }}">{{ item.letter }}</a>
+                  <a class="btn secondary" style="padding: 6px 10px;" href="/catalog?page={{ item.page }}&source_id={{ selected_source_id }}&genus={{ genus }}&query={{ query }}&date_from={{ date_from }}&date_to={{ date_to }}&sort={{ sort }}{% if dna_only %}&dna_only=true{% endif %}">{{ item.letter }}</a>
                 {% endif %}
               {% else %}
                 <span class="muted">{{ item.letter }}</span>
@@ -93,10 +100,10 @@
 
         <div style="margin-top: 12px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
           {% if page > 1 %}
-            <a class="btn secondary" href="/catalog?page={{ page - 1 }}&source_id={{ selected_source_id }}&genus={{ genus }}&query={{ query }}&date_from={{ date_from }}&date_to={{ date_to }}&sort={{ sort }}">Previous</a>
+            <a class="btn secondary" href="/catalog?page={{ page - 1 }}&source_id={{ selected_source_id }}&genus={{ genus }}&query={{ query }}&date_from={{ date_from }}&date_to={{ date_to }}&sort={{ sort }}{% if dna_only %}&dna_only=true{% endif %}">Previous</a>
           {% endif %}
           {% if page < pages %}
-            <a class="btn secondary" href="/catalog?page={{ page + 1 }}&source_id={{ selected_source_id }}&genus={{ genus }}&query={{ query }}&date_from={{ date_from }}&date_to={{ date_to }}&sort={{ sort }}">Next</a>
+            <a class="btn secondary" href="/catalog?page={{ page + 1 }}&source_id={{ selected_source_id }}&genus={{ genus }}&query={{ query }}&date_from={{ date_from }}&date_to={{ date_to }}&sort={{ sort }}{% if dna_only %}&dna_only=true{% endif %}">Next</a>
           {% endif %}
           <span class="muted">Page {{ page }} of {{ pages }}</span>
         </div>
@@ -154,10 +161,10 @@
 
         <div style="margin-top: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
           {% if page > 1 %}
-            <a class="btn secondary" href="/catalog?page={{ page - 1 }}&source_id={{ selected_source_id }}&genus={{ genus }}&query={{ query }}&date_from={{ date_from }}&date_to={{ date_to }}&sort={{ sort }}">Previous</a>
+            <a class="btn secondary" href="/catalog?page={{ page - 1 }}&source_id={{ selected_source_id }}&genus={{ genus }}&query={{ query }}&date_from={{ date_from }}&date_to={{ date_to }}&sort={{ sort }}{% if dna_only %}&dna_only=true{% endif %}">Previous</a>
           {% endif %}
           {% if page < pages %}
-            <a class="btn secondary" href="/catalog?page={{ page + 1 }}&source_id={{ selected_source_id }}&genus={{ genus }}&query={{ query }}&date_from={{ date_from }}&date_to={{ date_to }}&sort={{ sort }}">Next</a>
+            <a class="btn secondary" href="/catalog?page={{ page + 1 }}&source_id={{ selected_source_id }}&genus={{ genus }}&query={{ query }}&date_from={{ date_from }}&date_to={{ date_to }}&sort={{ sort }}{% if dna_only %}&dna_only=true{% endif %}">Next</a>
           {% endif %}
           <span class="muted">Page {{ page }} of {{ pages }}</span>
         </div>

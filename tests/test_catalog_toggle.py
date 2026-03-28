@@ -1,7 +1,8 @@
 import pytest
 from fastapi import HTTPException
+from types import SimpleNamespace
 
-from app.main import _alpha_initial, _catalog_genus_label, _payload_has_dna_its, ensure_data_catalog_enabled, normalize_catalog_sort, settings
+from app.main import _alpha_initial, _catalog_alpha_value, _catalog_genus_label, _payload_has_dna_its, ensure_data_catalog_enabled, normalize_catalog_sort, settings
 
 
 def test_normalize_catalog_sort_defaults_on_unknown():
@@ -41,6 +42,22 @@ def test_catalog_genus_label_prefers_taxon_and_falls_back():
 def test_alpha_initial_handles_letters_and_non_letters():
     assert _alpha_initial("Agaricus") == "A"
     assert _alpha_initial(" 9-lives ") == "#"
+
+
+def test_catalog_alpha_value_uses_expected_field_for_sort():
+    row = SimpleNamespace(
+        taxon_name="Trametes",
+        community_taxon_name="Polyporaceae",
+        species_guess="Turkey-tail",
+        genus_key="trametes",
+        place_guess="Cullman County, AL, USA",
+    )
+    assert _catalog_alpha_value(row, "taxon_asc") == "Trametes"
+    assert _catalog_alpha_value(row, "community_taxon_asc") == "Polyporaceae"
+    assert _catalog_alpha_value(row, "observed_taxon_asc") == "Turkey-tail"
+    assert _catalog_alpha_value(row, "genus_asc") == "trametes"
+    assert _catalog_alpha_value(row, "place_asc") == "Cullman County, AL, USA"
+    assert _catalog_alpha_value(row, "observed_desc") is None
 
 
 def test_payload_has_dna_its_true_when_field_id_2330_has_value():
