@@ -1,7 +1,5 @@
-from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-import re
 import shutil
 from typing import Optional
 from urllib.parse import parse_qs, quote, urlparse
@@ -49,19 +47,6 @@ PUBLIC_COUNTY_PAGE_SIZE = 24
 PUBLIC_REFRESH_INTERVAL_DAYS = max(1, settings.public_refresh_interval_days)
 DEFAULT_PROJECT_BUILD_IDS = "124358\n184305\n132913\n251751"
 CATALOG_PAGE_SIZE = max(10, min(settings.catalog_page_size, 200))
-GENUS_QUALIFIER_TOKENS = {
-    "cf",
-    "aff",
-    "nr",
-    "sp",
-    "spp",
-    "complex",
-    "group",
-    "sect",
-    "subsp",
-    "var",
-    "forma",
-}
 
 
 @app.get("/favicon.ico", include_in_schema=False)
@@ -126,76 +111,6 @@ def parse_optional_date(raw: str | None) -> tuple[Optional[date], Optional[str]]
         return date.fromisoformat(text), None
     except ValueError:
         return None, "Use YYYY-MM-DD date format."
-
-
-def _extract_genus_token(value: str | None) -> Optional[str]:
-    text = (value or "").strip()
-    if not text:
-        return None
-    for raw_token in text.split():
-        token = re.sub(r"[^A-Za-z-]", "", raw_token).strip("-").lower()
-        if not token:
-            continue
-        if token in GENUS_QUALIFIER_TOKENS:
-            continue
-        return token
-    return None
-
-
-def _distinct_genus_count(filtered_query, column) -> int:
-    values = (
-        filtered_query
-        .with_entities(column)
-        .filter(column.isnot(None))
-        .distinct()
-        .all()
-    )
-    genera = {_extract_genus_token(value) for (value,) in values}
-    return len([item for item in genera if item])
-
-
-def _source_display_label(source: models.CatalogSource) -> str:
-    label = (source.project_title or source.project_id or "").strip()
-    if label:
-        return label
-    return f"Source {source.id}"
-
-
-def _build_project_overlap_summary(
-    links: list[tuple[int, int]],
-    source_label_by_id: dict[int, str],
-) -> dict[str, object]:
-    source_ids_by_obs: dict[int, set[int]] = defaultdict(set)
-    for observation_id, source_id in links:
-        source_ids_by_obs[observation_id].add(source_id)
-
-    per_source_original_counts: dict[int, int] = defaultdict(int)
-    total_multi_project_observations = 0
-    for source_ids in source_ids_by_obs.values():
-        if len(source_ids) == 1:
-            source_id = next(iter(source_ids))
-            per_source_original_counts[source_id] += 1
-            continue
-        total_multi_project_observations += 1
-
-    original_rows = [
-        {
-            "source_id": source_id,
-            "project_label": source_label_by_id.get(source_id, f"Source {source_id}"),
-            "original_count": per_source_original_counts.get(source_id, 0),
-        }
-        for source_id in sorted(source_label_by_id.keys())
-    ]
-    original_rows.sort(key=lambda row: (-row["original_count"], row["project_label"].lower()))
-    total_original_observations = sum(row["original_count"] for row in original_rows)
-    total_unique_observations = len(source_ids_by_obs)
-
-    return {
-        "total_unique_observations": total_unique_observations,
-        "total_original_observations": total_original_observations,
-        "total_multi_project_observations": total_multi_project_observations,
-        "original_rows": original_rows,
-    }
 
 
 def _preferred_county_file_artifact(artifacts: list[models.ExportArtifact]) -> models.ExportArtifact | None:
@@ -692,37 +607,6 @@ def catalog_page(
         filtered_query = filtered_query.filter(models.CatalogObservation.observed_on_date <= to_date)
 
     total = filtered_query.count()
-    unique_taxa_count = (
-        filtered_query
-        .with_entities(models.CatalogObservation.taxon_name)
-        .filter(models.CatalogObservation.taxon_name.isnot(None))
-        .distinct()
-        .count()
-    )
-    unique_observers_count = (
-        filtered_query
-        .with_entities(models.CatalogObservation.user_login)
-        .filter(models.CatalogObservation.user_login.isnot(None))
-        .distinct()
-        .count()
-    )
-    unique_places_count = (
-        filtered_query
-        .with_entities(models.CatalogObservation.place_guess)
-        .filter(models.CatalogObservation.place_guess.isnot(None))
-        .distinct()
-        .count()
-    )
-    with_images_count = filtered_query.filter(models.CatalogObservation.photo_count > 0).count()
-    observed_span = filtered_query.with_entities(
-        func.min(models.CatalogObservation.observed_on_date),
-        func.max(models.CatalogObservation.observed_on_date),
-    ).one()
-    observed_date_min = observed_span[0]
-    observed_date_max = observed_span[1]
-    unique_taxon_genera_count = _distinct_genus_count(filtered_query, models.CatalogObservation.taxon_name)
-    unique_observed_genera_count = _distinct_genus_count(filtered_query, models.CatalogObservation.species_guess)
-    unique_community_genera_count = _distinct_genus_count(filtered_query, models.CatalogObservation.community_taxon_name)
 
     base_query = filtered_query
 
@@ -786,16 +670,6 @@ def catalog_page(
         .all()
     )
     by_source_id = {source.id: source for source in sources}
-    source_label_by_id = {source.id: _source_display_label(source) for source in sources}
-
-    all_links = (
-        db.query(
-            models.CatalogObservationProject.observation_id,
-            models.CatalogObservationProject.source_id,
-        )
-        .all()
-    )
-    overlap_summary = _build_project_overlap_summary(all_links, source_label_by_id)
 
     memberships_by_obs: dict[int, list[str]] = {}
     if rows:
@@ -809,7 +683,7 @@ def catalog_page(
             source_row = by_source_id.get(membership.source_id)
             if not source_row:
                 continue
-            label = source_label_by_id.get(source_row.id, _source_display_label(source_row))
+            label = (source_row.project_title or source_row.project_id or "").strip() or source_row.project_id
             memberships_by_obs.setdefault(membership.observation_id, []).append(label)
 
     return template_response(
@@ -829,19 +703,7 @@ def catalog_page(
             "date_to": date_to,
             "sort": normalized_sort,
             "date_error": date_error,
-            "overlap_summary": overlap_summary,
             "memberships_by_obs": memberships_by_obs,
-            "summary": {
-                "unique_taxa_count": unique_taxa_count,
-                "unique_taxon_genera_count": unique_taxon_genera_count,
-                "unique_observed_genera_count": unique_observed_genera_count,
-                "unique_community_genera_count": unique_community_genera_count,
-                "unique_observers_count": unique_observers_count,
-                "unique_places_count": unique_places_count,
-                "with_images_count": with_images_count,
-                "observed_date_min": observed_date_min,
-                "observed_date_max": observed_date_max,
-            },
         },
         show_ads=True,
     )

@@ -65,39 +65,7 @@
 
     <div class="card">
       <h3>Catalog Results</h3>
-      <p class="muted">{{ total }} observations matched.</p>
-      <p class="muted">Unique genera from iNaturalist <code>taxon</code>: {{ summary.unique_taxon_genera_count }}</p>
-      <p class="muted">Unique genera from iNaturalist <code>species_guess</code> (observer text): {{ summary.unique_observed_genera_count }}</p>
-      <p class="muted">Unique genera from iNaturalist <code>community_taxon</code>: {{ summary.unique_community_genera_count }}</p>
-      <p class="muted">Unique <code>taxon</code> names: {{ summary.unique_taxa_count }} | Unique observers: {{ summary.unique_observers_count }} | Unique places: {{ summary.unique_places_count }}</p>
-      <p class="muted">Observations with image URLs: {{ summary.with_images_count }} | Observed date span: {{ summary.observed_date_min if summary.observed_date_min else "Unknown" }} to {{ summary.observed_date_max if summary.observed_date_max else "Unknown" }}</p>
-
-      <h4 style="margin-top: 14px;">Project Overlap (Duplicate Counts)</h4>
-      <p class="muted">Comparison key is iNaturalist <code>observation.id</code>.</p>
-      <p class="muted">Total unique observations across listed projects: {{ overlap_summary.total_unique_observations }}</p>
-      <p class="muted">Observations present in 2+ projects: {{ overlap_summary.total_multi_project_observations }}</p>
-      <p class="muted"><strong>Total original observations (not in another listed sequencing project): {{ overlap_summary.total_original_observations }}</strong></p>
-
-      {% if overlap_summary.original_rows and overlap_summary.original_rows|length > 0 %}
-        <table style="margin-top: 8px;">
-          <thead>
-            <tr>
-              <th>Project</th>
-              <th>Original Observations</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in overlap_summary.original_rows %}
-              <tr>
-                <td>{{ row.project_label }} has {{ row.original_count }} original observations.</td>
-                <td>{{ row.original_count }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      {% else %}
-        <p class="muted">No project-only original observations found yet.</p>
-      {% endif %}
+      <p class="muted">Combined results are deduplicated by iNaturalist <code>observation.id</code>.</p>
 
       {% if rows and rows|length > 0 %}
         <table>
