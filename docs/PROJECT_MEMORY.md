@@ -153,6 +153,12 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - contents are numbered alphabetical genus-style tokens with observation counts (e.g., `1. Agaricales (4)`).
   - included in ZIP output and public download routing.
 
+## 2026-03-28
+- County sync source strategy updated for sequencing workflows:
+  - County list sync now queries all projects in `INAT_COUNTY_PROJECT_IDS` (default `124358,184305,132913,251751`) instead of relying on a single project ID.
+  - Observations are de-duplicated by iNaturalist `observation.id` across those project queries before caching/export.
+  - `DNA Barcode ITS` remains required; no API/media throttle settings changed.
+
 ## Routine Update Rule
 On each major decision or architecture change:
 1. Add one dated entry in this file.

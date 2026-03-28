@@ -75,6 +75,30 @@ def _queryable_dna_field_name() -> Optional[str]:
     return candidate
 
 
+def _split_project_filter_values(raw: Optional[str]) -> list[str]:
+    text = str(raw or "").replace("\n", ",")
+    values: list[str] = []
+    seen: set[str] = set()
+    for token in text.split(","):
+        cleaned = token.strip()
+        if not cleaned:
+            continue
+        marker = cleaned.lower()
+        if marker in seen:
+            continue
+        seen.add(marker)
+        values.append(cleaned)
+    return values
+
+
+def _project_filters_for_list(obs_list: models.ObservationList) -> list[str]:
+    if (obs_list.product_type or "").strip().lower() == "county":
+        configured = _split_project_filter_values(settings.inat_county_project_ids)
+        if configured:
+            return configured
+    return _split_project_filter_values(obs_list.inat_project_id)
+
+
 def _extract_field_value(obs: dict, field_id: str) -> Optional[str]:
     candidates = (
         obs.get("ofvs"),
@@ -617,7 +641,6 @@ def fetch_observations_for_list(obs_list: models.ObservationList) -> Iterable[In
 
     url = f"{base}/observations"
     per_page = 200
-    page = 1
     max_pages = 200
 
     timeout = httpx.Timeout(10.0, connect=5.0)
@@ -641,10 +664,10 @@ def fetch_observations_for_list(obs_list: models.ObservationList) -> Iterable[In
 
     with httpx.Client(timeout=timeout, headers=headers) as client:
         normalized_username = (obs_list.inat_username or "").strip()
-        normalized_project_id = (obs_list.inat_project_id or "").strip()
+        project_filters = _project_filters_for_list(obs_list)
         resolved_user_id: Optional[int] = obs_list.inat_user_id
 
-        if resolved_user_id is None and not normalized_username and not normalized_project_id:
+        if resolved_user_id is None and not normalized_username and not project_filters:
             raise ValueError("Provide an iNaturalist user ID, username, or project ID/slug.")
 
         if resolved_user_id is not None:
@@ -689,11 +712,6 @@ def fetch_observations_for_list(obs_list: models.ObservationList) -> Iterable[In
                 obs_list.inat_username = row_login
                 normalized_username = row_login
 
-        if normalized_project_id:
-            # Lists are already validated at create/edit time; avoid extra project lookup
-            # during every sync run to reduce external dependency failures.
-            obs_list.inat_project_id = normalized_project_id
-
         resolved_place_id: Optional[int] = obs_list.inat_place_id
         place_query = (obs_list.place_query or "").strip()
         if place_query and resolved_place_id is None:
@@ -705,151 +723,159 @@ def fetch_observations_for_list(obs_list: models.ObservationList) -> Iterable[In
             if place_name:
                 obs_list.place_query = place_query
 
-        while page <= max_pages:
-            params = {
-                "taxon_id": settings.inat_taxon_id,
-                "per_page": per_page,
-                "page": page,
-                "order_by": "observed_on",
-                "order": "desc",
-            }
-            if resolved_user_id is not None:
-                params["user_id"] = resolved_user_id
-            elif normalized_username:
-                params["user_login"] = normalized_username
-            if normalized_project_id:
-                params["project_id"] = normalized_project_id
-            dna_field_name = _queryable_dna_field_name()
-            if dna_field_name:
-                # iNaturalist search URL syntax supports field filters.
-                params[f"field:{dna_field_name}"] = ""
-            if obs_list.taxon_filter:
-                params["taxon_name"] = obs_list.taxon_filter.strip()
-            if resolved_place_id is not None:
-                params["place_id"] = resolved_place_id
+        seen_inat_ids: set[int] = set()
+        project_cycle: list[Optional[str]] = project_filters if project_filters else [None]
 
-            response = client.get(url, params=params)
-            response.raise_for_status()
-            data = response.json()
+        for project_filter in project_cycle:
+            page = 1
+            while page <= max_pages:
+                params = {
+                    "taxon_id": settings.inat_taxon_id,
+                    "per_page": per_page,
+                    "page": page,
+                    "order_by": "observed_on",
+                    "order": "desc",
+                }
+                if resolved_user_id is not None:
+                    params["user_id"] = resolved_user_id
+                elif normalized_username:
+                    params["user_login"] = normalized_username
+                if project_filter:
+                    params["project_id"] = project_filter
+                dna_field_name = _queryable_dna_field_name()
+                if dna_field_name:
+                    # iNaturalist search URL syntax supports field filters.
+                    params[f"field:{dna_field_name}"] = ""
+                if obs_list.taxon_filter:
+                    params["taxon_name"] = obs_list.taxon_filter.strip()
+                if resolved_place_id is not None:
+                    params["place_id"] = resolved_place_id
 
-            results = data.get("results") or []
-            if not results:
-                break
+                response = client.get(url, params=params)
+                response.raise_for_status()
+                data = response.json()
 
-            for obs in results:
-                if not isinstance(obs, dict):
-                    continue
-                field_value = _extract_field_value(obs, obs_list.inat_dna_field_id)
-                detail: Optional[dict] = None
-                if field_value is None:
-                    detail = _fetch_observation_detail(client, base, int(obs.get("id", 0)))
-                    if detail:
-                        field_value = _extract_field_value(detail, obs_list.inat_dna_field_id)
-                if field_value is None:
-                    continue
-
-                inat_id = obs.get("id")
-                if inat_id is None:
-                    continue
-
-                species_guess = obs.get("species_guess")
-                user = obs.get("user") or {}
-                user_name = user.get("name") or user.get("login")
-                inat_url = obs.get("uri") or obs.get("url") or f"https://www.inaturalist.org/observations/{inat_id}"
-                observed_at = _parse_observed_at(obs)
-                photo_entries = _extract_photo_entries(obs)
-                declared_photo_count = 0
-                for count_key in ("photos_count", "observation_photos_count"):
-                    raw_count = obs.get(count_key)
-                    if isinstance(raw_count, int) and raw_count > 0:
-                        declared_photo_count = raw_count
-                        break
-                if settings.export_include_all_photos:
-                    max_needed_photos = max(1, min(settings.export_max_photos_per_observation, 8))
-                    needs_more_for_export = len(photo_entries) < max_needed_photos
-                else:
-                    needs_more_for_export = False
-                if settings.export_include_all_photos and needs_more_for_export and declared_photo_count > len(photo_entries):
-                    if detail is None:
-                        detail = _fetch_observation_detail(client, base, int(inat_id))
-                    if detail:
-                        detail_entries = _extract_photo_entries(detail)
-                        if detail_entries:
-                            photo_entries = detail_entries
-                if not photo_entries and detail is None:
-                    detail = _fetch_observation_detail(client, base, int(inat_id))
-                    if detail:
-                        photo_entries = _extract_photo_entries(detail)
-
-                taxa = _extract_taxa(obs, detail=detail)
-                observation_taxon_name = taxa["observation_taxon_name"]
-                observation_common_name = taxa["observation_common_name"]
-                community_taxon_name = taxa["community_taxon_name"]
-
-                # Keep legacy fields populated for backwards compatibility with existing templates/export code.
-                scientific_name = (
-                    str(observation_taxon_name).strip()
-                    if observation_taxon_name
-                    else (str(obs.get("scientific_name") or "").strip() or None)
-                )
-                taxon_name = (
-                    str(taxa["current_taxon_name"]).strip()
-                    if taxa["current_taxon_name"]
-                    else (str(obs.get("taxon_name") or "").strip() or None)
-                )
-                common_name = (
-                    str(observation_common_name).strip()
-                    if observation_common_name
-                    else None
-                )
-                if common_name is None:
-                    taxon_obj = obs.get("taxon") or {}
-                    common_name = (
-                        str(taxon_obj.get("preferred_common_name") or taxon_obj.get("common_name") or "").strip()
-                        or None
-                    )
-
-                if photo_entries:
-                    photo_url = photo_entries[0].photo_url
-                    photo_license_code = photo_entries[0].photo_license_code
-                    photo_attribution = photo_entries[0].photo_attribution
-                else:
-                    photo_url = None
-                    photo_license_code = None
-                    photo_attribution = None
-
-                if not matches_taxon(taxon_name, species_guess, scientific_name):
-                    continue
-
-                yield InatObservation(
-                    inat_id=int(inat_id),
-                    taxon_name=taxon_name,
-                    species_guess=species_guess,
-                    scientific_name=scientific_name,
-                    common_name=common_name,
-                    observation_taxon_id=taxa["observation_taxon_id"],
-                    observation_taxon_name=taxa["observation_taxon_name"],
-                    observation_taxon_rank=taxa["observation_taxon_rank"],
-                    community_taxon_id=taxa["community_taxon_id"],
-                    community_taxon_name=taxa["community_taxon_name"],
-                    community_taxon_rank=taxa["community_taxon_rank"],
-                    user_name=user_name,
-                    observed_at=observed_at,
-                    inat_url=inat_url,
-                    dna_field_value=field_value,
-                    photo_url=photo_url,
-                    photo_license_code=photo_license_code,
-                    photo_attribution=photo_attribution,
-                    photo_entries=photo_entries,
-                )
-                found += 1
-                if found >= max_items:
-                    return
-
-            total = data.get("total_results")
-            if isinstance(total, int):
-                total_pages = max(1, (total + per_page - 1) // per_page)
-                if page >= total_pages:
+                results = data.get("results") or []
+                if not results:
                     break
 
-            page += 1
+                for obs in results:
+                    if not isinstance(obs, dict):
+                        continue
+
+                    inat_id = _coerce_int(obs.get("id"))
+                    if inat_id is None:
+                        continue
+                    if inat_id in seen_inat_ids:
+                        continue
+
+                    field_value = _extract_field_value(obs, obs_list.inat_dna_field_id)
+                    detail: Optional[dict] = None
+                    if field_value is None:
+                        detail = _fetch_observation_detail(client, base, inat_id)
+                        if detail:
+                            field_value = _extract_field_value(detail, obs_list.inat_dna_field_id)
+                    if field_value is None:
+                        continue
+
+                    species_guess = obs.get("species_guess")
+                    user = obs.get("user") or {}
+                    user_name = user.get("name") or user.get("login")
+                    inat_url = obs.get("uri") or obs.get("url") or f"https://www.inaturalist.org/observations/{inat_id}"
+                    observed_at = _parse_observed_at(obs)
+                    photo_entries = _extract_photo_entries(obs)
+                    declared_photo_count = 0
+                    for count_key in ("photos_count", "observation_photos_count"):
+                        raw_count = obs.get(count_key)
+                        if isinstance(raw_count, int) and raw_count > 0:
+                            declared_photo_count = raw_count
+                            break
+                    if settings.export_include_all_photos:
+                        max_needed_photos = max(1, min(settings.export_max_photos_per_observation, 8))
+                        needs_more_for_export = len(photo_entries) < max_needed_photos
+                    else:
+                        needs_more_for_export = False
+                    if settings.export_include_all_photos and needs_more_for_export and declared_photo_count > len(photo_entries):
+                        if detail is None:
+                            detail = _fetch_observation_detail(client, base, inat_id)
+                        if detail:
+                            detail_entries = _extract_photo_entries(detail)
+                            if detail_entries:
+                                photo_entries = detail_entries
+                    if not photo_entries and detail is None:
+                        detail = _fetch_observation_detail(client, base, inat_id)
+                        if detail:
+                            photo_entries = _extract_photo_entries(detail)
+
+                    taxa = _extract_taxa(obs, detail=detail)
+                    observation_taxon_name = taxa["observation_taxon_name"]
+                    observation_common_name = taxa["observation_common_name"]
+
+                    # Keep legacy fields populated for backwards compatibility with existing templates/export code.
+                    scientific_name = (
+                        str(observation_taxon_name).strip()
+                        if observation_taxon_name
+                        else (str(obs.get("scientific_name") or "").strip() or None)
+                    )
+                    taxon_name = (
+                        str(taxa["current_taxon_name"]).strip()
+                        if taxa["current_taxon_name"]
+                        else (str(obs.get("taxon_name") or "").strip() or None)
+                    )
+                    common_name = (
+                        str(observation_common_name).strip()
+                        if observation_common_name
+                        else None
+                    )
+                    if common_name is None:
+                        taxon_obj = obs.get("taxon") or {}
+                        common_name = (
+                            str(taxon_obj.get("preferred_common_name") or taxon_obj.get("common_name") or "").strip()
+                            or None
+                        )
+
+                    if photo_entries:
+                        photo_url = photo_entries[0].photo_url
+                        photo_license_code = photo_entries[0].photo_license_code
+                        photo_attribution = photo_entries[0].photo_attribution
+                    else:
+                        photo_url = None
+                        photo_license_code = None
+                        photo_attribution = None
+
+                    if not matches_taxon(taxon_name, species_guess, scientific_name):
+                        continue
+
+                    seen_inat_ids.add(inat_id)
+                    yield InatObservation(
+                        inat_id=inat_id,
+                        taxon_name=taxon_name,
+                        species_guess=species_guess,
+                        scientific_name=scientific_name,
+                        common_name=common_name,
+                        observation_taxon_id=taxa["observation_taxon_id"],
+                        observation_taxon_name=taxa["observation_taxon_name"],
+                        observation_taxon_rank=taxa["observation_taxon_rank"],
+                        community_taxon_id=taxa["community_taxon_id"],
+                        community_taxon_name=taxa["community_taxon_name"],
+                        community_taxon_rank=taxa["community_taxon_rank"],
+                        user_name=user_name,
+                        observed_at=observed_at,
+                        inat_url=inat_url,
+                        dna_field_value=field_value,
+                        photo_url=photo_url,
+                        photo_license_code=photo_license_code,
+                        photo_attribution=photo_attribution,
+                        photo_entries=photo_entries,
+                    )
+                    found += 1
+                    if found >= max_items:
+                        return
+
+                total = data.get("total_results")
+                if isinstance(total, int):
+                    total_pages = max(1, (total + per_page - 1) // per_page)
+                    if page >= total_pages:
+                        break
+
+                page += 1

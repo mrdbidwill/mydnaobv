@@ -18,7 +18,7 @@
 
     <div class="card">
       <h3>Seed And Build Counties</h3>
-      <p class="muted">Creates any missing county lists for one state + one project, then queues a full sync and PDF rebuild for every matching county list.</p>
+      <p class="muted">Creates any missing county lists for one state + one project label, then queues full sync and PDF rebuild jobs. County sync queries all configured sequencing projects and de-duplicates by iNaturalist observation ID.</p>
       <form method="post" action="/admin/projects/county-seed" class="grid">
         <label>
           iNaturalist project ID or slug
@@ -58,7 +58,7 @@
 
     <div class="card">
       <h3>Process State Counties</h3>
-      <p class="muted">Queues fresh full sync + PDF rebuild jobs for existing county lists in the selected state (optionally filtered to one project).</p>
+      <p class="muted">Queues fresh full sync + PDF rebuild jobs for existing county lists in the selected state (optionally filtered by stored project label).</p>
       <form method="post" action="/admin/states/build" class="grid">
         <label>
           State

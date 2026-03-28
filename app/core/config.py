@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     inat_dna_field_name: str = Field(default="DNA Barcode ITS", alias="INAT_DNA_FIELD_NAME")
     inat_taxon_id: str = Field(default="47170", alias="INAT_TAXON_ID")
     inat_default_project_id: Optional[str] = Field(default=None, alias="INAT_DEFAULT_PROJECT_ID")
+    inat_county_project_ids: str = Field(
+        default="124358,184305,132913,251751",
+        alias="INAT_COUNTY_PROJECT_IDS",
+    )
     max_observations: int = Field(default=5000, alias="MAX_OBSERVATIONS")
     admin_username: str = Field(default="admin", alias="ADMIN_USERNAME")
     admin_password: str = Field(default="change-me", alias="ADMIN_PASSWORD")
