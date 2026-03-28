@@ -66,7 +66,10 @@
     <div class="card">
       <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
         <h3 style="margin: 0;">Catalog Results</h3>
-        <a class="btn secondary" href="/catalog/genera-count?source_id={{ selected_source_id }}&genus={{ genus }}&query={{ query }}&date_from={{ date_from }}&date_to={{ date_to }}">Download Genera Count</a>
+        <div style="display: inline-flex; gap: 6px; flex-wrap: wrap;">
+          <a class="btn secondary" href="/catalog/genera-count?source_id={{ selected_source_id }}&genus={{ genus }}&query={{ query }}&date_from={{ date_from }}&date_to={{ date_to }}">Download Genera Count</a>
+          <a class="btn secondary" href="/catalog/genera-count?source_id={{ selected_source_id }}&genus={{ genus }}&query={{ query }}&date_from={{ date_from }}&date_to={{ date_to }}&dna_only=true">Download DNA ITS Genera Count</a>
+        </div>
       </div>
       <p class="muted">Duplicates have been removed by iNaturalist <code>observation.id</code>.</p>
 

@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime, timedelta
+import json
 from pathlib import Path
 import re
 import shutil
@@ -152,6 +153,32 @@ def _catalog_genus_label(
         if label:
             return label
     return None
+
+
+def _payload_has_dna_its(raw_payload: str | None) -> bool:
+    if not raw_payload:
+        return False
+    try:
+        payload = json.loads(raw_payload)
+    except Exception:
+        return False
+
+    field_id = str(settings.inat_dna_field_id or "2330").strip() or "2330"
+    for key in ("ofvs", "observation_field_values"):
+        values = payload.get(key)
+        if not isinstance(values, list):
+            continue
+        for item in values:
+            if not isinstance(item, dict):
+                continue
+            obs_field = item.get("observation_field")
+            obs_field_id = obs_field.get("id") if isinstance(obs_field, dict) else None
+            ofid = item.get("observation_field_id") or item.get("field_id") or obs_field_id
+            if str(ofid) != field_id:
+                continue
+            if str(item.get("value") or "").strip():
+                return True
+    return False
 
 
 def _build_catalog_filtered_query(
@@ -777,6 +804,7 @@ def catalog_genera_count(
     query: str = Query(default=""),
     date_from: str = Query(default=""),
     date_to: str = Query(default=""),
+    dna_only: bool = Query(default=False),
     db: Session = Depends(get_db),
 ):
     ensure_data_catalog_enabled()
@@ -802,6 +830,7 @@ def catalog_genera_count(
             models.CatalogObservation.species_guess,
             models.CatalogObservation.community_taxon_name,
             models.CatalogObservation.genus_key,
+            models.CatalogObservation.raw_payload,
         )
         .all()
     )
@@ -809,7 +838,9 @@ def catalog_genera_count(
     counts_by_genus: dict[str, int] = {}
     labels_by_genus: dict[str, str] = {}
     total_observations = 0
-    for taxon_name, species_guess, community_taxon_name, genus_key in rows:
+    for taxon_name, species_guess, community_taxon_name, genus_key, raw_payload in rows:
+        if dna_only and not _payload_has_dna_its(raw_payload):
+            continue
         total_observations += 1
         label = _catalog_genus_label(taxon_name, species_guess, community_taxon_name, genus_key)
         if not label:
@@ -826,9 +857,10 @@ def catalog_genera_count(
     )
 
     lines = [
-        "Catalog Genera Count",
+        "Catalog Genera Count (DNA Barcode ITS only)" if dna_only else "Catalog Genera Count",
         f"Source filter: {source_label}",
         f"Filters: genus='{genus or ''}', query='{query or ''}', date_from='{date_from or ''}', date_to='{date_to or ''}'",
+        f"DNA Barcode ITS filter: {'on' if dna_only else 'off'}",
         f"Total observations considered: {total_observations}",
         f"Total unique genera: {len(sorted_items)}",
         "",
@@ -841,6 +873,8 @@ def catalog_genera_count(
         slug = re.sub(r"[^a-z0-9-]+", "-", selected_source.project_id.lower()).strip("-")
         if slug:
             filename = f"{slug}_catalog_genera_count.txt"
+    if dna_only:
+        filename = filename.replace(".txt", "_dna_its.txt")
 
     return PlainTextResponse(
         "\n".join(lines),

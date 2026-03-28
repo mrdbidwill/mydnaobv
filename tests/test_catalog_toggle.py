@@ -1,7 +1,7 @@
 import pytest
 from fastapi import HTTPException
 
-from app.main import _catalog_genus_label, ensure_data_catalog_enabled, normalize_catalog_sort, settings
+from app.main import _catalog_genus_label, _payload_has_dna_its, ensure_data_catalog_enabled, normalize_catalog_sort, settings
 
 
 def test_normalize_catalog_sort_defaults_on_unknown():
@@ -36,3 +36,13 @@ def test_catalog_genus_label_prefers_taxon_and_falls_back():
     assert _catalog_genus_label("Agaricus campestris", None, None, None) == "Agaricus"
     assert _catalog_genus_label(None, "cf. Trametes versicolor", None, None) == "Trametes"
     assert _catalog_genus_label(None, None, None, "boletus") == "boletus"
+
+
+def test_payload_has_dna_its_true_when_field_id_2330_has_value():
+    payload = '{"ofvs":[{"observation_field_id":2330,"value":"ITS123"}]}'
+    assert _payload_has_dna_its(payload) is True
+
+
+def test_payload_has_dna_its_false_when_field_missing_or_empty():
+    assert _payload_has_dna_its('{"ofvs":[{"observation_field_id":2330,"value":""}]}') is False
+    assert _payload_has_dna_its('{"ofvs":[{"observation_field_id":9999,"value":"x"}]}') is False
