@@ -1,12 +1,17 @@
 {% extends "base.html" %}
 {% block content %}
   <div class="grid">
+    {% if data_catalog_enabled %}
+      <div class="card">
+        <h2>AMS DNA Observation Catalog</h2>
+        <p class="muted">Get list of all AMS DNA sequenced observations.</p>
+        <a class="btn secondary" href="/catalog">Open test-only catalog</a>
+      </div>
+    {% endif %}
+
     <div class="card">
       <h2>Alabama County PDF Downloads</h2>
       <p class="muted">Browse and download available county files.</p>
-      {% if data_catalog_enabled %}
-        <a class="btn secondary" href="/catalog" style="margin-bottom: 10px;">Open text-only catalog</a>
-      {% endif %}
       <form method="get" action="/" style="display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;">
         <label class="muted" for="state-filter">Completed state (Alabama)</label>
         <select id="state-filter" class="input" name="state_code" style="width: 220px;">
