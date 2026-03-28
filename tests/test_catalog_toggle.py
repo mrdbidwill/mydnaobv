@@ -62,4 +62,4 @@ def test_build_project_overlap_summary_reports_original_project_only_counts():
     assert summary["total_original_observations"] == 2
 
     per_source = {row["source_id"]: row["original_count"] for row in summary["original_rows"]}
-    assert per_source == {2: 1, 3: 1}
+    assert per_source == {1: 0, 2: 1, 3: 1}

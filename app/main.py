@@ -182,9 +182,9 @@ def _build_project_overlap_summary(
         {
             "source_id": source_id,
             "project_label": source_label_by_id.get(source_id, f"Source {source_id}"),
-            "original_count": count,
+            "original_count": per_source_original_counts.get(source_id, 0),
         }
-        for source_id, count in per_source_original_counts.items()
+        for source_id in sorted(source_label_by_id.keys())
     ]
     original_rows.sort(key=lambda row: (-row["original_count"], row["project_label"].lower()))
     total_original_observations = sum(row["original_count"] for row in original_rows)
