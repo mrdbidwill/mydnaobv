@@ -74,67 +74,29 @@
 
       <h4 style="margin-top: 14px;">Project Overlap (Duplicate Counts)</h4>
       <p class="muted">Comparison key is iNaturalist <code>observation.id</code>.</p>
+      <p class="muted">Total unique observations across listed projects: {{ overlap_summary.total_unique_observations }}</p>
       <p class="muted">Observations present in 2+ projects: {{ overlap_summary.total_multi_project_observations }}</p>
+      <p class="muted"><strong>Total original observations (not in another listed sequencing project): {{ overlap_summary.total_original_observations }}</strong></p>
 
-      {% if overlap_summary.per_source_rows and overlap_summary.per_source_rows|length > 0 %}
+      {% if overlap_summary.original_rows and overlap_summary.original_rows|length > 0 %}
         <table style="margin-top: 8px;">
           <thead>
             <tr>
               <th>Project</th>
-              <th>Duplicate Observations</th>
+              <th>Original Observations</th>
             </tr>
           </thead>
           <tbody>
-            {% for row in overlap_summary.per_source_rows %}
+            {% for row in overlap_summary.original_rows %}
               <tr>
-                <td>{{ row.project_label }}</td>
-                <td>{{ row.duplicate_count }}</td>
+                <td>{{ row.project_label }} has {{ row.original_count }} original observations.</td>
+                <td>{{ row.original_count }}</td>
               </tr>
             {% endfor %}
           </tbody>
         </table>
       {% else %}
-        <p class="muted">No cross-project duplicates yet.</p>
-      {% endif %}
-
-      {% if overlap_summary.pair_rows and overlap_summary.pair_rows|length > 0 %}
-        <h4 style="margin-top: 14px;">Pair Overlaps</h4>
-        <table>
-          <thead>
-            <tr>
-              <th>Project Pair</th>
-              <th>Observations In Both</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in overlap_summary.pair_rows %}
-              <tr>
-                <td>{{ row.pair_label }}</td>
-                <td>{{ row.count }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      {% endif %}
-
-      {% if overlap_summary.exact_rows and overlap_summary.exact_rows|length > 0 %}
-        <h4 style="margin-top: 14px;">Exact Multi-Project Combinations</h4>
-        <table>
-          <thead>
-            <tr>
-              <th>Exact Combination</th>
-              <th>Observation Count</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in overlap_summary.exact_rows %}
-              <tr>
-                <td>{{ row.combo_label }}</td>
-                <td>{{ row.count }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+        <p class="muted">No project-only original observations found yet.</p>
       {% endif %}
 
       {% if rows and rows|length > 0 %}

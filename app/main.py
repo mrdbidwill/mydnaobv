@@ -1,6 +1,5 @@
 from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
-from itertools import combinations
 from pathlib import Path
 import re
 import shutil
@@ -170,59 +169,32 @@ def _build_project_overlap_summary(
     for observation_id, source_id in links:
         source_ids_by_obs[observation_id].add(source_id)
 
-    per_source_duplicate_counts: dict[int, int] = defaultdict(int)
-    pair_counts: dict[tuple[int, int], int] = defaultdict(int)
-    exact_combo_counts: dict[tuple[int, ...], int] = defaultdict(int)
-
+    per_source_original_counts: dict[int, int] = defaultdict(int)
     total_multi_project_observations = 0
     for source_ids in source_ids_by_obs.values():
-        if len(source_ids) < 2:
+        if len(source_ids) == 1:
+            source_id = next(iter(source_ids))
+            per_source_original_counts[source_id] += 1
             continue
         total_multi_project_observations += 1
-        combo_key = tuple(sorted(source_ids))
-        exact_combo_counts[combo_key] += 1
-        for source_id in combo_key:
-            per_source_duplicate_counts[source_id] += 1
-        for left, right in combinations(combo_key, 2):
-            pair_counts[(left, right)] += 1
 
-    per_source_rows = [
+    original_rows = [
         {
             "source_id": source_id,
             "project_label": source_label_by_id.get(source_id, f"Source {source_id}"),
-            "duplicate_count": count,
+            "original_count": count,
         }
-        for source_id, count in per_source_duplicate_counts.items()
+        for source_id, count in per_source_original_counts.items()
     ]
-    per_source_rows.sort(key=lambda row: (-row["duplicate_count"], row["project_label"].lower()))
-
-    pair_rows = [
-        {
-            "source_ids": pair,
-            "pair_label": " + ".join(source_label_by_id.get(source_id, f"Source {source_id}") for source_id in pair),
-            "count": count,
-        }
-        for pair, count in pair_counts.items()
-    ]
-    pair_rows.sort(key=lambda row: (-row["count"], row["pair_label"].lower()))
-
-    exact_rows = [
-        {
-            "source_ids": combo,
-            "combo_label": " + ".join(
-                source_label_by_id.get(source_id, f"Source {source_id}") for source_id in combo
-            ),
-            "count": count,
-        }
-        for combo, count in exact_combo_counts.items()
-    ]
-    exact_rows.sort(key=lambda row: (len(row["source_ids"]), -row["count"], row["combo_label"].lower()))
+    original_rows.sort(key=lambda row: (-row["original_count"], row["project_label"].lower()))
+    total_original_observations = sum(row["original_count"] for row in original_rows)
+    total_unique_observations = len(source_ids_by_obs)
 
     return {
+        "total_unique_observations": total_unique_observations,
+        "total_original_observations": total_original_observations,
         "total_multi_project_observations": total_multi_project_observations,
-        "per_source_rows": per_source_rows,
-        "pair_rows": pair_rows,
-        "exact_rows": exact_rows,
+        "original_rows": original_rows,
     }
 
 

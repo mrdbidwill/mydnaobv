@@ -43,7 +43,7 @@ def test_extract_genus_token_skips_qualifier_tokens():
     assert _extract_genus_token("sp. Trametes") == "trametes"
 
 
-def test_build_project_overlap_summary_reports_pairs_and_exact_groups():
+def test_build_project_overlap_summary_reports_original_project_only_counts():
     links = [
         (101, 1),
         (101, 2),
@@ -57,16 +57,9 @@ def test_build_project_overlap_summary_reports_pairs_and_exact_groups():
 
     summary = _build_project_overlap_summary(links, labels)
 
+    assert summary["total_unique_observations"] == 4
     assert summary["total_multi_project_observations"] == 2
+    assert summary["total_original_observations"] == 2
 
-    per_source = {row["source_id"]: row["duplicate_count"] for row in summary["per_source_rows"]}
-    assert per_source == {1: 2, 2: 2, 3: 1}
-
-    pair_counts = {row["pair_label"]: row["count"] for row in summary["pair_rows"]}
-    assert pair_counts["Project 1 + Project 2"] == 2
-    assert pair_counts["Project 1 + Project 3"] == 1
-    assert pair_counts["Project 2 + Project 3"] == 1
-
-    exact_counts = {row["combo_label"]: row["count"] for row in summary["exact_rows"]}
-    assert exact_counts["Project 1 + Project 2"] == 1
-    assert exact_counts["Project 1 + Project 2 + Project 3"] == 1
+    per_source = {row["source_id"]: row["original_count"] for row in summary["original_rows"]}
+    assert per_source == {2: 1, 3: 1}
