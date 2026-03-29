@@ -62,3 +62,18 @@ def test_all_photos_mode_caps_candidates_per_observation(monkeypatch):
         "https://example.com/p1.jpg",
         "https://example.com/p2.jpg",
     ]
+
+
+def test_indexed_item_title_prefixes_observation_number():
+    obs = SimpleNamespace(
+        inat_observation_id=456,
+        taxon_name="Amanita suballiacea",
+        observation_taxon_name=None,
+        scientific_name=None,
+        community_taxon_name=None,
+        species_guess=None,
+        common_name=None,
+    )
+    title = export_service._indexed_item_title(obs, 3, "photo 1/4")
+    assert title.startswith("3. Amanita suballiacea")
+    assert "(photo 1/4)" in title

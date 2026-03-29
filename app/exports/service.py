@@ -10,7 +10,7 @@ import zipfile
 
 import httpx
 from pypdf import PdfReader, PdfWriter
-from sqlalchemy import case, func
+from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
 from app import models
@@ -85,6 +85,18 @@ def _preferred_taxon_title(obs: models.Observation, sort_source: str | None = No
         if candidate and candidate.strip():
             return candidate.strip()
     return ""
+
+
+def _indexed_item_title(
+    obs: models.Observation,
+    observation_index: int,
+    photo_suffix: str | None = None,
+) -> str:
+    base = _preferred_taxon_title(obs) or f"Observation {obs.inat_observation_id}"
+    title = f"{observation_index}. {base}"
+    if photo_suffix:
+        return f"{title} ({photo_suffix})"
+    return title
 
 
 def _extract_genus_key(text: str) -> str:
@@ -253,6 +265,56 @@ def enqueue_export_job_for_list(
     db.commit()
     db.refresh(job)
     return job, True, f"Queued export job #{job.id}."
+
+
+def enqueue_due_public_county_refresh_jobs(db: Session, limit: int = 2) -> int:
+    """
+    Queue stale public county lists for force-sync + rebuild.
+    Runs in the worker loop to keep public refresh targets moving.
+    """
+    max_to_queue = max(1, min(limit, 25))
+    now = utc_now_naive()
+    cutoff = now - timedelta(days=max(1, settings.public_refresh_interval_days))
+
+    active_rows = (
+        db.query(models.ExportJob.list_id)
+        .filter(models.ExportJob.status.in_(ACTIVE_JOB_STATUSES))
+        .distinct()
+        .all()
+    )
+    active_list_ids = {row[0] for row in active_rows if row[0] is not None}
+
+    due_lists = (
+        db.query(models.ObservationList)
+        .filter(
+            models.ObservationList.product_type == "county",
+            models.ObservationList.is_public_download.is_(True),
+            or_(
+                models.ObservationList.last_sync_at.is_(None),
+                models.ObservationList.last_sync_at <= cutoff,
+            ),
+        )
+        .order_by(models.ObservationList.last_sync_at.asc().nullsfirst(), models.ObservationList.id.asc())
+        .all()
+    )
+
+    queued = 0
+    for obs_list in due_lists:
+        if obs_list.id in active_list_ids:
+            continue
+        _, was_queued, _ = enqueue_export_job_for_list(
+            db,
+            obs_list,
+            requested_by="auto-refresh",
+            only_if_stale=False,
+            force_sync=True,
+        )
+        if was_queued:
+            queued += 1
+            active_list_ids.add(obs_list.id)
+        if queued >= max_to_queue:
+            break
+    return queued
 
 
 def list_jobs_for_list(db: Session, list_id: int, limit: int = 10) -> list[models.ExportJob]:
@@ -433,6 +495,7 @@ def _phase_plan(db: Session, job: models.ExportJob) -> bool:
         .all()
     )
     observations.sort(key=_observation_genus_sort_key)
+    observation_index_by_id = {obs.id: idx for idx, obs in enumerate(observations, start=1)}
     observation_ids = [obs.id for obs in observations]
     photos_by_observation: dict[int, list[models.ObservationPhoto]] = {}
     if observation_ids:
@@ -451,6 +514,7 @@ def _phase_plan(db: Session, job: models.ExportJob) -> bool:
 
     sequence = 1
     for obs in observations:
+        observation_index = observation_index_by_id.get(obs.id, sequence)
         candidates = _photo_candidates_for_observation(
             obs,
             photos=photos_by_observation.get(obs.id, []),
@@ -462,7 +526,7 @@ def _phase_plan(db: Session, job: models.ExportJob) -> bool:
                     observation_id=obs.id,
                     sequence=sequence,
                     inat_observation_id=obs.inat_observation_id,
-                    item_title=_preferred_taxon_title(obs),
+                    item_title=_indexed_item_title(obs, observation_index),
                     observation_taxon_name=obs.observation_taxon_name or obs.scientific_name,
                     community_taxon_name=obs.community_taxon_name,
                     observed_at=obs.observed_at,
@@ -482,9 +546,9 @@ def _phase_plan(db: Session, job: models.ExportJob) -> bool:
             decision = evaluate_license(candidate["license_code"])
             item_status = "pending" if decision.allowed else "skipped"
             skip_reason = None if decision.allowed else f"license:{decision.reason}"
-            title = _preferred_taxon_title(obs)
+            title = _indexed_item_title(obs, observation_index)
             if export_config.include_all_photos and total_candidates > 1:
-                title = f"{title or f'Observation {obs.inat_observation_id}'} (photo {idx}/{total_candidates})"
+                title = _indexed_item_title(obs, observation_index, f"photo {idx}/{total_candidates}")
 
             db.add(
                 models.ExportItem(
@@ -666,6 +730,9 @@ def _phase_render(db: Session, job: models.ExportJob) -> bool:
         if pending_count > 0:
             job.phase = "download"
         else:
+            added = _add_placeholder_items_for_uncovered_observations(db, job)
+            if added > 0:
+                return True
             job.phase = "finalize"
         return True
 
@@ -698,6 +765,66 @@ def _phase_render(db: Session, job: models.ExportJob) -> bool:
     return True
 
 
+def _add_placeholder_items_for_uncovered_observations(db: Session, job: models.ExportJob) -> int:
+    observations = (
+        db.query(models.Observation)
+        .filter(models.Observation.list_id == job.list_id)
+        .all()
+    )
+    if not observations:
+        return 0
+
+    observations.sort(key=_observation_genus_sort_key)
+    observation_index_by_id = {obs.id: idx for idx, obs in enumerate(observations, start=1)}
+
+    covered_rows = (
+        db.query(models.ExportItem.observation_id)
+        .filter(
+            models.ExportItem.job_id == job.id,
+            models.ExportItem.observation_id.isnot(None),
+            models.ExportItem.status.in_(("pending", "downloaded", "rendered")),
+        )
+        .distinct()
+        .all()
+    )
+    covered_observation_ids = {row[0] for row in covered_rows if row[0] is not None}
+
+    max_sequence = (
+        db.query(func.max(models.ExportItem.sequence))
+        .filter(models.ExportItem.job_id == job.id)
+        .scalar()
+        or 0
+    )
+    added = 0
+
+    for obs in observations:
+        if obs.id in covered_observation_ids:
+            continue
+        max_sequence += 1
+        observation_index = observation_index_by_id.get(obs.id, max_sequence)
+        added += 1
+        db.add(
+            models.ExportItem(
+                job_id=job.id,
+                observation_id=obs.id,
+                sequence=max_sequence,
+                inat_observation_id=obs.inat_observation_id,
+                item_title=_indexed_item_title(obs, observation_index, "image unavailable in this build"),
+                observation_taxon_name=obs.observation_taxon_name or obs.scientific_name,
+                community_taxon_name=obs.community_taxon_name,
+                observed_at=obs.observed_at,
+                inat_url=obs.inat_url,
+                image_url=None,
+                image_license_code=None,
+                image_attribution=None,
+                status="downloaded",
+                skip_reason="placeholder:image_unavailable_in_build",
+            )
+        )
+
+    return added
+
+
 def _phase_finalize(db: Session, job: models.ExportJob) -> bool:
     parts = (
         db.query(models.ExportArtifact)
@@ -725,6 +852,82 @@ def _phase_finalize(db: Session, job: models.ExportJob) -> bool:
         .all()
     )
     observations.sort(key=_observation_genus_sort_key)
+    observation_index_by_id = {obs.id: idx for idx, obs in enumerate(observations, start=1)}
+
+    rendered_observation_rows = (
+        db.query(models.ExportItem.observation_id)
+        .filter(
+            models.ExportItem.job_id == job.id,
+            models.ExportItem.observation_id.isnot(None),
+            models.ExportItem.status == "rendered",
+        )
+        .distinct()
+        .all()
+    )
+    rendered_observation_ids = {row[0] for row in rendered_observation_rows if row[0] is not None}
+    missing_observations = [obs for obs in observations if obs.id not in rendered_observation_ids]
+    placeholder_pages_added = 0
+
+    if missing_observations:
+        next_part = (
+            (db.query(func.max(models.ExportArtifact.part_number))
+             .filter(models.ExportArtifact.job_id == job.id, models.ExportArtifact.kind == "part_pdf")
+             .scalar())
+            or 0
+        ) + 1
+        max_sequence = (
+            db.query(func.max(models.ExportItem.sequence))
+            .filter(models.ExportItem.job_id == job.id)
+            .scalar()
+            or 0
+        )
+        placeholder_items: list[models.ExportItem] = []
+        for obs in missing_observations:
+            max_sequence += 1
+            placeholder_pages_added += 1
+            observation_index = observation_index_by_id.get(obs.id, max_sequence)
+            item = models.ExportItem(
+                job_id=job.id,
+                observation_id=obs.id,
+                sequence=max_sequence,
+                inat_observation_id=obs.inat_observation_id,
+                item_title=_indexed_item_title(obs, observation_index, "image unavailable in this build"),
+                observation_taxon_name=obs.observation_taxon_name or obs.scientific_name,
+                community_taxon_name=obs.community_taxon_name,
+                observed_at=obs.observed_at,
+                inat_url=obs.inat_url,
+                image_url=None,
+                image_license_code=None,
+                image_attribution=None,
+                status="rendered",
+                part_number=next_part,
+                skip_reason="placeholder:image_unavailable_in_build",
+            )
+            db.add(item)
+            placeholder_items.append(item)
+        db.flush()
+
+        part_relpath = f"parts/part_{next_part:03d}.pdf"
+        part_abspath = _job_dir(job.id) / part_relpath
+        render_part_pdf(part_abspath, placeholder_items, _job_dir(job.id))
+        db.add(
+            models.ExportArtifact(
+                job_id=job.id,
+                kind="part_pdf",
+                part_number=next_part,
+                relative_path=_relative_to_storage(part_abspath),
+                size_bytes=part_abspath.stat().st_size,
+            )
+        )
+        db.flush()
+
+        parts = (
+            db.query(models.ExportArtifact)
+            .filter(models.ExportArtifact.job_id == job.id, models.ExportArtifact.kind == "part_pdf")
+            .order_by(models.ExportArtifact.part_number.asc())
+            .all()
+        )
+
     index_pdf_path = docs_dir / index_pdf_name
     render_observation_index_pdf(
         output_path=index_pdf_path,
@@ -800,6 +1003,11 @@ def _phase_finalize(db: Session, job: models.ExportJob) -> bool:
             "Export complete: county guide PDF, observations index PDF, and ZIP ready."
             if merged_created
             else "Export complete: observations index PDF and ZIP with split county guide parts ready."
+        )
+    if placeholder_pages_added > 0:
+        job.message = (
+            f"{job.message} Included {placeholder_pages_added} observation placeholder page(s) "
+            "where images were unavailable in this build."
         )
     publish_warning = publish_job_artifacts(job, artifacts, _storage_root())
     if publish_warning:

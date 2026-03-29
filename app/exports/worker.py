@@ -2,13 +2,22 @@ from __future__ import annotations
 
 import argparse
 
+from app.core.config import settings
 from app.db import SessionLocal
-from app.exports.service import cleanup_expired_exports, process_next_job
+from app.exports.service import (
+    cleanup_expired_exports,
+    enqueue_due_public_county_refresh_jobs,
+    process_next_job,
+)
 
 
 def run_once() -> int:
     db = SessionLocal()
     try:
+        enqueue_due_public_county_refresh_jobs(
+            db,
+            limit=max(1, settings.public_auto_refresh_enqueue_per_run),
+        )
         job = process_next_job(db)
         if not job:
             return 0

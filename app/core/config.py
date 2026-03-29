@@ -78,6 +78,7 @@ class Settings(BaseSettings):
     )
     export_public_downloads_enabled: bool = Field(default=False, alias="EXPORT_PUBLIC_DOWNLOADS_ENABLED")
     public_refresh_interval_days: int = Field(default=7, alias="PUBLIC_REFRESH_INTERVAL_DAYS")
+    public_auto_refresh_enqueue_per_run: int = Field(default=2, alias="PUBLIC_AUTO_REFRESH_ENQUEUE_PER_RUN")
     public_state_codes: str = Field(default="AL", alias="PUBLIC_STATE_CODES")
     enable_data_catalog: bool = Field(default=True, alias="ENABLE_DATA_CATALOG")
     catalog_page_size: int = Field(default=50, alias="CATALOG_PAGE_SIZE")

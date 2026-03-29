@@ -2,6 +2,17 @@
 
 Purpose: persistent decision/history log for future chat sessions and implementation continuity.
 
+## Critical Inclusion/Parity Invariants (Must Read Before Changes)
+- Every county/public output must use this inclusion rule:
+  - observation is inside the county/state scope
+  - observation belongs to one of configured county project IDs (currently four AMS sequencing projects)
+  - observation has `DNA Barcode ITS`
+- The county guide output must remain observation-complete relative to the observation index/list:
+  - if an observation is in the list/index, it must appear in county output
+  - if image export fails/unavailable, include a placeholder page with a clear explanation and the iNaturalist URL
+- County guide observation numbering must align with index numbering (`1..N` by the same sorted observation list).
+- Before any implementation/deploy change, re-check this file and verify changes preserve these invariants.
+
 ## 2026-03-07
 - Confirmed roadmap direction:
   - continue current plan now
@@ -158,6 +169,18 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - County list sync now queries all projects in `INAT_COUNTY_PROJECT_IDS` (default `124358,184305,132913,251751`) instead of relying on a single project ID.
   - Observations are de-duplicated by iNaturalist `observation.id` across those project queries before caching/export.
   - `DNA Barcode ITS` remains required; no API/media throttle settings changed.
+
+## 2026-03-29
+- Validation incident and rule hardening:
+  - User reported apparent mismatch between Baldwin observation index and county guide pages.
+  - Confirmed need for strict parity guarantees independent of image download outcomes.
+- Required behavior clarified and adopted:
+  - county guide must include every listed observation even when all images fail/unavailable
+  - county guide pages must carry index-aligned observation numbering for easier verification
+  - image-missing pages must explain that iNaturalist may still contain images but this build could not download/render them
+- Operational requirement added:
+  - overdue public county refreshes must be auto-queued by worker loop (within existing throttle/queue controls)
+  - stale "Refresh due" rows should no longer depend solely on manual admin enqueue actions
 
 ## Routine Update Rule
 On each major decision or architecture change:

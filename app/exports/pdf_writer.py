@@ -173,15 +173,25 @@ def render_part_pdf(
                 except Exception:
                     _draw_wrapped(
                         c,
-                        "Image could not be rendered. View source link above.",
+                        "Image is present on iNaturalist, but it could not be rendered in this build. "
+                        "Use the iNaturalist link above.",
                         MARGIN,
                         IMAGE_TOP - 16,
                         PAGE_WIDTH - (MARGIN * 2),
                     )
         else:
+            if (item.skip_reason or "").startswith("placeholder:"):
+                image_note = (
+                    "Image is present on iNaturalist, but it could not be downloaded in this build. "
+                    "Use the iNaturalist link above."
+                )
+            elif item.skip_reason == "no_image_url":
+                image_note = "No image URL was available in this build. Use the iNaturalist link above."
+            else:
+                image_note = "Image unavailable in this build. Use the iNaturalist link above."
             _draw_wrapped(
                 c,
-                "No local image available. View source link above.",
+                image_note,
                 MARGIN,
                 IMAGE_TOP - 16,
                 PAGE_WIDTH - (MARGIN * 2),
