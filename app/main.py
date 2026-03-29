@@ -699,7 +699,7 @@ def catalog_page(
     query: str = Query(default=""),
     date_from: str = Query(default=""),
     date_to: str = Query(default=""),
-    sort: str = Query(default="observed_desc"),
+    sort: str = Query(default="taxon_asc"),
     db: Session = Depends(get_db),
 ):
     ensure_data_catalog_enabled()
