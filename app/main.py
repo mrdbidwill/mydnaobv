@@ -49,6 +49,7 @@ PUBLIC_COUNTY_PAGE_SIZE = 24
 PUBLIC_REFRESH_INTERVAL_DAYS = max(1, settings.public_refresh_interval_days)
 DEFAULT_PROJECT_BUILD_IDS = "124358\n184305\n132913\n251751"
 CATALOG_PAGE_SIZE = max(10, min(settings.catalog_page_size, 200))
+CATALOG_ALPHA_LINK_SCAN_LIMIT = 5000
 GENUS_QUALIFIER_TOKENS = {
     "cf",
     "aff",
@@ -719,6 +720,9 @@ def catalog_page(
         to_date,
     )
 
+    if dna_only:
+        filtered_query = filtered_query.filter(models.CatalogObservation.has_dna_its.is_(True))
+
     base_query = filtered_query
 
     if normalized_sort == "observed_asc":
@@ -767,54 +771,34 @@ def catalog_page(
             models.CatalogObservation.inat_observation_id.desc(),
         )
 
+    total = filtered_query.count()
+    pages = max(1, (total + CATALOG_PAGE_SIZE - 1) // CATALOG_PAGE_SIZE)
+    current_page = min(page, pages)
+    rows = (
+        base_query
+        .offset((current_page - 1) * CATALOG_PAGE_SIZE)
+        .limit(CATALOG_PAGE_SIZE)
+        .all()
+    )
+
+    alpha_column = None
+    if normalized_sort == "taxon_asc":
+        alpha_column = models.CatalogObservation.taxon_name
+    elif normalized_sort == "community_taxon_asc":
+        alpha_column = models.CatalogObservation.community_taxon_name
+    elif normalized_sort == "observed_taxon_asc":
+        alpha_column = models.CatalogObservation.species_guess
+    elif normalized_sort == "genus_asc":
+        alpha_column = models.CatalogObservation.genus_key
+    elif normalized_sort == "place_asc":
+        alpha_column = models.CatalogObservation.place_guess
+
     alpha_page_links: list[dict[str, object]] = []
-    if dna_only:
-        ordered_rows = base_query.all()
-        filtered_rows = [row for row in ordered_rows if _payload_has_dna_its(row.raw_payload)]
-        total = len(filtered_rows)
-        pages = max(1, (total + CATALOG_PAGE_SIZE - 1) // CATALOG_PAGE_SIZE)
-        current_page = min(page, pages)
-        start = (current_page - 1) * CATALOG_PAGE_SIZE
-        rows = filtered_rows[start : start + CATALOG_PAGE_SIZE]
-
-        alpha_enabled = normalized_sort in {
-            "taxon_asc",
-            "community_taxon_asc",
-            "observed_taxon_asc",
-            "genus_asc",
-            "place_asc",
-        }
-        if alpha_enabled:
-            letter_to_page: dict[str, int] = {}
-            for idx, row in enumerate(filtered_rows, start=1):
-                letter = _alpha_initial(_catalog_alpha_value(row, normalized_sort))
-                if letter not in letter_to_page:
-                    letter_to_page[letter] = ((idx - 1) // CATALOG_PAGE_SIZE) + 1
-
-            for letter in list("ABCDEFGHIJKLMNOPQRSTUVWXYZ") + ["#"]:
-                target_page = letter_to_page.get(letter)
-                alpha_page_links.append(
-                    {
-                        "letter": letter,
-                        "page": target_page,
-                        "is_current": target_page is not None and int(target_page) == int(current_page),
-                    }
-                )
-    else:
-        total = filtered_query.count()
-        alpha_column = None
-        if normalized_sort == "taxon_asc":
-            alpha_column = models.CatalogObservation.taxon_name
-        elif normalized_sort == "community_taxon_asc":
-            alpha_column = models.CatalogObservation.community_taxon_name
-        elif normalized_sort == "observed_taxon_asc":
-            alpha_column = models.CatalogObservation.species_guess
-        elif normalized_sort == "genus_asc":
-            alpha_column = models.CatalogObservation.genus_key
-        elif normalized_sort == "place_asc":
-            alpha_column = models.CatalogObservation.place_guess
-
-        if alpha_column is not None:
+    alpha_links_skipped = False
+    if alpha_column is not None:
+        if total > CATALOG_ALPHA_LINK_SCAN_LIMIT:
+            alpha_links_skipped = True
+        else:
             ordered_values = base_query.with_entities(alpha_column).all()
             letter_to_page: dict[str, int] = {}
             for idx, (value,) in enumerate(ordered_values, start=1):
@@ -828,22 +812,9 @@ def catalog_page(
                     {
                         "letter": letter,
                         "page": target_page,
-                        "is_current": target_page is not None and int(target_page) == int(page),
+                        "is_current": target_page is not None and int(target_page) == int(current_page),
                     }
                 )
-
-        pages = max(1, (total + CATALOG_PAGE_SIZE - 1) // CATALOG_PAGE_SIZE)
-        current_page = min(page, pages)
-        if alpha_page_links:
-            for item in alpha_page_links:
-                target_page = item.get("page")
-                item["is_current"] = target_page is not None and int(target_page) == int(current_page)
-        rows = (
-            base_query
-            .offset((current_page - 1) * CATALOG_PAGE_SIZE)
-            .limit(CATALOG_PAGE_SIZE)
-            .all()
-        )
 
     sources = (
         db.query(models.CatalogSource)
@@ -887,6 +858,8 @@ def catalog_page(
             "date_error": date_error,
             "memberships_by_obs": memberships_by_obs,
             "alpha_page_links": alpha_page_links,
+            "alpha_links_skipped": alpha_links_skipped,
+            "alpha_links_scan_limit": CATALOG_ALPHA_LINK_SCAN_LIMIT,
         },
         show_ads=True,
     )
@@ -918,6 +891,9 @@ def catalog_genera_count(
         to_date,
     )
 
+    if dna_only:
+        filtered_query = filtered_query.filter(models.CatalogObservation.has_dna_its.is_(True))
+
     rows = (
         filtered_query
         .with_entities(
@@ -925,7 +901,6 @@ def catalog_genera_count(
             models.CatalogObservation.species_guess,
             models.CatalogObservation.community_taxon_name,
             models.CatalogObservation.genus_key,
-            models.CatalogObservation.raw_payload,
         )
         .all()
     )
@@ -933,9 +908,7 @@ def catalog_genera_count(
     counts_by_genus: dict[str, int] = {}
     labels_by_genus: dict[str, str] = {}
     total_observations = 0
-    for taxon_name, species_guess, community_taxon_name, genus_key, raw_payload in rows:
-        if dna_only and not _payload_has_dna_its(raw_payload):
-            continue
+    for taxon_name, species_guess, community_taxon_name, genus_key in rows:
         total_observations += 1
         label = _catalog_genus_label(taxon_name, species_guess, community_taxon_name, genus_key)
         if not label:

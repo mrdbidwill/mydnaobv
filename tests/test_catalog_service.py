@@ -41,6 +41,7 @@ def test_flatten_observation_payload_extracts_key_fields():
     assert out["user_login"] == "tester"
     assert out["photo_count"] == 1
     assert out["primary_photo_url"] == "https://static.inaturalist.org/photos/1/medium.jpg"
+    assert out["has_dna_its"] is False
 
 
 def test_flatten_observation_payload_fallbacks_to_species_guess_for_genus():
@@ -52,6 +53,18 @@ def test_flatten_observation_payload_fallbacks_to_species_guess_for_genus():
     out = flatten_observation_payload(obs)
     assert out is not None
     assert out["genus_key"] == "agaricus"
+
+
+def test_flatten_observation_payload_marks_dna_its_when_field_present(monkeypatch):
+    monkeypatch.setattr(catalog_service.settings, "inat_dna_field_id", "2330")
+    obs = {
+        "id": 789,
+        "ofvs": [{"observation_field_id": 2330, "value": "ITS-789"}],
+        "photos": [],
+    }
+    out = flatten_observation_payload(obs)
+    assert out is not None
+    assert out["has_dna_its"] is True
 
 
 def test_sync_catalog_source_persists_links_before_orphan_cleanup(monkeypatch):

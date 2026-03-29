@@ -82,6 +82,30 @@ def _extract_genus_key(*candidates: Optional[str]) -> Optional[str]:
     return None
 
 
+def _configured_dna_field_id() -> str:
+    candidate = str(settings.inat_dna_field_id or "").strip()
+    return candidate or "2330"
+
+
+def _observation_has_dna_its(obs: dict[str, Any]) -> bool:
+    field_id = _configured_dna_field_id()
+    for key in ("ofvs", "observation_field_values"):
+        values = obs.get(key)
+        if not isinstance(values, list):
+            continue
+        for item in values:
+            if not isinstance(item, dict):
+                continue
+            obs_field = item.get("observation_field")
+            obs_field_id = obs_field.get("id") if isinstance(obs_field, dict) else None
+            observed_field_id = item.get("observation_field_id") or item.get("field_id") or obs_field_id
+            if str(observed_field_id) != field_id:
+                continue
+            if str(item.get("value") or "").strip():
+                return True
+    return False
+
+
 def flatten_observation_payload(obs: dict[str, Any]) -> Optional[dict[str, Any]]:
     inat_id = obs.get("id")
     if not isinstance(inat_id, int):
@@ -141,6 +165,7 @@ def flatten_observation_payload(obs: dict[str, Any]) -> Optional[dict[str, Any]]
         "primary_photo_license_code": str(first_photo.get("license_code") or "").strip() or None,
         "primary_photo_attribution": str(first_photo.get("attribution") or "").strip() or None,
         "photo_count": len([p for p in photos if isinstance(p, dict)]),
+        "has_dna_its": _observation_has_dna_its(obs),
         "raw_payload": json.dumps(obs, ensure_ascii=False),
     }
 

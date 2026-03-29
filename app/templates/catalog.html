@@ -72,6 +72,9 @@
       </div>
       <p class="muted">Duplicates have been removed by iNaturalist <code>observation.id</code>.</p>
       <p class="muted">Filter active: DNA Barcode ITS only.</p>
+      {% if alpha_links_skipped %}
+        <p class="muted">Alphabetical jump links are hidden for large result sets (more than {{ alpha_links_scan_limit }} observations) to keep page loading responsive.</p>
+      {% endif %}
 
       {% if rows and rows|length > 0 %}
         {% if alpha_page_links and alpha_page_links|length > 0 %}
