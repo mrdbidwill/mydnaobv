@@ -198,6 +198,11 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - new cache controls: `EXPORT_IMAGE_CACHE_*` (enable, TTL days, retention days, prune interval, max prune files/run)
 - Public auto-refresh queue scope expanded:
   - due-job enqueue now covers both public `county` and public `project` products (force-sync rebuild path unchanged)
+- Worker concurrency/lock hardening:
+  - pick loop now only claims `queued` / `waiting_quota` jobs; `running` jobs are not pickable by parallel workers
+  - stale `running` jobs are auto-requeued after timeout-based heartbeat cutoff
+  - worker now marks claimed jobs `running` immediately and returns unfinished work to `queued` for the next cycle
+  - process exception path now does session rollback before fail-mark commit (prevents `PendingRollbackError` cascades)
 
 ## Routine Update Rule
 On each major decision or architecture change:

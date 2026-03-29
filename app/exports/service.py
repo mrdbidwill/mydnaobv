@@ -27,6 +27,7 @@ from app.exports.policy import evaluate_license, normalize_license_code
 from app.services.list_sync import sync_list_observations
 
 ACTIVE_JOB_STATUSES = ("queued", "running", "waiting_quota")
+PICKABLE_JOB_STATUSES = ("queued", "waiting_quota")
 FINISHED_JOB_STATUSES = ("ready", "partial_ready", "failed", "canceled")
 AUTO_MAINTENANCE_CLEANUP_INTERVAL_HOURS = 24
 GENUS_QUALIFIER_TOKENS = {
@@ -364,10 +365,13 @@ def process_next_job(db: Session) -> models.ExportJob | None:
     if not job:
         return None
 
-    if job.status in ("queued", "waiting_quota"):
+    if job.status in PICKABLE_JOB_STATUSES:
         job.status = "running"
     if not job.started_at:
         job.started_at = now
+    job.next_run_at = None
+    job.updated_at = utc_now_naive()
+    db.commit()
 
     deadline = time.monotonic() + max(5, export_config.run_timeout_seconds)
 
@@ -385,16 +389,27 @@ def process_next_job(db: Session) -> models.ExportJob | None:
 
         if job.status not in FINISHED_JOB_STATUSES:
             _schedule_next_run(job, utc_now_naive())
+            if job.status == "running":
+                # Release claim so the next worker cycle can continue the job.
+                job.status = "queued"
             job.updated_at = utc_now_naive()
             db.commit()
 
         return job
     except Exception as exc:
-        job.status = "failed"
-        job.message = f"worker_error: {exc}"
-        job.finished_at = utc_now_naive()
-        job.updated_at = utc_now_naive()
-        db.commit()
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        failed_job = db.query(models.ExportJob).filter(models.ExportJob.id == job.id).first()
+        if failed_job:
+            failed_job.status = "failed"
+            failed_job.phase = "done"
+            failed_job.message = f"worker_error: {exc}"
+            failed_job.finished_at = utc_now_naive()
+            failed_job.updated_at = utc_now_naive()
+            db.commit()
+            return failed_job
         return job
 
 
@@ -453,6 +468,8 @@ def run_scheduled_maintenance(db: Session) -> dict[str, int]:
 
 
 def _pick_next_job(db: Session, now: datetime) -> models.ExportJob | None:
+    _requeue_stale_running_jobs(db, now)
+
     bucket_rank = case(
         (models.ExportJob.size_bucket == "XS", 0),
         (models.ExportJob.size_bucket == "S", 1),
@@ -464,10 +481,11 @@ def _pick_next_job(db: Session, now: datetime) -> models.ExportJob | None:
     candidates = (
         db.query(models.ExportJob)
         .filter(
-            models.ExportJob.status.in_(ACTIVE_JOB_STATUSES),
+            models.ExportJob.status.in_(PICKABLE_JOB_STATUSES),
             (models.ExportJob.next_run_at.is_(None) | (models.ExportJob.next_run_at <= now)),
         )
         .order_by(bucket_rank.asc(), models.ExportJob.created_at.asc())
+        .with_for_update(skip_locked=True)
         .limit(25)
         .all()
     )
@@ -482,6 +500,35 @@ def _pick_next_job(db: Session, now: datetime) -> models.ExportJob | None:
     if candidates:
         db.commit()
     return None
+
+
+def _requeue_stale_running_jobs(db: Session, now: datetime) -> int:
+    """
+    Recover jobs stuck in `running` due to worker interruption.
+    """
+    stale_after_seconds = max(120, export_config.run_timeout_seconds * 3)
+    stale_cutoff = now - timedelta(seconds=stale_after_seconds)
+    stale_jobs = (
+        db.query(models.ExportJob)
+        .filter(
+            models.ExportJob.status == "running",
+            models.ExportJob.updated_at.isnot(None),
+            models.ExportJob.updated_at <= stale_cutoff,
+        )
+        .all()
+    )
+    if not stale_jobs:
+        return 0
+    for job in stale_jobs:
+        job.status = "queued"
+        job.next_run_at = now
+        job.updated_at = utc_now_naive()
+        message = (job.message or "").strip()
+        recovery_note = "Recovered stale running job lock."
+        if recovery_note not in message:
+            job.message = f"{message} {recovery_note}".strip()
+    db.commit()
+    return len(stale_jobs)
 
 
 def _process_phase(db: Session, job: models.ExportJob, deadline: float) -> bool:
