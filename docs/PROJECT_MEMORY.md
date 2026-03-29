@@ -191,6 +191,13 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - copied into export items
   - rendered on county guide PDFs and observation index PDFs with fallback `No set`
   - exposed in admin list observation table for parity checks
+- Added export image cache hardening and scheduled maintenance:
+  - county/project image download phase now reuses cached media when available, with periodic TTL revalidation from source
+  - when refresh fetch fails or quotas are hit, stale cached image can be used to keep observation pages renderable
+  - worker `--once` now runs interval-based maintenance: expired export cleanup + image cache prune
+  - new cache controls: `EXPORT_IMAGE_CACHE_*` (enable, TTL days, retention days, prune interval, max prune files/run)
+- Public auto-refresh queue scope expanded:
+  - due-job enqueue now covers both public `county` and public `project` products (force-sync rebuild path unchanged)
 
 ## Routine Update Rule
 On each major decision or architecture change:

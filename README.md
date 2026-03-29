@@ -116,7 +116,9 @@ This project now supports a modular, queue-based PDF export pipeline for offline
 - Heavy export controls live on authenticated admin page: `/admin`.
 - Optional publish mode copies finished files to external/static storage and exposes a public member page: `/downloads`.
 - Optional mode: include multiple photos per observation with conservative KVM1 caps.
+- Image downloads are cache-first with periodic revalidation/pruning controls so repeated rebuilds reuse existing media whenever possible.
 - County jobs with zero exportable image pages now complete with a placeholder county guide PDF instead of failing.
+- Worker auto-queue refresh now covers public county and public project lists.
 - Create/edit flow now includes a fast pre-check estimate, and list/export pages show synced-data ETA ranges before queueing.
 - Export access supports:
   - `EXPORT_OPERATORS_JSON` (preferred, multiple operator accounts), or
@@ -136,6 +138,11 @@ EXPORT_INCLUDE_ALL_PHOTOS=false
 EXPORT_MAX_PHOTOS_PER_OBSERVATION=1
 EXPORT_SORT_TAXON_SOURCE=observation
 EXPORT_RETENTION_HOURS=48
+EXPORT_IMAGE_CACHE_ENABLED=true
+EXPORT_IMAGE_CACHE_TTL_DAYS=14
+EXPORT_IMAGE_CACHE_RETENTION_DAYS=45
+EXPORT_IMAGE_CACHE_PRUNE_INTERVAL_HOURS=24
+EXPORT_IMAGE_CACHE_MAX_PRUNE_FILES=500
 ```
 
 Example published member downloads mode:
@@ -222,6 +229,9 @@ Cleanup expired artifacts:
 ```bash
 python3 -m app.exports.worker --cleanup
 ```
+
+Note:
+- `--once` now also performs scheduled maintenance (interval-based export cleanup + image-cache pruning) and auto-queues due public county/project refresh jobs.
 
 Dry-run orphan export/publish directory cleanup (folders left behind with no DB rows):
 

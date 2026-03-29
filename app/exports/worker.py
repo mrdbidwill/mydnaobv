@@ -6,15 +6,18 @@ from app.core.config import settings
 from app.db import SessionLocal
 from app.exports.service import (
     cleanup_expired_exports,
-    enqueue_due_public_county_refresh_jobs,
+    enqueue_due_public_refresh_jobs,
+    prune_image_cache,
     process_next_job,
+    run_scheduled_maintenance,
 )
 
 
 def run_once() -> int:
     db = SessionLocal()
     try:
-        enqueue_due_public_county_refresh_jobs(
+        run_scheduled_maintenance(db)
+        enqueue_due_public_refresh_jobs(
             db,
             limit=max(1, settings.public_auto_refresh_enqueue_per_run),
         )
@@ -30,6 +33,7 @@ def run_cleanup() -> int:
     db = SessionLocal()
     try:
         cleanup_expired_exports(db)
+        prune_image_cache()
         return 0
     finally:
         db.close()

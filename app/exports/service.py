@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -27,6 +28,7 @@ from app.services.list_sync import sync_list_observations
 
 ACTIVE_JOB_STATUSES = ("queued", "running", "waiting_quota")
 FINISHED_JOB_STATUSES = ("ready", "partial_ready", "failed", "canceled")
+AUTO_MAINTENANCE_CLEANUP_INTERVAL_HOURS = 24
 GENUS_QUALIFIER_TOKENS = {
     "cf",
     "aff",
@@ -267,9 +269,9 @@ def enqueue_export_job_for_list(
     return job, True, f"Queued export job #{job.id}."
 
 
-def enqueue_due_public_county_refresh_jobs(db: Session, limit: int = 2) -> int:
+def enqueue_due_public_refresh_jobs(db: Session, limit: int = 2) -> int:
     """
-    Queue stale public county lists for force-sync + rebuild.
+    Queue stale public county/project lists for force-sync + rebuild.
     Runs in the worker loop to keep public refresh targets moving.
     """
     max_to_queue = max(1, min(limit, 25))
@@ -287,7 +289,7 @@ def enqueue_due_public_county_refresh_jobs(db: Session, limit: int = 2) -> int:
     due_lists = (
         db.query(models.ObservationList)
         .filter(
-            models.ObservationList.product_type == "county",
+            models.ObservationList.product_type.in_(("county", "project")),
             models.ObservationList.is_public_download.is_(True),
             or_(
                 models.ObservationList.last_sync_at.is_(None),
@@ -315,6 +317,11 @@ def enqueue_due_public_county_refresh_jobs(db: Session, limit: int = 2) -> int:
         if queued >= max_to_queue:
             break
     return queued
+
+
+def enqueue_due_public_county_refresh_jobs(db: Session, limit: int = 2) -> int:
+    # Backward-compatible name kept for older call sites/tests.
+    return enqueue_due_public_refresh_jobs(db, limit=limit)
 
 
 def list_jobs_for_list(db: Session, list_id: int, limit: int = 10) -> list[models.ExportJob]:
@@ -410,6 +417,39 @@ def cleanup_expired_exports(db: Session) -> int:
     if removed:
         db.commit()
     return removed
+
+
+def run_scheduled_maintenance(db: Session) -> dict[str, int]:
+    """
+    Lightweight recurring maintenance intended for frequent worker runs.
+    Uses a state file to avoid heavy work on every pass.
+    """
+    now = utc_now_naive()
+    state = _load_auto_maintenance_state()
+    removed_jobs = 0
+    pruned_cache_files = 0
+
+    cleanup_cutoff = now - timedelta(hours=AUTO_MAINTENANCE_CLEANUP_INTERVAL_HOURS)
+    last_cleanup = _parse_naive_utc(state.get("last_cleanup_at"))
+    if last_cleanup is None or last_cleanup <= cleanup_cutoff:
+        removed_jobs = cleanup_expired_exports(db)
+        state["last_cleanup_at"] = now.isoformat()
+
+    prune_interval = max(1, export_config.image_cache_prune_interval_hours)
+    prune_cutoff = now - timedelta(hours=prune_interval)
+    last_prune = _parse_naive_utc(state.get("last_image_cache_prune_at"))
+    if last_prune is None or last_prune <= prune_cutoff:
+        pruned_cache_files = prune_image_cache(
+            now=now,
+            max_files=max(1, export_config.image_cache_max_prune_files),
+        )
+        state["last_image_cache_prune_at"] = now.isoformat()
+
+    _save_auto_maintenance_state(state)
+    return {
+        "removed_jobs": removed_jobs,
+        "pruned_cache_files": pruned_cache_files,
+    }
 
 
 def _pick_next_job(db: Session, now: datetime) -> models.ExportJob | None:
@@ -632,7 +672,30 @@ def _phase_download(db: Session, job: models.ExportJob, deadline: float) -> bool
             if time.monotonic() >= deadline:
                 break
 
+            cached_path, cache_is_fresh = _lookup_image_cache_path(item.image_url or "", now)
+            if cached_path and cache_is_fresh:
+                try:
+                    item.local_image_relpath = _materialize_item_image_from_cache(job.id, item.id, cached_path)
+                    item.status = "downloaded"
+                    item.error_message = None
+                    item.updated_at = utc_now_naive()
+                    progressed = True
+                    continue
+                except Exception:
+                    # Fall through to a live fetch when cache copy fails.
+                    pass
+
             if quota["day_requests"] >= export_config.max_api_requests_per_day:
+                if cached_path:
+                    try:
+                        item.local_image_relpath = _materialize_item_image_from_cache(job.id, item.id, cached_path)
+                        item.status = "downloaded"
+                        item.error_message = "used_cached_image_due_to_api_request_quota"
+                        item.updated_at = utc_now_naive()
+                        progressed = True
+                        continue
+                    except Exception:
+                        pass
                 job.status = "waiting_quota"
                 job.message = "Paused: reached daily API request budget."
                 job.next_run_at = now + timedelta(hours=1)
@@ -640,6 +703,16 @@ def _phase_download(db: Session, job: models.ExportJob, deadline: float) -> bool
                 return False
 
             if quota["day_bytes"] >= export_config.max_media_mb_per_day * 1024 * 1024:
+                if cached_path:
+                    try:
+                        item.local_image_relpath = _materialize_item_image_from_cache(job.id, item.id, cached_path)
+                        item.status = "downloaded"
+                        item.error_message = "used_cached_image_due_to_daily_media_quota"
+                        item.updated_at = utc_now_naive()
+                        progressed = True
+                        continue
+                    except Exception:
+                        pass
                 job.status = "waiting_quota"
                 job.message = "Paused: reached daily media download budget."
                 job.next_run_at = now + timedelta(hours=1)
@@ -647,6 +720,16 @@ def _phase_download(db: Session, job: models.ExportJob, deadline: float) -> bool
                 return False
 
             if quota["hour_bytes"] >= export_config.max_media_mb_per_hour * 1024 * 1024:
+                if cached_path:
+                    try:
+                        item.local_image_relpath = _materialize_item_image_from_cache(job.id, item.id, cached_path)
+                        item.status = "downloaded"
+                        item.error_message = "used_cached_image_due_to_hourly_media_quota"
+                        item.updated_at = utc_now_naive()
+                        progressed = True
+                        continue
+                    except Exception:
+                        pass
                 job.status = "waiting_quota"
                 job.message = "Paused: reached hourly media download budget."
                 job.next_run_at = now + timedelta(hours=1)
@@ -654,6 +737,16 @@ def _phase_download(db: Session, job: models.ExportJob, deadline: float) -> bool
                 return False
 
             if run_bytes >= run_byte_budget:
+                if cached_path:
+                    try:
+                        item.local_image_relpath = _materialize_item_image_from_cache(job.id, item.id, cached_path)
+                        item.status = "downloaded"
+                        item.error_message = "used_cached_image_due_to_run_byte_budget"
+                        item.updated_at = utc_now_naive()
+                        progressed = True
+                        continue
+                    except Exception:
+                        pass
                 break
 
             item.attempts += 1
@@ -672,10 +765,18 @@ def _phase_download(db: Session, job: models.ExportJob, deadline: float) -> bool
                 if run_bytes + payload_size > run_byte_budget:
                     break
 
-                ext = _extension_for_content_type(content_type)
-                relative_path = f"images/item_{item.id}{ext}"
-                destination = _job_dir(job.id) / relative_path
-                destination.write_bytes(payload)
+                relative_path = _materialize_item_image_from_payload(
+                    job.id,
+                    item.id,
+                    payload,
+                    content_type,
+                )
+                _store_image_cache_entry(
+                    image_url=item.image_url or "",
+                    payload=payload,
+                    content_type=content_type,
+                    now=now,
+                )
 
                 item.local_image_relpath = relative_path
                 item.status = "downloaded"
@@ -688,6 +789,17 @@ def _phase_download(db: Session, job: models.ExportJob, deadline: float) -> bool
                 job.bytes_downloaded += payload_size
                 progressed = True
             except Exception as exc:
+                if cached_path:
+                    try:
+                        item.local_image_relpath = _materialize_item_image_from_cache(job.id, item.id, cached_path)
+                        item.status = "downloaded"
+                        item.error_message = f"refresh_failed_used_cached_image: {exc}"
+                        item.updated_at = utc_now_naive()
+                        progressed = True
+                        continue
+                    except Exception:
+                        pass
+
                 item.status = "failed" if item.attempts >= 3 else "pending"
                 item.error_message = str(exc)
                 item.updated_at = utc_now_naive()
@@ -1120,6 +1232,268 @@ def _storage_root() -> Path:
     root = Path(export_config.storage_dir)
     root.mkdir(parents=True, exist_ok=True)
     return root
+
+
+def _parse_naive_utc(raw: object) -> datetime | None:
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if parsed.tzinfo is not None:
+        return parsed.astimezone(UTC).replace(tzinfo=None)
+    return parsed
+
+
+def _auto_maintenance_state_path() -> Path:
+    return _storage_root() / "maintenance_state.json"
+
+
+def _load_auto_maintenance_state() -> dict[str, str]:
+    path = _auto_maintenance_state_path()
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, str] = {}
+    for key in ("last_cleanup_at", "last_image_cache_prune_at"):
+        value = raw.get(key)
+        if isinstance(value, str) and value.strip():
+            out[key] = value
+    return out
+
+
+def _save_auto_maintenance_state(payload: dict[str, str]) -> None:
+    path = _auto_maintenance_state_path()
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _image_cache_enabled() -> bool:
+    return bool(export_config.image_cache_enabled)
+
+
+def _image_cache_root() -> Path:
+    root = _storage_root() / "image_cache"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _image_cache_key(image_url: str) -> str:
+    cleaned = str(image_url or "").strip()
+    return hashlib.sha256(cleaned.encode("utf-8")).hexdigest()
+
+
+def _image_cache_meta_path(image_url: str) -> Path:
+    key = _image_cache_key(image_url)
+    return _image_cache_root() / key[:2] / f"{key}.json"
+
+
+def _image_cache_payload_path_from_meta(meta_path: Path, meta: dict[str, object]) -> Path | None:
+    key = meta_path.stem
+    extension = str(meta.get("extension") or "").strip().lower()
+    if extension:
+        if not extension.startswith("."):
+            extension = f".{extension}"
+        candidate = meta_path.parent / f"{key}{extension}"
+        if candidate.exists() and candidate.is_file():
+            return candidate
+    for candidate in meta_path.parent.glob(f"{key}.*"):
+        if candidate.suffix.lower() == ".json":
+            continue
+        if candidate.exists() and candidate.is_file():
+            return candidate
+    return None
+
+
+def _write_image_cache_meta(meta_path: Path, payload: dict[str, object]) -> None:
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
+    meta_path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _lookup_image_cache_path(image_url: str, now: datetime) -> tuple[Path | None, bool]:
+    if not _image_cache_enabled():
+        return None, False
+    cleaned_url = str(image_url or "").strip()
+    if not cleaned_url:
+        return None, False
+
+    meta_path = _image_cache_meta_path(cleaned_url)
+    if not meta_path.exists() or not meta_path.is_file():
+        return None, False
+
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    except Exception:
+        return None, False
+    if not isinstance(meta, dict):
+        return None, False
+
+    payload_path = _image_cache_payload_path_from_meta(meta_path, meta)
+    if payload_path is None:
+        return None, False
+
+    payload_size = payload_path.stat().st_size
+    if payload_size <= 0:
+        return None, False
+    try:
+        expected_size = int(meta.get("size_bytes") or 0)
+    except Exception:
+        expected_size = 0
+    if expected_size > 0 and expected_size != payload_size:
+        return None, False
+
+    last_verified = (
+        _parse_naive_utc(meta.get("last_verified_at"))
+        or _parse_naive_utc(meta.get("created_at"))
+        or _parse_naive_utc(meta.get("last_accessed_at"))
+    )
+    freshness_cutoff = now - timedelta(days=max(1, export_config.image_cache_ttl_days))
+    is_fresh = bool(last_verified and last_verified >= freshness_cutoff)
+
+    meta["last_accessed_at"] = now.isoformat()
+    _write_image_cache_meta(meta_path, meta)
+    return payload_path, is_fresh
+
+
+def _store_image_cache_entry(
+    *,
+    image_url: str,
+    payload: bytes,
+    content_type: str,
+    now: datetime,
+) -> Path | None:
+    if not _image_cache_enabled():
+        return None
+    cleaned_url = str(image_url or "").strip()
+    if not cleaned_url:
+        return None
+    if not payload:
+        return None
+
+    meta_path = _image_cache_meta_path(cleaned_url)
+    cache_dir = meta_path.parent
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    key = meta_path.stem
+    ext = _extension_for_content_type(content_type)
+    payload_path = cache_dir / f"{key}{ext}"
+    payload_path.write_bytes(payload)
+
+    # Keep exactly one payload variant per key.
+    for sibling in cache_dir.glob(f"{key}.*"):
+        if sibling == payload_path or sibling == meta_path:
+            continue
+        if sibling.is_file():
+            sibling.unlink(missing_ok=True)
+
+    meta = {
+        "image_url": cleaned_url,
+        "content_type": content_type,
+        "extension": ext,
+        "size_bytes": len(payload),
+        "created_at": now.isoformat(),
+        "last_verified_at": now.isoformat(),
+        "last_accessed_at": now.isoformat(),
+    }
+    _write_image_cache_meta(meta_path, meta)
+    return payload_path
+
+
+def _materialize_item_image_from_cache(job_id: int, item_id: int, cache_path: Path) -> str:
+    ext = cache_path.suffix.lower()
+    if not ext or len(ext) > 8:
+        ext = ".jpg"
+    relative_path = f"images/item_{item_id}{ext}"
+    destination = _job_dir(job_id) / relative_path
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(cache_path, destination)
+    return relative_path
+
+
+def _materialize_item_image_from_payload(
+    job_id: int,
+    item_id: int,
+    payload: bytes,
+    content_type: str,
+) -> str:
+    ext = _extension_for_content_type(content_type)
+    relative_path = f"images/item_{item_id}{ext}"
+    destination = _job_dir(job_id) / relative_path
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(payload)
+    return relative_path
+
+
+def prune_image_cache(*, now: datetime | None = None, max_files: int | None = None) -> int:
+    if not _image_cache_enabled():
+        return 0
+
+    current = now or utc_now_naive()
+    retention_days = max(1, export_config.image_cache_retention_days)
+    cutoff = current - timedelta(days=retention_days)
+    limit = max(1, max_files if max_files is not None else export_config.image_cache_max_prune_files)
+    removed = 0
+
+    root = _image_cache_root()
+    for meta_path in root.rglob("*.json"):
+        if removed >= limit:
+            break
+        if not meta_path.is_file():
+            continue
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except Exception:
+            meta = {}
+        if not isinstance(meta, dict):
+            meta = {}
+
+        reference_time = (
+            _parse_naive_utc(meta.get("last_accessed_at"))
+            or _parse_naive_utc(meta.get("last_verified_at"))
+            or _parse_naive_utc(meta.get("created_at"))
+        )
+        if reference_time is None:
+            reference_time = datetime.fromtimestamp(meta_path.stat().st_mtime, tz=UTC).replace(tzinfo=None)
+        if reference_time > cutoff:
+            continue
+
+        payload_path = _image_cache_payload_path_from_meta(meta_path, meta)
+        if payload_path and payload_path.exists():
+            payload_path.unlink(missing_ok=True)
+        meta_path.unlink(missing_ok=True)
+        removed += 1
+
+    # Remove orphaned payload files and empty directories.
+    for payload_path in root.rglob("*"):
+        if removed >= limit:
+            break
+        if not payload_path.is_file():
+            continue
+        if payload_path.suffix.lower() == ".json":
+            continue
+        key = payload_path.stem
+        meta_path = payload_path.parent / f"{key}.json"
+        if meta_path.exists():
+            continue
+        modified = datetime.fromtimestamp(payload_path.stat().st_mtime, tz=UTC).replace(tzinfo=None)
+        if modified <= cutoff:
+            payload_path.unlink(missing_ok=True)
+            removed += 1
+
+    # Best-effort empty-dir cleanup.
+    for folder in sorted(root.rglob("*"), reverse=True):
+        if folder.is_dir():
+            try:
+                folder.rmdir()
+            except OSError:
+                pass
+
+    return removed
 
 
 def _job_dir(job_id: int) -> Path:

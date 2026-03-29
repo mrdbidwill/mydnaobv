@@ -15,6 +15,11 @@ class ExportConfig:
     part_size: int
     download_chunk_size: int
     download_byte_budget_mb: int
+    image_cache_enabled: bool
+    image_cache_ttl_days: int
+    image_cache_retention_days: int
+    image_cache_prune_interval_hours: int
+    image_cache_max_prune_files: int
     include_all_photos: bool
     max_photos_per_observation: int
     request_interval_seconds: float
@@ -101,6 +106,11 @@ export_config = ExportConfig(
     part_size=settings.export_part_size,
     download_chunk_size=settings.export_download_chunk_size,
     download_byte_budget_mb=settings.export_download_byte_budget_mb,
+    image_cache_enabled=settings.export_image_cache_enabled,
+    image_cache_ttl_days=settings.export_image_cache_ttl_days,
+    image_cache_retention_days=settings.export_image_cache_retention_days,
+    image_cache_prune_interval_hours=settings.export_image_cache_prune_interval_hours,
+    image_cache_max_prune_files=settings.export_image_cache_max_prune_files,
     include_all_photos=settings.export_include_all_photos,
     max_photos_per_observation=settings.export_max_photos_per_observation,
     request_interval_seconds=settings.export_request_interval_seconds,
