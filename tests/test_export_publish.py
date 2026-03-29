@@ -46,7 +46,7 @@ def test_publish_job_artifacts_writes_job_and_latest_files(tmp_path, monkeypatch
     assert (tmp_path / "published" / "list_5" / "latest" / "manifest.json").exists()
 
     latest_url = publish_module.published_latest_url(5, artifacts[0])
-    assert latest_url == "https://downloads.example.org/mydnaobv/list_5/latest/all_observations.pdf"
+    assert latest_url == "https://downloads.example.org/mydnaobv/list_5/latest/all_observations.pdf?v=101"
 
 
 def test_publish_job_artifacts_reports_misconfiguration(tmp_path, monkeypatch):
@@ -68,15 +68,15 @@ def test_publish_job_artifacts_reports_misconfiguration(tmp_path, monkeypatch):
 def test_publish_job_artifacts_s3_uploads_expected_keys(tmp_path, monkeypatch):
     class FakeS3:
         def __init__(self):
-            self.upload_calls: list[tuple[str, str, str]] = []
-            self.put_calls: list[tuple[str, str, bytes]] = []
+            self.upload_calls: list[tuple[str, str, str, dict | None]] = []
+            self.put_calls: list[tuple[str, str, bytes, str | None]] = []
 
-        def upload_file(self, filename, bucket, key):
-            self.upload_calls.append((filename, bucket, key))
+        def upload_file(self, filename, bucket, key, ExtraArgs=None):
+            self.upload_calls.append((filename, bucket, key, ExtraArgs))
 
-        def put_object(self, Bucket, Key, Body, ContentType):
+        def put_object(self, Bucket, Key, Body, ContentType, CacheControl=None):
             assert ContentType == "application/json"
-            self.put_calls.append((Bucket, Key, Body))
+            self.put_calls.append((Bucket, Key, Body, CacheControl))
 
     fake = FakeS3()
     cfg = replace(
@@ -111,8 +111,18 @@ def test_publish_job_artifacts_s3_uploads_expected_keys(tmp_path, monkeypatch):
     warning = publish_module.publish_job_artifacts(job, artifacts, storage_root)
     assert warning is None
     assert fake.upload_calls == [
-        (str(source_dir / "all_observations.pdf"), "dna-downloads", "mydnaobv/list_7/job_2/all_observations.pdf"),
-        (str(source_dir / "all_observations.pdf"), "dna-downloads", "mydnaobv/list_7/latest/all_observations.pdf"),
+        (
+            str(source_dir / "all_observations.pdf"),
+            "dna-downloads",
+            "mydnaobv/list_7/job_2/all_observations.pdf",
+            {"CacheControl": publish_module.CACHE_CONTROL_IMMUTABLE},
+        ),
+        (
+            str(source_dir / "all_observations.pdf"),
+            "dna-downloads",
+            "mydnaobv/list_7/latest/all_observations.pdf",
+            {"CacheControl": publish_module.CACHE_CONTROL_LATEST},
+        ),
     ]
     assert len(fake.put_calls) == 2
 

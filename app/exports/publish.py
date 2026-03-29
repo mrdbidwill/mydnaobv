@@ -18,6 +18,8 @@ from app.exports.config import export_config
 
 BACKEND_FILESYSTEM = "filesystem"
 BACKEND_S3 = "s3"
+CACHE_CONTROL_LATEST = "no-cache, max-age=0, must-revalidate"
+CACHE_CONTROL_IMMUTABLE = "public, max-age=31536000, immutable"
 
 
 def publish_enabled() -> bool:
@@ -55,10 +57,12 @@ def published_job_url(list_id: int, job_id: int, artifact: models.ExportArtifact
 def published_latest_url(list_id: int, artifact: models.ExportArtifact) -> str | None:
     if not publish_enabled():
         return None
-    return _url_join(
+    latest = _url_join(
         str(export_config.publish_base_url or ""),
         f"list_{list_id}/latest/{published_filename(artifact)}",
     )
+    # Add a stable per-artifact version token so "latest" links don't serve stale CDN cache.
+    return f"{latest}?v={artifact.id}"
 
 
 def latest_artifact_exists(list_id: int, artifact: models.ExportArtifact) -> bool:
@@ -154,7 +158,7 @@ def _publish_job_artifacts_filesystem(
                     "part_number": artifact.part_number,
                     "filename": filename,
                     "job_url": _url_join(base_url, f"list_{job.list_id}/job_{job.id}/{filename}"),
-                    "latest_url": _url_join(base_url, f"list_{job.list_id}/latest/{filename}"),
+                    "latest_url": published_latest_url(job.list_id, artifact),
                 }
             )
 
@@ -208,8 +212,18 @@ def _publish_job_artifacts_s3(
 
             job_key = _object_key(f"list_{job.list_id}/job_{job.id}/{filename}")
             latest_key = _object_key(f"list_{job.list_id}/latest/{filename}")
-            client.upload_file(str(src), bucket, job_key)
-            client.upload_file(str(src), bucket, latest_key)
+            client.upload_file(
+                str(src),
+                bucket,
+                job_key,
+                ExtraArgs={"CacheControl": CACHE_CONTROL_IMMUTABLE},
+            )
+            client.upload_file(
+                str(src),
+                bucket,
+                latest_key,
+                ExtraArgs={"CacheControl": CACHE_CONTROL_LATEST},
+            )
 
             published_rows.append(
                 {
@@ -221,10 +235,7 @@ def _publish_job_artifacts_s3(
                         str(export_config.publish_base_url or ""),
                         f"list_{job.list_id}/job_{job.id}/{filename}",
                     ),
-                    "latest_url": _url_join(
-                        str(export_config.publish_base_url or ""),
-                        f"list_{job.list_id}/latest/{filename}",
-                    ),
+                    "latest_url": published_latest_url(job.list_id, artifact),
                 }
             )
 
@@ -241,12 +252,14 @@ def _publish_job_artifacts_s3(
             Key=_object_key(f"list_{job.list_id}/job_{job.id}/manifest.json"),
             Body=payload,
             ContentType="application/json",
+            CacheControl=CACHE_CONTROL_IMMUTABLE,
         )
         client.put_object(
             Bucket=bucket,
             Key=_object_key(f"list_{job.list_id}/latest/manifest.json"),
             Body=payload,
             ContentType="application/json",
+            CacheControl=CACHE_CONTROL_LATEST,
         )
     except Exception as exc:
         return f"publish failed: {exc}"

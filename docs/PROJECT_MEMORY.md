@@ -181,6 +181,11 @@ Purpose: persistent decision/history log for future chat sessions and implementa
 - Operational requirement added:
   - overdue public county refreshes must be auto-queued by worker loop (within existing throttle/queue controls)
   - stale "Refresh due" rows should no longer depend solely on manual admin enqueue actions
+- CDN cache consistency hardening:
+  - `published_latest_url(...)` now appends a stable artifact version query token (`?v=<artifact_id>`) to avoid stale `latest` links during cache propagation.
+  - S3/R2 publish now sets cache policy metadata:
+    - immutable cache for `job_*/` artifacts
+    - revalidate/no-cache policy for `latest/` artifacts and latest manifest
 
 ## Routine Update Rule
 On each major decision or architecture change:
