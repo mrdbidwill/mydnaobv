@@ -93,6 +93,7 @@
               <th>Species Guess</th>
               <th>Scientific Name</th>
               <th>Common Name</th>
+              <th>Barcode Inferred Species or Name</th>
               <th>Link</th>
             </tr>
           </thead>
@@ -103,6 +104,7 @@
                 <td>{{ obs.species_guess if obs.species_guess else "" }}</td>
                 <td>{{ obs.scientific_name if obs.scientific_name else "" }}</td>
                 <td>{{ obs.common_name if obs.common_name else "" }}</td>
+                <td>{{ obs.barcode_inferred_species_or_name if obs.barcode_inferred_species_or_name else "No set" }}</td>
                 <td><a href="{{ obs.inat_url }}" target="_blank" rel="noreferrer">iNaturalist</a></td>
               </tr>
             {% endfor %}

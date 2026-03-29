@@ -32,6 +32,7 @@ def test_render_observation_index_pdf_embeds_clickable_inaturalist_link(tmp_path
         common_name="Viscid Violet Cort",
         user_name="David Wilkins",
         observed_at=datetime(2023, 12, 10),
+        barcode_inferred_species_or_name="Agaricomycetes",
     )
 
     render_observation_index_pdf(
@@ -52,6 +53,8 @@ def test_render_observation_index_pdf_embeds_clickable_inaturalist_link(tmp_path
             uris.append(str(action["/URI"]))
 
     assert url in uris
+    text = "\n".join((page.extract_text() or "") for page in reader.pages)
+    assert "Barcode Inferred Species or Name: Agaricomycetes" in text
 
 
 def test_render_part_pdf_includes_placeholder_image_note(tmp_path):
@@ -62,6 +65,7 @@ def test_render_part_pdf_includes_placeholder_image_note(tmp_path):
         inat_observation_id=123,
         inat_url="https://www.inaturalist.org/observations/123",
         item_title="1. Amanita",
+        barcode_inferred_species_or_name="Polyporales",
         status="rendered",
         skip_reason="placeholder:image_unavailable_in_build",
     )
@@ -74,6 +78,7 @@ def test_render_part_pdf_includes_placeholder_image_note(tmp_path):
 
     text = "\n".join((page.extract_text() or "") for page in PdfReader(str(output)).pages)
     assert "could not be downloaded in this build" in text
+    assert "Barcode Inferred Species or Name: Polyporales" in text
 
 
 def test_render_part_pdf_includes_no_image_url_note(tmp_path):
@@ -96,3 +101,4 @@ def test_render_part_pdf_includes_no_image_url_note(tmp_path):
 
     text = "\n".join((page.extract_text() or "") for page in PdfReader(str(output)).pages)
     assert "No image URL was available in this build" in text
+    assert "Barcode Inferred Species or Name: No set" in text

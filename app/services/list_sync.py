@@ -41,6 +41,7 @@ def sync_list_observations(db: Session, obs_list: models.ObservationList) -> int
             existing.observed_at = obs.observed_at
             existing.inat_url = obs.inat_url
             existing.dna_field_value = obs.dna_field_value
+            existing.barcode_inferred_species_or_name = obs.barcode_inferred_species_or_name
             existing.photo_url = obs.photo_url
             existing.photo_license_code = obs.photo_license_code
             existing.photo_attribution = obs.photo_attribution
@@ -62,6 +63,7 @@ def sync_list_observations(db: Session, obs_list: models.ObservationList) -> int
                 observed_at=obs.observed_at,
                 inat_url=obs.inat_url,
                 dna_field_value=obs.dna_field_value,
+                barcode_inferred_species_or_name=obs.barcode_inferred_species_or_name,
                 photo_url=obs.photo_url,
                 photo_license_code=obs.photo_license_code,
                 photo_attribution=obs.photo_attribution,

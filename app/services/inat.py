@@ -4,6 +4,8 @@ import httpx
 from app.core.config import settings
 from app import models
 
+BARCODE_INFERRED_SPECIES_FIELD_ID = "20740"
+
 
 class InatObservation:
     def __init__(
@@ -23,6 +25,7 @@ class InatObservation:
         observed_at: Optional[datetime],
         inat_url: str,
         dna_field_value: Optional[str],
+        barcode_inferred_species_or_name: Optional[str],
         photo_url: Optional[str],
         photo_license_code: Optional[str],
         photo_attribution: Optional[str],
@@ -43,6 +46,7 @@ class InatObservation:
         self.observed_at = observed_at
         self.inat_url = inat_url
         self.dna_field_value = dna_field_value
+        self.barcode_inferred_species_or_name = barcode_inferred_species_or_name
         self.photo_url = photo_url
         self.photo_license_code = photo_license_code
         self.photo_attribution = photo_attribution
@@ -778,6 +782,11 @@ def fetch_observations_for_list(obs_list: models.ObservationList) -> Iterable[In
                     if field_value is None:
                         continue
 
+                    barcode_inferred_species_or_name = _extract_field_value(
+                        obs,
+                        BARCODE_INFERRED_SPECIES_FIELD_ID,
+                    )
+
                     species_guess = obs.get("species_guess")
                     user = obs.get("user") or {}
                     user_name = user.get("name") or user.get("login")
@@ -806,6 +815,19 @@ def fetch_observations_for_list(obs_list: models.ObservationList) -> Iterable[In
                         detail = _fetch_observation_detail(client, base, inat_id)
                         if detail:
                             photo_entries = _extract_photo_entries(detail)
+
+                    if barcode_inferred_species_or_name is None and detail is not None:
+                        barcode_inferred_species_or_name = _extract_field_value(
+                            detail,
+                            BARCODE_INFERRED_SPECIES_FIELD_ID,
+                        )
+                    if barcode_inferred_species_or_name is None and detail is None:
+                        detail = _fetch_observation_detail(client, base, inat_id)
+                        if detail:
+                            barcode_inferred_species_or_name = _extract_field_value(
+                                detail,
+                                BARCODE_INFERRED_SPECIES_FIELD_ID,
+                            )
 
                     taxa = _extract_taxa(obs, detail=detail)
                     observation_taxon_name = taxa["observation_taxon_name"]
@@ -863,6 +885,7 @@ def fetch_observations_for_list(obs_list: models.ObservationList) -> Iterable[In
                         observed_at=observed_at,
                         inat_url=inat_url,
                         dna_field_value=field_value,
+                        barcode_inferred_species_or_name=barcode_inferred_species_or_name,
                         photo_url=photo_url,
                         photo_license_code=photo_license_code,
                         photo_attribution=photo_attribution,

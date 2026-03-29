@@ -18,6 +18,7 @@ class ObservationOut(BaseModel):
     observed_at: Optional[datetime]
     inat_url: str
     dna_field_value: Optional[str]
+    barcode_inferred_species_or_name: Optional[str]
 
     class Config:
         from_attributes = True

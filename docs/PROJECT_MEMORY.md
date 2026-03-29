@@ -186,6 +186,11 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - S3/R2 publish now sets cache policy metadata:
     - immutable cache for `job_*/` artifacts
     - revalidate/no-cache policy for `latest/` artifacts and latest manifest
+- Added iNaturalist observation field `20740` support (`Barcode Inferred Species or Name`) for county/project outputs:
+  - synced into cached observations
+  - copied into export items
+  - rendered on county guide PDFs and observation index PDFs with fallback `No set`
+  - exposed in admin list observation table for parity checks
 
 ## Routine Update Rule
 On each major decision or architecture change:

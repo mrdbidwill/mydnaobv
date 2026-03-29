@@ -1,4 +1,4 @@
-from app.services.inat import _extract_taxa
+from app.services.inat import _extract_field_value, _extract_taxa
 
 
 def test_extract_taxa_prefers_observer_current_identification_for_observation_taxon():
@@ -44,3 +44,21 @@ def test_extract_taxa_falls_back_to_species_guess_when_no_identification_taxon()
     assert out["current_taxon_name"] is None
     assert out["observation_taxon_name"] == "Fallback species guess"
     assert out["community_taxon_name"] is None
+
+
+def test_extract_field_value_reads_observation_field_id():
+    obs = {
+        "ofvs": [
+            {"observation_field_id": 20740, "value": "Agaricomycetes"},
+        ]
+    }
+    assert _extract_field_value(obs, "20740") == "Agaricomycetes"
+
+
+def test_extract_field_value_reads_nested_observation_field_id():
+    obs = {
+        "observation_field_values": [
+            {"observation_field": {"id": 20740}, "value": "Polyporales"},
+        ]
+    }
+    assert _extract_field_value(obs, "20740") == "Polyporales"

@@ -162,6 +162,8 @@ def render_part_pdf(
             y = _draw_wrapped(c, f"Observation taxon: {item.observation_taxon_name}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
         if item.community_taxon_name:
             y = _draw_wrapped(c, f"Community taxon: {item.community_taxon_name}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
+        barcode_inferred = item.barcode_inferred_species_or_name or "No set"
+        y = _draw_wrapped(c, f"Barcode Inferred Species or Name: {barcode_inferred}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
         if item.observed_at:
             y = _draw_wrapped(c, f"Observed at: {item.observed_at.isoformat()}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
 
@@ -290,6 +292,7 @@ def render_observation_index_pdf(
         current_taxon = obs.taxon_name or "Not available"
         observation_taxon = obs.observation_taxon_name or obs.scientific_name or "Not available"
         community_taxon = obs.community_taxon_name or "Not available"
+        barcode_inferred = obs.barcode_inferred_species_or_name or "No set"
         common = obs.common_name or "Not provided"
         observer = obs.user_name or "Unknown observer"
         observed_text = _format_observed_at(obs.observed_at)
@@ -305,6 +308,7 @@ def render_observation_index_pdf(
         y = _draw_wrapped(c, f"iNaturalist taxon: {current_taxon}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
         y = _draw_wrapped(c, f"Observation taxon: {observation_taxon}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
         y = _draw_wrapped(c, f"Community taxon: {community_taxon}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
+        y = _draw_wrapped(c, f"Barcode Inferred Species or Name: {barcode_inferred}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
         y = _draw_wrapped(c, f"Observed: {observed_text} | Observer: {observer}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
         y = _draw_wrapped(c, f"Common name: {common}", MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
         y = _draw_link_line(c, "iNaturalist", obs.inat_url, MARGIN, y, PAGE_WIDTH - (MARGIN * 2))
