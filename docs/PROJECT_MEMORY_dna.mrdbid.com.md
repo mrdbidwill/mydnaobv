@@ -18,3 +18,12 @@ Purpose: portfolio-level continuity pointer for the `myDNAobv` codebase in this 
   - all-photo export mode (max 8) increases queue time and may trigger `partial_ready` on larger counties.
   - one permissions-related export failure confirmed need to keep export directory ownership aligned with service user.
   - server package mirror required compatible `boto3` fallback version to enable R2 publishing runtime.
+
+## 2026-03-30
+- Added shared-VPS utilization policy for `dna.mrdbid.com` in `docs/SHARED_VPS_DAY_NIGHT_RUNBOOK.md`:
+  - day profile: single Python export worker lane with lower scheduling priority.
+  - night/rebuild profile: dual Python export lanes (parallel `--once` runs with separate lock files).
+- Guardrails explicitly documented (CPU/load/memory/swap/web p95/5xx/queue age) with rollback triggers.
+- Queue policy clarified:
+  - prioritize user-facing jobs in daytime.
+  - run bulk/state rebuild queues primarily in low-traffic night windows.

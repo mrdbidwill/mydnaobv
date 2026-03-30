@@ -4,6 +4,9 @@ Date: March 8, 2026
 
 Goal: increase queue throughput while keeping iNaturalist safety limits unchanged.
 
+For shared-VPS day/night scheduling and cross-app capacity partitioning (Rails + Python), use:
+- `docs/SHARED_VPS_DAY_NIGHT_RUNBOOK.md`
+
 ## Safety constraints (do not change in this stage)
 
 - `EXPORT_REQUEST_INTERVAL_SECONDS`

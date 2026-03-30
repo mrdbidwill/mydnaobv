@@ -17,3 +17,9 @@ Purpose: continuity log for monetization planning when direct repo access is una
 - Reviewed after `myDNAobv` R2 production rollout.
 - No scope change for `mycowriter.com`: remain on AdSense-only implementation plan.
 - RubyMine handoff doc revalidated; still no storage-migration scope added.
+
+## 2026-03-30
+- Added shared-host operating policy context:
+  - `mycowriter.com` should remain low fixed-concurrency on shared VPS.
+  - off-peak CPU headroom is intentionally allocated to PDF rebuild pipeline in `myDNAobv`.
+- This keeps co-writer UX stable while enabling faster backlog completion for export-heavy workloads.

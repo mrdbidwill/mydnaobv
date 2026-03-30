@@ -196,6 +196,11 @@ EXPORT_L_WINDOW_START_HOUR=0
 EXPORT_L_WINDOW_END_HOUR=12
 ```
 
+Shared-VPS portfolio operations profile:
+- Use the day/night capacity and scheduling runbook in `docs/SHARED_VPS_DAY_NIGHT_RUNBOOK.md`.
+- It defines guarded daytime UX mode and higher-throughput night/rebuild mode for this Python worker plus low-traffic Rails co-hosted apps.
+- Ready-to-paste Central Time crontab templates are in `docs/CRONTAB_DAY_NIGHT_AMERICA_CHICAGO.md`.
+
 ### Rights and license policy
 
 - By default, only these photo licenses are exportable: `cc0`, `cc-by`, `cc-by-sa`, `cc-by-nc`, `cc-by-nc-sa`.

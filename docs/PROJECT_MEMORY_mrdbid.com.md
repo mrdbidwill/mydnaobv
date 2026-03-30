@@ -21,3 +21,12 @@ Purpose: continuity log for monetization and storage migration planning when dir
   - generated file naming should be context-specific (avoid generic repeated names) for better user/download UX.
   - keep a manual deploy fallback path documented; CI deploy failures can produce noise even when live service is healthy.
 - RubyMine handoff doc was revalidated and updated to explicitly call out quota-wait and split-output fallback as expected under heavy load.
+
+## 2026-03-30
+- Portfolio shared-VPS policy updated:
+  - Rails apps (including `mrdbid.com`) keep low fixed web concurrency so shared host remains responsive.
+  - Python export rebuild workload gets scheduled priority in low-traffic windows via day/night profile.
+- Reference runbook added in `myDNAobv` continuity docs:
+  - `docs/SHARED_VPS_DAY_NIGHT_RUNBOOK.md`
+- Operational expectation for `mrdbid.com` on shared host:
+  - preserve UX floor with small predictable app footprint while allowing batch-heavy workloads to consume spare off-peak capacity.

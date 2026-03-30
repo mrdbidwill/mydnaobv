@@ -204,6 +204,23 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - worker now marks claimed jobs `running` immediately and returns unfinished work to `queued` for the next cycle
   - process exception path now does session rollback before fail-mark commit (prevents `PendingRollbackError` cascades)
 
+## 2026-03-30
+- Capacity strategy finalized for shared Hostinger VPS (Ubuntu 24.04, KVM2 class) with mixed workloads:
+  - Rails portfolio apps (`mrdbid.com`, `auto-glossary.com`, `mycowriter.com`) remain low-concurrency baseline.
+  - `myDNAobv` Python export pipeline receives priority for initial/major rebuild throughput, especially in low-traffic windows.
+- Added shared operations runbook:
+  - `docs/SHARED_VPS_DAY_NIGHT_RUNBOOK.md`
+  - includes guardrail targets (CPU/load/memory/swap/latency/error/queue age), rollback triggers, and review cadence.
+- Day/night execution policy documented:
+  - daytime: single export worker lane (`--once`) with lower CPU scheduling priority.
+  - night/rebuild window: dual export worker lanes (separate lock files) for higher backlog throughput.
+  - bulk/state rebuilds should be queued in night window; daytime focuses on user-facing jobs.
+- Maintains existing iNaturalist guardrails and existing job-staleness de-dup behavior.
+- No change to county inclusion/parity invariants; county output logic and numbering guarantees remain required exactly as listed above.
+- Added timezone-specific cron template reference for operators:
+  - `docs/CRONTAB_DAY_NIGHT_AMERICA_CHICAGO.md`
+  - includes ready-to-paste blocks for either `root` or `mydnaobv` crontab ownership with `CRON_TZ=America/Chicago`.
+
 ## Routine Update Rule
 On each major decision or architecture change:
 1. Add one dated entry in this file.

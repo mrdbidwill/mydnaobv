@@ -1,6 +1,6 @@
 # KVM4 + County Pipeline Roadmap
 
-Last updated: March 14, 2026
+Last updated: March 30, 2026
 
 ## Objective
 Reduce large-export turnaround time and move to a curated, prebuilt county-product model that protects shared VPS resources.
@@ -9,6 +9,14 @@ Reduce large-export turnaround time and move to a curated, prebuilt county-produ
 - After R2 cutover, KVM4 priority is compute/runtime headroom (CPU/RAM/concurrency), not image disk pressure.
 - Keep treating `waiting_quota` and `partial_ready` as expected under heavy loads unless metrics/logs indicate true failure.
 - Post-upgrade work should focus on Phase 4 parallel worker safety and incremental tuning with metric checkpoints.
+
+## 2026-03-30 Sync Note
+- Adopted explicit shared-VPS day/night operations profile for portfolio co-hosting:
+  - daytime: single Python export worker lane with lower scheduling priority
+  - night/rebuild window: dual Python export worker lanes for backlog throughput
+  - Rails apps remain low-concurrency baseline to preserve UX floor
+- Added guardrail table and rollback triggers in `docs/SHARED_VPS_DAY_NIGHT_RUNBOOK.md`.
+- Operational policy: queue bulk/state rebuilds in night window; keep daytime focused on user-facing/smaller jobs.
 
 ## Phase 1 (Now): KVM4 Readiness Without Architecture Rewrite
 - Keep the current queue/worker model.
@@ -46,6 +54,7 @@ Reduce large-export turnaround time and move to a curated, prebuilt county-produ
 - Move from effectively single-lane worker behavior to safe parallel workers.
 - Add queue locking/concurrency guardrails per list/job.
 - Optionally isolate web and worker processes/services.
+- Run day/night profile with metric gates; increase worker lanes only when p95 latency/error budgets remain healthy.
 
 ## Load Review Checklist
 - Review `export_jobs` by hour/day:
