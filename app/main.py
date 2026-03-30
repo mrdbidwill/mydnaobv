@@ -48,6 +48,7 @@ ADMIN_PAGE_SIZE = 25
 PUBLIC_COUNTY_PAGE_SIZE = 24
 PUBLIC_REFRESH_INTERVAL_DAYS = max(1, settings.public_refresh_interval_days)
 DEFAULT_PROJECT_BUILD_IDS = "124358\n184305\n132913\n251751"
+DEFAULT_ADSENSE_CLIENT_ID = "ca-pub-8323362126637830"
 CATALOG_PAGE_SIZE = max(10, min(settings.catalog_page_size, 200))
 CATALOG_ALPHA_LINK_SCAN_LIMIT = 5000
 GENUS_QUALIFIER_TOKENS = {
@@ -78,7 +79,7 @@ def template_response(
     show_ads: bool = False,
     status_code: int = 200,
 ):
-    adsense_client_id = (settings.adsense_client_id or "").strip()
+    adsense_client_id = (settings.adsense_client_id or DEFAULT_ADSENSE_CLIENT_ID).strip()
     adsense_banner_slot = (settings.adsense_banner_slot or "").strip()
     render_ads = bool(show_ads and settings.adsense_enabled and adsense_client_id)
     payload = {
