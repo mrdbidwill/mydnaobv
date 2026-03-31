@@ -1879,6 +1879,16 @@ def _filename_prefix_for_list(obs_list: models.ObservationList | None, list_id: 
             tokens.append(obs_list.county_name)
         if obs_list.state_code:
             tokens.append(obs_list.state_code)
+        if obs_list.product_type == "project":
+            title_text = (obs_list.title or "").strip()
+            for marker in ("— iNaturalist Project", "- iNaturalist Project"):
+                if marker in title_text:
+                    title_text = title_text.split(marker, 1)[0].strip(" -")
+                    break
+            if title_text:
+                tokens.append(title_text)
+            elif obs_list.inat_project_id:
+                tokens.append(obs_list.inat_project_id)
         if not tokens and obs_list.title:
             tokens.append(obs_list.title)
 

@@ -73,7 +73,17 @@ def latest_artifact_exists(list_id: int, artifact: models.ExportArtifact) -> boo
         job_id = int(getattr(artifact, "job_id", 0) or 0)
         if job_id <= 0:
             return False
-        return is_latest_job_published(list_id, job_id)
+        state = _load_publish_state(list_id)
+        if int(state.get("latest_job_id") or 0) < job_id:
+            return False
+        latest_files = state.get("latest_filenames")
+        if isinstance(latest_files, list):
+            expected = published_filename(artifact)
+            names = {str(item).strip() for item in latest_files if str(item).strip()}
+            return expected in names
+        if artifact.kind == "zip_chunk":
+            return False
+        return True
 
     root = _publish_root()
     if not root:
@@ -103,7 +113,8 @@ def publish_job_artifacts(
         warning = _publish_job_artifacts_filesystem(job, artifacts, storage_root, root, base_url)
 
     if warning is None:
-        _mark_latest_job_published(job.list_id, job.id)
+        filenames = [published_filename(artifact) for artifact in artifacts]
+        _mark_latest_job_published(job.list_id, job.id, filenames)
     return warning
 
 
@@ -322,14 +333,16 @@ def _save_publish_state(list_id: int, payload: dict[str, object]) -> None:
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
-def _mark_latest_job_published(list_id: int, job_id: int) -> None:
+def _mark_latest_job_published(list_id: int, job_id: int, filenames: list[str] | None = None) -> None:
     now_iso = datetime.now(UTC).isoformat()
     state = _load_publish_state(list_id)
     latest_job_id = int(state.get("latest_job_id") or 0)
     if int(job_id) < latest_job_id:
         return
+    clean_filenames = sorted({str(name).strip() for name in (filenames or []) if str(name).strip()})
     state["latest_job_id"] = int(job_id)
     state["published_at_utc"] = now_iso
+    state["latest_filenames"] = clean_filenames
     _save_publish_state(list_id, state)
 
 

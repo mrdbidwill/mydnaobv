@@ -123,7 +123,7 @@
                 </td>
                 <td>
                   {% if row.genera_download_url %}
-                    <a class="btn secondary" href="{{ row.genera_download_url }}" target="_blank" rel="noreferrer">Download Genera Count</a>
+                    <a class="btn secondary" href="{{ row.genera_download_url }}" target="_blank" rel="noreferrer">Genera Count</a>
                     {% if row.genera_download_meta %}
                       <div class="muted" style="margin-top: 6px;">{{ row.genera_download_meta.size_label }}</div>
                     {% endif %}
@@ -161,6 +161,7 @@
     <div class="card">
       <h3>Project Downloads</h3>
       <p class="muted">Project-wide PDFs are listed here when the latest build is available.</p>
+      <p class="muted"><code>Genera Count</code> opens a text file listing every genus in the project and the number of observations for each genus.</p>
       {% if project_rows and project_rows|length > 0 %}
         <table>
           <thead>
@@ -178,7 +179,7 @@
               {% set list = row.list %}
               <tr>
                 <td>
-                  {{ list.title }}
+                  {{ row.display_title }}
                   <div class="muted">{{ list.inat_project_id if list.inat_project_id else "" }}</div>
                 </td>
                 <td>
@@ -225,7 +226,7 @@
                 </td>
                 <td>
                   {% if row.genera_download_url %}
-                    <a class="btn secondary" href="{{ row.genera_download_url }}" target="_blank" rel="noreferrer">Download Genera Count</a>
+                    <a class="btn secondary" href="{{ row.genera_download_url }}" target="_blank" rel="noreferrer">Genera Count</a>
                     {% if row.genera_download_meta %}
                       <div class="muted" style="margin-top: 6px;">{{ row.genera_download_meta.size_label }}</div>
                     {% endif %}

@@ -15,6 +15,12 @@
         --accent-2: #d4a373;
         --card: #fffaf0;
         --border: #e4d8c6;
+        --layout-max-width: 980px;
+      }
+      @media (min-width: 1280px) {
+        :root {
+          --layout-max-width: min(60vw, 1400px);
+        }
       }
       * { box-sizing: border-box; }
       body {
@@ -32,7 +38,7 @@
         top: 0;
       }
       .header-inner {
-        max-width: 980px;
+        max-width: var(--layout-max-width);
         margin: 0 auto;
         display: flex;
         gap: 14px;
@@ -43,7 +49,7 @@
         min-width: 0;
       }
       main {
-        max-width: 980px;
+        max-width: var(--layout-max-width);
         margin: 0 auto;
         padding: 24px 20px 60px 20px;
       }
@@ -140,7 +146,7 @@
         }
       }
       .ad-slot-wrap {
-        max-width: 980px;
+        max-width: var(--layout-max-width);
         margin: 12px auto 0 auto;
         padding: 0 20px;
       }

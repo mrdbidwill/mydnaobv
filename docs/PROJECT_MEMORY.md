@@ -247,6 +247,22 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - S3 latest-link availability is now gated by local publish-state marker (instead of assuming latest exists), avoiding stale/nonexistent `latest` links for newly completed but not-yet-published artifacts.
   - publish success records per-list latest published job marker under export storage.
 
+## 2026-03-31
+- Public homepage UX and artifact-link consistency update:
+  - increased large-screen content container width target to ~60% viewport for improved readability on desktop.
+  - shortened public project display titles by removing redundant `— iNaturalist Project ...` suffix in project rows.
+  - updated genera action wording from `Download Genera Count` to `Genera Count` and clarified it opens a text listing of genera with observation counts.
+- ZIP chunk reliability hardening:
+  - public part-download buttons now only render when the specific chunk artifact is available (local file or confirmed published file).
+  - chunk links prefer app-routed download endpoints, avoiding direct `latest/` object URLs that may not exist for chunk artifacts in older publish states.
+  - S3/R2 latest-availability check now supports filename-level validation via publish-state `latest_filenames`, preventing false-positive latest links for missing artifacts.
+  - backward compatibility: when legacy publish-state lacks filename list, `zip_chunk` is treated as unavailable for direct latest linking to avoid user-facing 404s.
+- Export filename simplification for project products:
+  - project artifact filename prefixes now use the cleaned project title (or project ID fallback) without duplicating the `iNaturalist Project` suffix pattern.
+- County inclusion/parity invariants unchanged:
+  - required county scope + project membership + `DNA Barcode ITS` rule preserved.
+  - county guide observation-completeness and numbering alignment behavior unchanged.
+
 ## Routine Update Rule
 On each major decision or architecture change:
 1. Add one dated entry in this file.

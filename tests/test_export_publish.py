@@ -158,3 +158,77 @@ def test_latest_artifact_exists_s3_requires_publish_marker(tmp_path, monkeypatch
         relative_path="job_3/final/all_observations.pdf",
     )
     assert publish_module.latest_artifact_exists(5, artifact) is False
+
+
+def test_latest_artifact_exists_s3_checks_filename_membership(tmp_path, monkeypatch):
+    cfg = replace(
+        publish_module.export_config,
+        publish_enabled=True,
+        storage_dir=str(tmp_path / "exports"),
+        publish_backend="s3",
+        publish_base_url="https://downloads.example.org/mydnaobv",
+        publish_bucket="dna-downloads",
+        publish_s3_endpoint="https://example.r2.cloudflarestorage.com",
+        publish_s3_access_key_id="key",
+        publish_s3_secret_access_key="secret",
+    )
+    monkeypatch.setattr(publish_module, "export_config", cfg)
+
+    publish_module._save_publish_state(
+        5,
+        {
+            "latest_job_id": 10,
+            "latest_filenames": ["observation_export_parts.zip"],
+        },
+    )
+
+    zip_artifact = SimpleNamespace(
+        id=302,
+        kind="zip",
+        job_id=10,
+        part_number=None,
+        relative_path="job_10/final/observation_export_parts.zip",
+    )
+    chunk_artifact = SimpleNamespace(
+        id=303,
+        kind="zip_chunk",
+        job_id=10,
+        part_number=1,
+        relative_path="job_10/final/chunks/observation_export_parts.zip.part001",
+    )
+    assert publish_module.latest_artifact_exists(5, zip_artifact) is True
+    assert publish_module.latest_artifact_exists(5, chunk_artifact) is False
+
+
+def test_latest_artifact_exists_s3_without_filenames_hides_zip_chunks(tmp_path, monkeypatch):
+    cfg = replace(
+        publish_module.export_config,
+        publish_enabled=True,
+        storage_dir=str(tmp_path / "exports"),
+        publish_backend="s3",
+        publish_base_url="https://downloads.example.org/mydnaobv",
+        publish_bucket="dna-downloads",
+        publish_s3_endpoint="https://example.r2.cloudflarestorage.com",
+        publish_s3_access_key_id="key",
+        publish_s3_secret_access_key="secret",
+    )
+    monkeypatch.setattr(publish_module, "export_config", cfg)
+
+    publish_module._save_publish_state(5, {"latest_job_id": 10})
+
+    zip_artifact = SimpleNamespace(
+        id=304,
+        kind="zip",
+        job_id=10,
+        part_number=None,
+        relative_path="job_10/final/observation_export_parts.zip",
+    )
+    chunk_artifact = SimpleNamespace(
+        id=305,
+        kind="zip_chunk",
+        job_id=10,
+        part_number=1,
+        relative_path="job_10/final/chunks/observation_export_parts.zip.part001",
+    )
+    assert publish_module.latest_artifact_exists(5, zip_artifact) is True
+    assert publish_module.latest_artifact_exists(5, chunk_artifact) is False

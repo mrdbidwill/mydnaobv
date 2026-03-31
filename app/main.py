@@ -297,9 +297,25 @@ def _download_meta(artifact: models.ExportArtifact | None) -> dict[str, str] | N
     }
 
 
+def _project_display_title(obs_list: models.ObservationList) -> str:
+    raw_title = (obs_list.title or "").strip()
+    for marker in ("— iNaturalist Project", "- iNaturalist Project"):
+        if marker in raw_title:
+            candidate = raw_title.split(marker, 1)[0].strip(" -")
+            if candidate:
+                return candidate
+    if raw_title:
+        return raw_title
+    if obs_list.inat_project_id:
+        return f"Project {obs_list.inat_project_id}"
+    return f"Project list {obs_list.id}"
+
+
 def _artifact_public_url(list_id: int, artifact: models.ExportArtifact | None) -> str | None:
     if not artifact:
         return None
+    if artifact.kind == "zip_chunk":
+        return f"/public/lists/{list_id}/artifacts/{artifact.id}/download"
     if latest_artifact_exists(list_id, artifact):
         latest_url = published_latest_url(list_id, artifact)
         if latest_url:
@@ -459,15 +475,25 @@ def load_public_county_rows(
                 county_download_label = "County PDF" if county_artifact.kind == "merged_pdf" else "County ZIP"
             index_download_url = _artifact_public_url(obs_list.id, index_artifact)
             genera_download_url = _artifact_public_url(obs_list.id, genera_artifact)
-            zip_chunk_downloads = [
-                {
-                    "label": f"Part {chunk.part_number}",
-                    "url": _artifact_public_url(obs_list.id, chunk),
-                    "size_label": _format_size_label(chunk.size_bytes),
-                }
-                for chunk in zip_chunk_artifacts
-                if _artifact_public_url(obs_list.id, chunk)
-            ]
+            zip_chunk_downloads = []
+            for chunk in zip_chunk_artifacts:
+                chunk_url = _artifact_public_url(obs_list.id, chunk)
+                if not chunk_url:
+                    continue
+                chunk_path = artifact_abspath(chunk)
+                chunk_available = (
+                    (chunk_path.exists() and chunk_path.is_file())
+                    or latest_artifact_exists(obs_list.id, chunk)
+                )
+                if not chunk_available:
+                    continue
+                zip_chunk_downloads.append(
+                    {
+                        "label": f"Part {chunk.part_number}",
+                        "url": chunk_url,
+                        "size_label": _format_size_label(chunk.size_bytes),
+                    }
+                )
         refresh_data = _refresh_summary(obs_list.last_sync_at)
 
         catalog.append(
@@ -545,19 +571,30 @@ def load_public_project_rows(db: Session) -> list[dict[str, object]]:
                 county_download_label = "Project PDF" if county_artifact.kind == "merged_pdf" else "Project ZIP"
             index_download_url = _artifact_public_url(obs_list.id, index_artifact)
             genera_download_url = _artifact_public_url(obs_list.id, genera_artifact)
-            zip_chunk_downloads = [
-                {
-                    "label": f"Part {chunk.part_number}",
-                    "url": _artifact_public_url(obs_list.id, chunk),
-                    "size_label": _format_size_label(chunk.size_bytes),
-                }
-                for chunk in zip_chunk_artifacts
-                if _artifact_public_url(obs_list.id, chunk)
-            ]
+            zip_chunk_downloads = []
+            for chunk in zip_chunk_artifacts:
+                chunk_url = _artifact_public_url(obs_list.id, chunk)
+                if not chunk_url:
+                    continue
+                chunk_path = artifact_abspath(chunk)
+                chunk_available = (
+                    (chunk_path.exists() and chunk_path.is_file())
+                    or latest_artifact_exists(obs_list.id, chunk)
+                )
+                if not chunk_available:
+                    continue
+                zip_chunk_downloads.append(
+                    {
+                        "label": f"Part {chunk.part_number}",
+                        "url": chunk_url,
+                        "size_label": _format_size_label(chunk.size_bytes),
+                    }
+                )
         refresh_data = _refresh_summary(obs_list.last_sync_at)
         out.append(
             {
                 "list": obs_list,
+                "display_title": _project_display_title(obs_list),
                 "latest_job": latest_job,
                 "county_artifact": county_artifact,
                 "index_artifact": index_artifact,
@@ -1446,7 +1483,7 @@ def public_download_latest_artifact(
         return FileResponse(path=str(artifact_path), filename=artifact_path.name)
 
     published_url = published_latest_url(list_id, artifact)
-    if published_url:
+    if published_url and latest_artifact_exists(list_id, artifact):
         return RedirectResponse(url=published_url, status_code=307)
 
     raise HTTPException(status_code=404, detail="File not available")
@@ -1733,7 +1770,7 @@ def admin_seed_and_build_projects(
             continue
 
         title_main = project_title or f"Project {canonical_project_id}"
-        title = f"{title_main} — iNaturalist Project {canonical_project_id}"
+        title = title_main
         description_parts = [
             "Auto-generated project list.",
             f"Project: {canonical_project_id}.",
