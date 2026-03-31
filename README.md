@@ -104,6 +104,7 @@ This project now supports a modular, queue-based PDF export pipeline for offline
 - Jobs are prioritized smallest to largest (`XS`, `S`, `M`, `L`).
 - Large jobs are limited to an overnight window.
 - If merge pressure is high, output degrades gracefully to split PDFs + ZIP.
+- Very large ZIP exports can be auto-split into chunk files (`.part001`, `.part002`, ...) for easier download on slower connections.
 - Every completed job includes `observations_index.pdf` for linked record review.
 - Every completed job also includes a genera summary text file (`*_genera_count.txt`) with numbered counts such as `1. Agaricales (4)`.
 - Taxonomy logic for sequencing reevaluation:
@@ -115,6 +116,7 @@ This project now supports a modular, queue-based PDF export pipeline for offline
 - Public list creation and browsing remain unchanged.
 - Heavy export controls live on authenticated admin page: `/admin`.
 - Optional publish mode copies finished files to external/static storage and exposes a public member page: `/downloads`.
+- Publish now runs outside the finalize step, so large upload latency does not block a job from reaching `ready` / `partial_ready`.
 - Optional mode: include multiple photos per observation with conservative KVM1 caps.
 - Image downloads are cache-first with periodic revalidation/pruning controls so repeated rebuilds reuse existing media whenever possible.
 - County jobs with zero exportable image pages now complete with a placeholder county guide PDF instead of failing.
@@ -151,6 +153,7 @@ Example published member downloads mode:
 EXPORT_PUBLISH_ENABLED=true
 EXPORT_PUBLISH_DIR=/var/www/mydnaobv-downloads
 EXPORT_PUBLISH_BASE_URL=https://downloads.example.org/mydnaobv
+EXPORT_PUBLISH_JOBS_PER_RUN=1
 EXPORT_PUBLIC_DOWNLOADS_ENABLED=true
 PUBLIC_REFRESH_INTERVAL_DAYS=7
 PUBLIC_AUTO_REFRESH_ENQUEUE_PER_RUN=2
@@ -169,7 +172,15 @@ EXPORT_PUBLISH_S3_REGION=auto
 EXPORT_PUBLISH_S3_ACCESS_KEY_ID=<r2-access-key-id>
 EXPORT_PUBLISH_S3_SECRET_ACCESS_KEY=<r2-secret-access-key>
 EXPORT_PUBLISH_BASE_URL=https://downloads.dna.mrdbid.com/mydnaobv
+EXPORT_PUBLISH_JOBS_PER_RUN=1
 EXPORT_PUBLIC_DOWNLOADS_ENABLED=true
+```
+
+Large ZIP chunking option:
+
+```env
+# 0 disables chunk files
+EXPORT_ZIP_CHUNK_SIZE_MB=500
 ```
 
 AdSense public-page gating:

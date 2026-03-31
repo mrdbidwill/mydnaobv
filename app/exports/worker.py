@@ -7,6 +7,7 @@ from app.db import SessionLocal
 from app.exports.service import (
     cleanup_expired_exports,
     enqueue_due_public_refresh_jobs,
+    process_pending_publish_jobs,
     prune_image_cache,
     process_next_job,
     run_scheduled_maintenance,
@@ -21,9 +22,11 @@ def run_once() -> int:
             db,
             limit=max(1, settings.public_auto_refresh_enqueue_per_run),
         )
-        job = process_next_job(db)
-        if not job:
-            return 0
+        process_next_job(db)
+        process_pending_publish_jobs(
+            db,
+            limit=max(1, settings.export_publish_jobs_per_run),
+        )
         return 0
     finally:
         db.close()

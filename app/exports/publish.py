@@ -69,10 +69,11 @@ def latest_artifact_exists(list_id: int, artifact: models.ExportArtifact) -> boo
     if not publish_enabled():
         return False
 
-    # S3-compatible storage checks would add one network request per artifact row in page views.
-    # Assume latest key exists when publish mode is enabled; failed publish keeps local fallback alive.
     if _publish_backend() == BACKEND_S3:
-        return True
+        job_id = int(getattr(artifact, "job_id", 0) or 0)
+        if job_id <= 0:
+            return False
+        return is_latest_job_published(list_id, job_id)
 
     root = _publish_root()
     if not root:
@@ -92,13 +93,25 @@ def publish_job_artifacts(
     if not base_url:
         return "publish enabled but EXPORT_PUBLISH_BASE_URL is missing."
 
+    warning: str | None
     if _publish_backend() == BACKEND_S3:
-        return _publish_job_artifacts_s3(job, artifacts, storage_root)
+        warning = _publish_job_artifacts_s3(job, artifacts, storage_root)
+    else:
+        root = _publish_root()
+        if not root:
+            return "publish enabled but EXPORT_PUBLISH_DIR is missing."
+        warning = _publish_job_artifacts_filesystem(job, artifacts, storage_root, root, base_url)
 
-    root = _publish_root()
-    if not root:
-        return "publish enabled but EXPORT_PUBLISH_DIR is missing."
-    return _publish_job_artifacts_filesystem(job, artifacts, storage_root, root, base_url)
+    if warning is None:
+        _mark_latest_job_published(job.list_id, job.id)
+    return warning
+
+
+def is_latest_job_published(list_id: int, job_id: int) -> bool:
+    if not publish_enabled():
+        return False
+    state = _load_publish_state(list_id)
+    return int(state.get("latest_job_id") or 0) >= int(job_id)
 
 
 def cleanup_published_job(list_id: int, job_id: int) -> None:
@@ -279,6 +292,45 @@ def _publish_root() -> Path | None:
     root = Path(configured)
     root.mkdir(parents=True, exist_ok=True)
     return root
+
+
+def _publish_state_root() -> Path:
+    root = Path(export_config.storage_dir) / "publish_state"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _publish_state_path(list_id: int) -> Path:
+    return _publish_state_root() / f"list_{int(list_id)}.json"
+
+
+def _load_publish_state(list_id: int) -> dict[str, object]:
+    path = _publish_state_path(list_id)
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if isinstance(payload, dict):
+        return payload
+    return {}
+
+
+def _save_publish_state(list_id: int, payload: dict[str, object]) -> None:
+    path = _publish_state_path(list_id)
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _mark_latest_job_published(list_id: int, job_id: int) -> None:
+    now_iso = datetime.now(UTC).isoformat()
+    state = _load_publish_state(list_id)
+    latest_job_id = int(state.get("latest_job_id") or 0)
+    if int(job_id) < latest_job_id:
+        return
+    state["latest_job_id"] = int(job_id)
+    state["published_at_utc"] = now_iso
+    _save_publish_state(list_id, state)
 
 
 def _publish_backend() -> str:

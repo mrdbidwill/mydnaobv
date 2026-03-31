@@ -234,6 +234,17 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - `waiting_quota` jobs retain explicit retry timestamps.
 - Operational note:
   - very large finalize/zip work can exceed external cron `timeout` windows and leave jobs cycling via stale-lock recovery; treat as timeout-pressure tuning issue (not parity logic failure) and adjust runtime windows conservatively.
+- Download UX + large artifact reliability update:
+  - public county/project download rows now display file size labels and plain-language large-download guidance.
+  - large ZIP artifacts can now auto-split into sequential public chunk files (`*.part001`, `*.part002`, ...) when above configurable threshold (`EXPORT_ZIP_CHUNK_SIZE_MB`).
+  - public artifact route now allows `zip_chunk` downloads and can redirect to published latest URL if local retained file is missing.
+- Finalize/runtime throughput update:
+  - ZIP assembly now stores already-compressed file types (PDF/ZIP/media) with `ZIP_STORED` to reduce CPU pressure during large package generation.
+- Publish decoupling implemented:
+  - export finalize no longer blocks on R2/filesystem publish; jobs can complete as `ready` / `partial_ready` first.
+  - worker loop now runs a bounded publish pass (`EXPORT_PUBLISH_JOBS_PER_RUN`) outside finalize.
+  - S3 latest-link availability is now gated by local publish-state marker (instead of assuming latest exists), avoiding stale/nonexistent `latest` links for newly completed but not-yet-published artifacts.
+  - publish success records per-list latest published job marker under export storage.
 
 ## Routine Update Rule
 On each major decision or architecture change:

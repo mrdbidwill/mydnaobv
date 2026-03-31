@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     export_l_window_start_hour: int = Field(default=0, alias="EXPORT_L_WINDOW_START_HOUR")
     export_l_window_end_hour: int = Field(default=6, alias="EXPORT_L_WINDOW_END_HOUR")
     export_zip_only_part_threshold: int = Field(default=4, alias="EXPORT_ZIP_ONLY_PART_THRESHOLD")
+    export_zip_chunk_size_mb: int = Field(default=500, alias="EXPORT_ZIP_CHUNK_SIZE_MB")
     export_allowed_licenses: str = Field(
         default="cc0,cc-by,cc-by-sa,cc-by-nc,cc-by-nc-sa",
         alias="EXPORT_ALLOWED_LICENSES",
@@ -81,6 +82,7 @@ class Settings(BaseSettings):
         default=None,
         alias="EXPORT_PUBLISH_S3_SECRET_ACCESS_KEY",
     )
+    export_publish_jobs_per_run: int = Field(default=1, alias="EXPORT_PUBLISH_JOBS_PER_RUN")
     export_public_downloads_enabled: bool = Field(default=False, alias="EXPORT_PUBLIC_DOWNLOADS_ENABLED")
     public_refresh_interval_days: int = Field(default=7, alias="PUBLIC_REFRESH_INTERVAL_DAYS")
     public_auto_refresh_enqueue_per_run: int = Field(default=2, alias="PUBLIC_AUTO_REFRESH_ENQUEUE_PER_RUN")

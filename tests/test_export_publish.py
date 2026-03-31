@@ -6,15 +6,16 @@ from app.exports import publish as publish_module
 
 
 def test_publish_job_artifacts_writes_job_and_latest_files(tmp_path, monkeypatch):
+    storage_root = tmp_path / "exports"
     cfg = replace(
         publish_module.export_config,
         publish_enabled=True,
+        storage_dir=str(storage_root),
         publish_dir=str(tmp_path / "published"),
         publish_base_url="https://downloads.example.org/mydnaobv",
     )
     monkeypatch.setattr(publish_module, "export_config", cfg)
 
-    storage_root = tmp_path / "exports"
     source_dir = storage_root / "job_11" / "final"
     source_dir.mkdir(parents=True, exist_ok=True)
     merged = source_dir / "all_observations.pdf"
@@ -27,12 +28,14 @@ def test_publish_job_artifacts_writes_job_and_latest_files(tmp_path, monkeypatch
         SimpleNamespace(
             id=101,
             kind="merged_pdf",
+            job_id=11,
             part_number=None,
             relative_path="job_11/final/all_observations.pdf",
         ),
         SimpleNamespace(
             id=102,
             kind="zip",
+            job_id=11,
             part_number=None,
             relative_path="job_11/final/observation_export_parts.zip",
         ),
@@ -44,6 +47,8 @@ def test_publish_job_artifacts_writes_job_and_latest_files(tmp_path, monkeypatch
     assert (tmp_path / "published" / "list_5" / "job_11" / "all_observations.pdf").read_bytes() == b"pdf-bytes"
     assert (tmp_path / "published" / "list_5" / "latest" / "all_observations.pdf").read_bytes() == b"pdf-bytes"
     assert (tmp_path / "published" / "list_5" / "latest" / "manifest.json").exists()
+    assert publish_module.is_latest_job_published(5, 11) is True
+    assert publish_module.latest_artifact_exists(5, artifacts[0]) is True
 
     latest_url = publish_module.published_latest_url(5, artifacts[0])
     assert latest_url == "https://downloads.example.org/mydnaobv/list_5/latest/all_observations.pdf?v=101"
@@ -53,6 +58,7 @@ def test_publish_job_artifacts_reports_misconfiguration(tmp_path, monkeypatch):
     cfg = replace(
         publish_module.export_config,
         publish_enabled=True,
+        storage_dir=str(tmp_path / "exports"),
         publish_dir=str(tmp_path / "published"),
         publish_base_url=None,
     )
@@ -82,6 +88,7 @@ def test_publish_job_artifacts_s3_uploads_expected_keys(tmp_path, monkeypatch):
     cfg = replace(
         publish_module.export_config,
         publish_enabled=True,
+        storage_dir=str(tmp_path / "exports"),
         publish_backend="s3",
         publish_base_url="https://downloads.example.org/mydnaobv",
         publish_bucket="dna-downloads",
@@ -103,6 +110,7 @@ def test_publish_job_artifacts_s3_uploads_expected_keys(tmp_path, monkeypatch):
         SimpleNamespace(
             id=201,
             kind="merged_pdf",
+            job_id=2,
             part_number=None,
             relative_path="job_2/final/all_observations.pdf",
         )
@@ -125,12 +133,14 @@ def test_publish_job_artifacts_s3_uploads_expected_keys(tmp_path, monkeypatch):
         ),
     ]
     assert len(fake.put_calls) == 2
+    assert publish_module.is_latest_job_published(7, 2) is True
 
 
-def test_latest_artifact_exists_s3_returns_true_when_enabled(monkeypatch):
+def test_latest_artifact_exists_s3_requires_publish_marker(tmp_path, monkeypatch):
     cfg = replace(
         publish_module.export_config,
         publish_enabled=True,
+        storage_dir=str(tmp_path / "exports"),
         publish_backend="s3",
         publish_base_url="https://downloads.example.org/mydnaobv",
         publish_bucket="dna-downloads",
@@ -143,7 +153,8 @@ def test_latest_artifact_exists_s3_returns_true_when_enabled(monkeypatch):
     artifact = SimpleNamespace(
         id=301,
         kind="merged_pdf",
+        job_id=3,
         part_number=None,
         relative_path="job_3/final/all_observations.pdf",
     )
-    assert publish_module.latest_artifact_exists(5, artifact) is True
+    assert publish_module.latest_artifact_exists(5, artifact) is False

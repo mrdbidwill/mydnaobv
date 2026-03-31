@@ -93,6 +93,9 @@
                 <td>
                   {% if row.index_download_url %}
                     <a class="btn secondary" href="{{ row.index_download_url }}" target="_blank" rel="noreferrer">Download Observation PDF</a>
+                    {% if row.index_download_meta %}
+                      <div class="muted" style="margin-top: 6px;">{{ row.index_download_meta.size_label }}</div>
+                    {% endif %}
                   {% else %}
                     <span class="muted">Not ready yet</span>
                   {% endif %}
@@ -100,6 +103,20 @@
                 <td>
                   {% if row.county_download_url %}
                     <a class="btn secondary" href="{{ row.county_download_url }}" target="_blank" rel="noreferrer">Download {{ row.county_download_label }}</a>
+                    {% if row.county_download_meta %}
+                      <div class="muted" style="margin-top: 6px;">{{ row.county_download_meta.size_label }}</div>
+                      {% if row.county_download_meta.tier_label %}
+                        <div class="muted">{{ row.county_download_meta.tier_label }}</div>
+                      {% endif %}
+                    {% endif %}
+                    {% if row.zip_chunk_downloads and row.zip_chunk_downloads|length > 0 %}
+                      <div class="muted" style="margin-top: 8px;">If full ZIP is too large, download by parts:</div>
+                      {% for chunk in row.zip_chunk_downloads %}
+                        <a class="btn secondary" href="{{ chunk.url }}" target="_blank" rel="noreferrer" style="margin-top: 6px; margin-right: 6px;">{{ chunk.label }}</a>
+                        <span class="muted">{{ chunk.size_label }}</span>
+                        <br>
+                      {% endfor %}
+                    {% endif %}
                   {% else %}
                     <span class="muted">Not ready yet</span>
                   {% endif %}
@@ -107,6 +124,9 @@
                 <td>
                   {% if row.genera_download_url %}
                     <a class="btn secondary" href="{{ row.genera_download_url }}" target="_blank" rel="noreferrer">Download Genera Count</a>
+                    {% if row.genera_download_meta %}
+                      <div class="muted" style="margin-top: 6px;">{{ row.genera_download_meta.size_label }}</div>
+                    {% endif %}
                   {% else %}
                     <span class="muted">Not ready yet</span>
                   {% endif %}
@@ -175,6 +195,9 @@
                 <td>
                   {% if row.index_download_url %}
                     <a class="btn secondary" href="{{ row.index_download_url }}" target="_blank" rel="noreferrer">Download Observation PDF</a>
+                    {% if row.index_download_meta %}
+                      <div class="muted" style="margin-top: 6px;">{{ row.index_download_meta.size_label }}</div>
+                    {% endif %}
                   {% else %}
                     <span class="muted">Not ready yet</span>
                   {% endif %}
@@ -182,6 +205,20 @@
                 <td>
                   {% if row.county_download_url %}
                     <a class="btn secondary" href="{{ row.county_download_url }}" target="_blank" rel="noreferrer">Download {{ row.county_download_label }}</a>
+                    {% if row.county_download_meta %}
+                      <div class="muted" style="margin-top: 6px;">{{ row.county_download_meta.size_label }}</div>
+                      {% if row.county_download_meta.tier_label %}
+                        <div class="muted">{{ row.county_download_meta.tier_label }}</div>
+                      {% endif %}
+                    {% endif %}
+                    {% if row.zip_chunk_downloads and row.zip_chunk_downloads|length > 0 %}
+                      <div class="muted" style="margin-top: 8px;">If full ZIP is too large, download by parts:</div>
+                      {% for chunk in row.zip_chunk_downloads %}
+                        <a class="btn secondary" href="{{ chunk.url }}" target="_blank" rel="noreferrer" style="margin-top: 6px; margin-right: 6px;">{{ chunk.label }}</a>
+                        <span class="muted">{{ chunk.size_label }}</span>
+                        <br>
+                      {% endfor %}
+                    {% endif %}
                   {% else %}
                     <span class="muted">Not ready yet</span>
                   {% endif %}
@@ -189,6 +226,9 @@
                 <td>
                   {% if row.genera_download_url %}
                     <a class="btn secondary" href="{{ row.genera_download_url }}" target="_blank" rel="noreferrer">Download Genera Count</a>
+                    {% if row.genera_download_meta %}
+                      <div class="muted" style="margin-top: 6px;">{{ row.genera_download_meta.size_label }}</div>
+                    {% endif %}
                   {% else %}
                     <span class="muted">Not ready yet</span>
                   {% endif %}

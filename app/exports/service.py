@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from app import models
 from app.core.config import settings
 from app.exports.config import export_config
-from app.exports.publish import cleanup_published_job, publish_job_artifacts
+from app.exports.publish import cleanup_published_job, is_latest_job_published, publish_enabled, publish_job_artifacts
 from app.exports.pdf_writer import (
     render_empty_county_guide_pdf,
     render_observation_index_pdf,
@@ -433,6 +433,49 @@ def cleanup_expired_exports(db: Session) -> int:
     if removed:
         db.commit()
     return removed
+
+
+def process_pending_publish_jobs(db: Session, limit: int | None = None) -> int:
+    if not publish_enabled():
+        return 0
+
+    max_to_publish = max(1, min(limit or export_config.publish_jobs_per_run, 10))
+    candidates = (
+        db.query(models.ExportJob)
+        .join(models.ObservationList, models.ObservationList.id == models.ExportJob.list_id)
+        .filter(
+            models.ExportJob.status.in_(("ready", "partial_ready")),
+            models.ObservationList.is_public_download.is_(True),
+            models.ObservationList.product_type.in_(("county", "project")),
+        )
+        .order_by(models.ExportJob.finished_at.asc().nullslast(), models.ExportJob.id.asc())
+        .limit(200)
+        .all()
+    )
+
+    published_count = 0
+    storage_root = _storage_root()
+    for job in candidates:
+        if is_latest_job_published(job.list_id, job.id):
+            continue
+
+        artifacts = list_artifacts_for_job(db, job.id)
+        if not artifacts:
+            continue
+
+        publish_warning = publish_job_artifacts(job, artifacts, storage_root)
+        if publish_warning:
+            job.message = _append_job_note(job.message, f"Publish note: {publish_warning}")
+        else:
+            job.message = _append_job_note(job.message, "Publish complete.")
+        job.updated_at = utc_now_naive()
+        db.commit()
+
+        published_count += 1
+        if published_count >= max_to_publish:
+            break
+
+    return published_count
 
 
 def run_scheduled_maintenance(db: Session) -> dict[str, int]:
@@ -1149,26 +1192,36 @@ def _phase_finalize(db: Session, job: models.ExportJob) -> bool:
 
     zip_path = docs_dir / zip_name
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.write(readme_path, arcname="README_FIRST.txt")
-        zf.write(index_pdf_path, arcname=index_pdf_name)
-        zf.write(genera_count_path, arcname=genera_count_name)
+        zf.write(
+            readme_path,
+            arcname="README_FIRST.txt",
+            compress_type=_zip_compression_for_arcname("README_FIRST.txt"),
+        )
+        zf.write(
+            index_pdf_path,
+            arcname=index_pdf_name,
+            compress_type=_zip_compression_for_arcname(index_pdf_name),
+        )
+        zf.write(
+            genera_count_path,
+            arcname=genera_count_name,
+            compress_type=_zip_compression_for_arcname(genera_count_name),
+        )
         for part in parts:
             part_path = _storage_root() / part.relative_path
             arcname = f"parts/{Path(part.relative_path).name}"
-            zf.write(part_path, arcname=arcname)
+            zf.write(part_path, arcname=arcname, compress_type=_zip_compression_for_arcname(arcname))
         if merged_created:
             merged_path = docs_dir / county_pdf_name
-            zf.write(merged_path, arcname=county_pdf_name)
+            zf.write(
+                merged_path,
+                arcname=county_pdf_name,
+                compress_type=_zip_compression_for_arcname(county_pdf_name),
+            )
 
     _upsert_artifact(db, job.id, "zip", _relative_to_storage(zip_path), None)
-
-    db.flush()
-    artifacts = (
-        db.query(models.ExportArtifact)
-        .filter(models.ExportArtifact.job_id == job.id)
-        .order_by(models.ExportArtifact.id.asc())
-        .all()
-    )
+    chunk_paths = _split_large_zip(zip_path, export_config.zip_chunk_size_mb)
+    _replace_zip_chunk_artifacts(db, job.id, chunk_paths)
 
     job.phase = "done"
     job.status = "ready" if merged_created else "partial_ready"
@@ -1186,9 +1239,8 @@ def _phase_finalize(db: Session, job: models.ExportJob) -> bool:
             f"{job.message} Included {placeholder_pages_added} observation placeholder page(s) "
             "where images were unavailable in this build."
         )
-    publish_warning = publish_job_artifacts(job, artifacts, _storage_root())
-    if publish_warning:
-        job.message = f"{job.message} Publish note: {publish_warning}"
+    if publish_enabled():
+        job.message = _append_job_note(job.message, "Publish queued.")
     job.next_run_at = None
     return True
 
@@ -1227,6 +1279,91 @@ def _recommended_part_size() -> int:
     if export_config.include_all_photos:
         return max(30, min(export_config.part_size, 75))
     return max(50, min(export_config.part_size, 150))
+
+
+def _zip_compression_for_arcname(arcname: str) -> int:
+    lowered = (arcname or "").strip().lower()
+    if lowered.endswith((".pdf", ".jpg", ".jpeg", ".png", ".webp", ".gif", ".zip")):
+        return zipfile.ZIP_STORED
+    return zipfile.ZIP_DEFLATED
+
+
+def _split_large_zip(zip_path: Path, chunk_size_mb: int) -> list[Path]:
+    size_bytes = zip_path.stat().st_size if zip_path.exists() else 0
+    chunk_size_bytes = max(0, int(chunk_size_mb)) * 1024 * 1024
+    if size_bytes <= 0 or chunk_size_bytes <= 0 or size_bytes <= chunk_size_bytes:
+        return []
+
+    chunk_dir = zip_path.parent / "chunks"
+    if chunk_dir.exists():
+        shutil.rmtree(chunk_dir, ignore_errors=True)
+    chunk_dir.mkdir(parents=True, exist_ok=True)
+
+    chunk_paths: list[Path] = []
+    chunk_index = 1
+    with zip_path.open("rb") as source:
+        while True:
+            chunk_name = f"{zip_path.name}.part{chunk_index:03d}"
+            chunk_path = chunk_dir / chunk_name
+            bytes_written = 0
+            with chunk_path.open("wb") as destination:
+                while bytes_written < chunk_size_bytes:
+                    to_read = min(4 * 1024 * 1024, chunk_size_bytes - bytes_written)
+                    payload = source.read(to_read)
+                    if not payload:
+                        break
+                    destination.write(payload)
+                    bytes_written += len(payload)
+
+            if bytes_written == 0:
+                chunk_path.unlink(missing_ok=True)
+                break
+
+            chunk_paths.append(chunk_path)
+            chunk_index += 1
+
+            if bytes_written < chunk_size_bytes:
+                break
+
+    return chunk_paths
+
+
+def _replace_zip_chunk_artifacts(db: Session, job_id: int, chunk_paths: list[Path]) -> None:
+    existing = (
+        db.query(models.ExportArtifact)
+        .filter(models.ExportArtifact.job_id == job_id, models.ExportArtifact.kind == "zip_chunk")
+        .all()
+    )
+    for artifact in existing:
+        abs_path = _storage_root() / artifact.relative_path
+        if abs_path.exists():
+            abs_path.unlink(missing_ok=True)
+        db.delete(artifact)
+    db.flush()
+
+    for idx, chunk_path in enumerate(chunk_paths, start=1):
+        db.add(
+            models.ExportArtifact(
+                job_id=job_id,
+                kind="zip_chunk",
+                part_number=idx,
+                relative_path=_relative_to_storage(chunk_path),
+                size_bytes=chunk_path.stat().st_size if chunk_path.exists() else 0,
+            )
+        )
+
+
+def _append_job_note(message: str | None, note: str) -> str:
+    clean_note = (note or "").strip()
+    if not clean_note:
+        return (message or "").strip()
+
+    current = (message or "").strip()
+    if clean_note in current:
+        return current
+    if not current:
+        return clean_note
+    return f"{current} {clean_note}"
 
 
 def _sync_throttle_delay_seconds(exc: Exception) -> int | None:

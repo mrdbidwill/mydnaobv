@@ -36,6 +36,7 @@ class ExportConfig:
     l_window_start_hour: int
     l_window_end_hour: int
     zip_only_part_threshold: int
+    zip_chunk_size_mb: int
     allowed_licenses_csv: str
     allow_unlicensed: bool
     publish_enabled: bool
@@ -48,6 +49,7 @@ class ExportConfig:
     publish_s3_region: str
     publish_s3_access_key_id: str | None
     publish_s3_secret_access_key: str | None
+    publish_jobs_per_run: int
     public_downloads_enabled: bool
 
     def classify_bucket(self, item_count: int) -> str:
@@ -127,6 +129,7 @@ export_config = ExportConfig(
     l_window_start_hour=settings.export_l_window_start_hour,
     l_window_end_hour=settings.export_l_window_end_hour,
     zip_only_part_threshold=settings.export_zip_only_part_threshold,
+    zip_chunk_size_mb=settings.export_zip_chunk_size_mb,
     allowed_licenses_csv=settings.export_allowed_licenses,
     allow_unlicensed=settings.export_allow_unlicensed,
     publish_enabled=settings.export_publish_enabled,
@@ -139,6 +142,7 @@ export_config = ExportConfig(
     publish_s3_region=settings.export_publish_s3_region,
     publish_s3_access_key_id=settings.export_publish_s3_access_key_id,
     publish_s3_secret_access_key=settings.export_publish_s3_secret_access_key,
+    publish_jobs_per_run=settings.export_publish_jobs_per_run,
     public_downloads_enabled=settings.export_public_downloads_enabled,
 )
 

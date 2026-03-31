@@ -7,6 +7,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app import models
 from app.db import Base
+from app.exports import publish as publish_module
 from app.exports import service as export_service
 
 
@@ -213,3 +214,73 @@ def test_schedule_next_run_preserves_waiting_quota_retry_time():
     assert job.status == "waiting_quota"
     assert job.next_run_at == retry_at
     assert job.last_run_at == now
+
+
+def test_process_pending_publish_jobs_publishes_ready_job(tmp_path, monkeypatch):
+    db = _session()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    try:
+        export_root = tmp_path / "exports"
+        publish_root = tmp_path / "published"
+        cfg = replace(
+            export_service.export_config,
+            publish_enabled=True,
+            publish_backend="filesystem",
+            publish_dir=str(publish_root),
+            publish_base_url="https://downloads.example.org/mydnaobv",
+            storage_dir=str(export_root),
+            publish_jobs_per_run=1,
+        )
+        monkeypatch.setattr(export_service, "export_config", cfg)
+        monkeypatch.setattr(publish_module, "export_config", cfg)
+
+        _mk_list(db, 20, product_type="project", is_public=True)
+        job = models.ExportJob(
+            id=200,
+            list_id=20,
+            status="ready",
+            phase="done",
+            created_at=now - timedelta(minutes=10),
+            finished_at=now - timedelta(minutes=5),
+            updated_at=now - timedelta(minutes=5),
+            message="Export complete.",
+        )
+        db.add(job)
+        db.flush()
+
+        final_dir = export_root / "job_200" / "final"
+        final_dir.mkdir(parents=True, exist_ok=True)
+        zip_path = final_dir / "example.zip"
+        zip_path.write_bytes(b"zip-bytes")
+
+        db.add(
+            models.ExportArtifact(
+                job_id=200,
+                kind="zip",
+                part_number=None,
+                relative_path="job_200/final/example.zip",
+                size_bytes=zip_path.stat().st_size,
+            )
+        )
+        db.commit()
+
+        published = export_service.process_pending_publish_jobs(db, limit=1)
+        db.refresh(job)
+
+        assert published == 1
+        assert "Publish complete." in (job.message or "")
+        assert (publish_root / "list_20" / "latest" / "example.zip").exists()
+        assert publish_module.is_latest_job_published(20, 200) is True
+    finally:
+        db.close()
+
+
+def test_split_large_zip_creates_ordered_chunks(tmp_path):
+    zip_path = tmp_path / "sample.zip"
+    zip_path.write_bytes(b"x" * (3 * 1024 * 1024 + 17))
+
+    chunks = export_service._split_large_zip(zip_path, chunk_size_mb=1)
+    assert len(chunks) == 4
+    assert chunks[0].name.endswith(".part001")
+    assert chunks[-1].name.endswith(".part004")
+    assert sum(chunk.stat().st_size for chunk in chunks) == zip_path.stat().st_size
