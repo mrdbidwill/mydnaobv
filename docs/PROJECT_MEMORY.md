@@ -221,6 +221,20 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - `docs/CRONTAB_DAY_NIGHT_AMERICA_CHICAGO.md`
   - includes ready-to-paste blocks for either `root` or `mydnaobv` crontab ownership with `CRON_TZ=America/Chicago`.
 
+## 2026-03-31
+- Production incident findings for project builds:
+  - `Job #435` (`ams-fungal-diversity-project-collection`) failed in plan/sync phase due iNaturalist HTTP `429 normal_throttling` during force-sync (`/observations?page=2`).
+  - Existing public "Ready" files remained available because public links use latest completed (`ready`/`partial_ready`) artifacts, not latest attempted job.
+- Queue reliability hardening implemented:
+  - sync-phase iNaturalist HTTP `429` now maps to `waiting_quota` with delayed retry instead of terminal `failed`.
+  - retry delay now respects `Retry-After` header when present (bounded) with safe default delay when missing.
+  - `_schedule_next_run(...)` now preserves pre-set future `next_run_at` for `waiting_quota` jobs instead of overriding with generic cadence.
+- Test coverage added:
+  - sync `429` transitions to retriable wait state.
+  - `waiting_quota` jobs retain explicit retry timestamps.
+- Operational note:
+  - very large finalize/zip work can exceed external cron `timeout` windows and leave jobs cycling via stale-lock recovery; treat as timeout-pressure tuning issue (not parity logic failure) and adjust runtime windows conservatively.
+
 ## Routine Update Rule
 On each major decision or architecture change:
 1. Add one dated entry in this file.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from email.utils import parsedate_to_datetime
 import hashlib
 import json
 from pathlib import Path
@@ -570,6 +571,19 @@ def _phase_plan(db: Session, job: models.ExportJob) -> bool:
             job.force_sync = False
         except Exception as exc:
             db.rollback()
+            throttle_delay_seconds = _sync_throttle_delay_seconds(exc)
+            if throttle_delay_seconds is not None:
+                now = utc_now_naive()
+                retry_at = now + timedelta(seconds=throttle_delay_seconds)
+                job.status = "waiting_quota"
+                job.phase = "plan"
+                job.next_run_at = retry_at
+                job.last_run_at = now
+                job.message = (
+                    "Sync paused by iNaturalist throttling (HTTP 429). "
+                    f"Retry after {throttle_delay_seconds}s at {retry_at.isoformat()} UTC."
+                )
+                return False
             job.status = "failed"
             job.phase = "done"
             job.message = f"Sync failed before export: {exc}"
@@ -1196,6 +1210,9 @@ def _refresh_job_counts(db: Session, job: models.ExportJob) -> None:
 
 
 def _schedule_next_run(job: models.ExportJob, now: datetime) -> None:
+    if job.status == "waiting_quota" and job.next_run_at and job.next_run_at > now:
+        job.last_run_at = now
+        return
     bucket = job.size_bucket or "L"
     if bucket == "L" and not export_config.is_large_window_open(now):
         job.next_run_at = export_config.next_large_window_start(now)
@@ -1210,6 +1227,39 @@ def _recommended_part_size() -> int:
     if export_config.include_all_photos:
         return max(30, min(export_config.part_size, 75))
     return max(50, min(export_config.part_size, 150))
+
+
+def _sync_throttle_delay_seconds(exc: Exception) -> int | None:
+    if not isinstance(exc, httpx.HTTPStatusError):
+        return None
+
+    response = exc.response
+    if response is None or response.status_code != 429:
+        return None
+
+    retry_after = _retry_after_seconds(response.headers.get("Retry-After"))
+    if retry_after is None:
+        return 30 * 60
+    return max(60, min(retry_after, 6 * 60 * 60))
+
+
+def _retry_after_seconds(raw_value: str | None) -> int | None:
+    value = (raw_value or "").strip()
+    if not value:
+        return None
+
+    if value.isdigit():
+        return max(0, int(value))
+
+    try:
+        parsed = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    now = datetime.now(UTC)
+    return max(0, int((parsed.astimezone(UTC) - now).total_seconds()))
 
 
 def _effective_download_chunk_size() -> int:
