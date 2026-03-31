@@ -27,3 +27,16 @@ Purpose: portfolio-level continuity pointer for the `myDNAobv` codebase in this 
 - Queue policy clarified:
   - prioritize user-facing jobs in daytime.
   - run bulk/state rebuild queues primarily in low-traffic night windows.
+
+## 2026-03-31
+- Download-accessibility behavior clarified and deployed:
+  - keep full ZIP/PDF artifacts available (no reduced-data fallback required).
+  - public download rows now display file sizes and explicit large-download guidance for less technical users.
+  - large ZIP artifacts are split into simpler chunk downloads (`Part 1`, `Part 2`, ...) when above configured threshold.
+- Reliability behavior clarified and deployed:
+  - sync-phase iNaturalist HTTP `429` now pauses to `waiting_quota` with retry timing, instead of terminal `failed`.
+  - finalize no longer blocks on publish-to-R2; publish runs as a separate bounded worker pass.
+  - ZIP packaging now avoids recompressing already-compressed payloads to reduce finalize CPU pressure.
+- Current operations preference:
+  - maintain all-photo/full-data outputs.
+  - optimize delivery and completion reliability around that full-data requirement.

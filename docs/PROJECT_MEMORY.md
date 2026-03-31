@@ -238,6 +238,7 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - public county/project download rows now display file size labels and plain-language large-download guidance.
   - large ZIP artifacts can now auto-split into sequential public chunk files (`*.part001`, `*.part002`, ...) when above configurable threshold (`EXPORT_ZIP_CHUNK_SIZE_MB`).
   - public artifact route now allows `zip_chunk` downloads and can redirect to published latest URL if local retained file is missing.
+  - policy intent: keep full-data artifacts available while improving accessibility for low-skill or low-bandwidth users (guidance + part downloads, not data reduction).
 - Finalize/runtime throughput update:
   - ZIP assembly now stores already-compressed file types (PDF/ZIP/media) with `ZIP_STORED` to reduce CPU pressure during large package generation.
 - Publish decoupling implemented:

@@ -34,11 +34,11 @@ SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # Day profile: single export lane during daytime.
-*/2 7-22 * * * flock -n /var/lock/mydnaobv_export_day.lock timeout 120s nice -n 15 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
+*/2 7-22 * * * flock -n /var/lock/mydnaobv_export_day.lock timeout 300s nice -n 15 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
 
 # Night profile: dual export lanes for backlog/rebuild throughput.
-*/2 23,0-6 * * * flock -n /var/lock/mydnaobv_export_night_a.lock timeout 150s nice -n 8 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
-*/2 23,0-6 * * * flock -n /var/lock/mydnaobv_export_night_b.lock timeout 150s nice -n 8 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
+*/2 23,0-6 * * * flock -n /var/lock/mydnaobv_export_night_a.lock timeout 600s nice -n 8 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
+*/2 23,0-6 * * * flock -n /var/lock/mydnaobv_export_night_b.lock timeout 600s nice -n 8 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
 
 # Daily cleanup.
 17 3 * * * /usr/bin/python3 -m app.exports.worker --cleanup
@@ -72,11 +72,11 @@ SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # Day profile: single export lane during daytime.
-*/2 7-22 * * * flock -n /var/lock/mydnaobv_export_day.lock timeout 120s nice -n 15 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
+*/2 7-22 * * * flock -n /var/lock/mydnaobv_export_day.lock timeout 300s nice -n 15 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
 
 # Night profile: dual export lanes for backlog/rebuild throughput.
-*/2 23,0-6 * * * flock -n /var/lock/mydnaobv_export_night_a.lock timeout 150s nice -n 8 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
-*/2 23,0-6 * * * flock -n /var/lock/mydnaobv_export_night_b.lock timeout 150s nice -n 8 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
+*/2 23,0-6 * * * flock -n /var/lock/mydnaobv_export_night_a.lock timeout 600s nice -n 8 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
+*/2 23,0-6 * * * flock -n /var/lock/mydnaobv_export_night_b.lock timeout 600s nice -n 8 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
 
 # Daily cleanup.
 17 3 * * * /usr/bin/python3 -m app.exports.worker --cleanup
@@ -93,3 +93,4 @@ sudo crontab -l
 - If an older single-lane worker line exists (`mydnaobv_export.lock`), remove it when enabling this profile.
 - Keep iNaturalist request/media guardrail environment values unchanged while applying this scheduler.
 - Daylight Saving Time is handled automatically by `CRON_TZ=America/Chicago` (CST/CDT).
+- 2026-03-31: timeout profile raised to `300s` day / `600s` night to avoid cutting off large finalize/zip phases.

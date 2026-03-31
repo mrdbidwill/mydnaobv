@@ -37,7 +37,7 @@ Use for local daytime traffic window.
 - Python export workers:
   - run one lane only.
   - keep lower priority (`nice -n 15`, `ionice -c2 -n7`).
-  - keep per-run slice moderate (`timeout 120s`).
+  - keep per-run slice moderate (`timeout 300s`).
 
 ### Night/Rebuild Profile (throughput-first)
 
@@ -48,7 +48,7 @@ Use for low-traffic windows and initial/major backlog builds.
 - Python export workers:
   - run two lanes in parallel (separate flock lock files).
   - reduce nice penalty (`nice -n 8`, same `ionice -c2 -n7`).
-  - allow slightly longer per-run slice (`timeout 150s`).
+  - allow longer per-run slice (`timeout 600s`).
   - queue bulk rebuild actions in this window.
 
 ## Cron Template (Current Architecture)
@@ -57,11 +57,11 @@ Example schedule in `America/Chicago`:
 
 ```cron
 # Day profile: single export lane during daytime.
-*/2 7-22 * * * flock -n /var/lock/mydnaobv_export_day.lock timeout 120s nice -n 15 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
+*/2 7-22 * * * flock -n /var/lock/mydnaobv_export_day.lock timeout 300s nice -n 15 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
 
 # Night profile: dual export lanes for backlog/rebuild throughput.
-*/2 23,0-6 * * * flock -n /var/lock/mydnaobv_export_night_a.lock timeout 150s nice -n 8 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
-*/2 23,0-6 * * * flock -n /var/lock/mydnaobv_export_night_b.lock timeout 150s nice -n 8 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
+*/2 23,0-6 * * * flock -n /var/lock/mydnaobv_export_night_a.lock timeout 600s nice -n 8 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
+*/2 23,0-6 * * * flock -n /var/lock/mydnaobv_export_night_b.lock timeout 600s nice -n 8 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
 
 # Daily cleanup.
 17 3 * * * /usr/bin/python3 -m app.exports.worker --cleanup
@@ -70,6 +70,12 @@ Example schedule in `America/Chicago`:
 Why this is safe in current code:
 - job selection uses DB row locking (`with_for_update(skip_locked=True)`), so concurrent workers claim different jobs.
 - pick loop only claims `queued` / `waiting_quota`, and stale `running` jobs are auto-requeued.
+- publish now runs outside finalize; long R2 uploads no longer block jobs from reaching `ready` / `partial_ready`.
+
+## 2026-03-31 Operational Note
+
+- Timeouts were raised from `120/150s` to `300/600s` (day/night) after observing large finalize/zip phases for all-photo jobs.
+- Keep this higher timeout profile unless guardrail metrics regress; short external timeouts can force stale-lock recovery loops on large jobs.
 
 ## Queue Policy
 

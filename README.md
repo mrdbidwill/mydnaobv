@@ -259,9 +259,14 @@ python scripts/cleanup_orphan_exports.py --apply
 Suggested cron entries (staged throughput):
 
 ```cron
-*/2 * * * * flock -n /var/lock/mydnaobv_export.lock timeout 120s nice -n 15 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
+# Single-lane fallback profile
+*/2 * * * * flock -n /var/lock/mydnaobv_export.lock timeout 300s nice -n 15 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
 17 3 * * * /usr/bin/python3 -m app.exports.worker --cleanup
 ```
+
+Recommended production day/night profile (with longer timeouts for large finalize/zip jobs) is documented in:
+- `docs/CRONTAB_DAY_NIGHT_AMERICA_CHICAGO.md`
+- `docs/SHARED_VPS_DAY_NIGHT_RUNBOOK.md`
 
 Problem-observation reporting (for owner follow-up):
 
