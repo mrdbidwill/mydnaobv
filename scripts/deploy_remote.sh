@@ -136,7 +136,6 @@ fi
 ssh "${ssh_opts_arr[@]}" "${USER_NAME}@${HOST}" \
   "cd '${APP_DIR}' && \
    APP_DIR='${APP_DIR}' \
-   DEPLOY_ENV_FILE='/tmp/mydnaobv-deploy-env.disabled' \
    BRANCH='${BRANCH}' \
    SERVICE_NAME='${SERVICE_NAME}' \
    SYSTEMCTL_USE_SUDO='${SYSTEMCTL_USE_SUDO}' \
