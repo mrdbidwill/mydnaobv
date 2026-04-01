@@ -158,6 +158,7 @@ notify_alert() {
 
 POST_DEPLOY_ALERT_WEBHOOK_URL="$(normalize_alert_url "primary" "${POST_DEPLOY_ALERT_WEBHOOK_URL}")"
 POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL="$(normalize_alert_url "fallback" "${POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL}")"
+log "Deploy alert endpoint lengths: primary=${#POST_DEPLOY_ALERT_WEBHOOK_URL}, fallback=${#POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL}, format=${DEPLOY_ALERT_FORMAT}"
 
 abort_deploy() {
   local message="$1"

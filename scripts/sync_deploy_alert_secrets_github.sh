@@ -52,9 +52,9 @@ set_secret() {
   local name="$1"
   local value="$2"
   if [[ -n "${REPO}" ]]; then
-    printf '%s' "${value}" | gh secret set "${name}" --repo "${REPO}" --body -
+    gh secret set "${name}" --repo "${REPO}" --body "${value}"
   else
-    printf '%s' "${value}" | gh secret set "${name}" --body -
+    gh secret set "${name}" --body "${value}"
   fi
 }
 
