@@ -323,6 +323,7 @@ Optional flags:
 - `DEPLOY_ALERT_ON_SUCCESS=0` set to `1` to send success alerts too
 - `ENABLE_AUTO_ROLLBACK=1` attempts automatic rollback to previous commit on deploy failure
 - `ROLLBACK_RUN_SMOKE=1` runs smoke checks again after rollback restart
+- `ROLLBACK_SMOKE_PATHS=/public/lists/...` optional explicit rollback smoke paths; default is empty (auto-discover homepage links)
 - `ALLOW_UNTRACKED=1` allows local untracked files on server (default)
 - `ALLOW_DIRTY=1` to bypass clean-worktree protection (not recommended)
 

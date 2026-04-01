@@ -282,6 +282,7 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - deploy failure handler now attempts automatic rollback (`ENABLE_AUTO_ROLLBACK=1` default): reset to pre-deploy commit, reinstall deps, restart service, rerun health + optional smoke.
   - rollback result is included in alert/log output; DB migrations remain non-reverted and must stay backward-compatible.
   - follow-up fix: enabled `ERR` trap propagation in deploy script (`set -E`) so failures raised inside helper functions (including post-deploy smoke) trigger rollback handler reliably.
+  - follow-up fix: rollback path now uses explicit command-status checks (robust under error-handler context) and can run rollback smoke with independent path config (`ROLLBACK_SMOKE_PATHS`, default auto-discovery).
   - `deploy_remote.sh` now forwards smoke-check settings/env to remote deploy runs.
 - County inclusion/parity invariants unchanged.
 

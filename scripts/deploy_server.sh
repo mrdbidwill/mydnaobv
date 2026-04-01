@@ -34,6 +34,7 @@ DEPLOY_ALERT_TIMEOUT_SECONDS="${DEPLOY_ALERT_TIMEOUT_SECONDS:-10}"
 DEPLOY_ALERT_ON_SUCCESS="${DEPLOY_ALERT_ON_SUCCESS:-0}"
 ENABLE_AUTO_ROLLBACK="${ENABLE_AUTO_ROLLBACK:-1}"
 ROLLBACK_RUN_SMOKE="${ROLLBACK_RUN_SMOKE:-1}"
+ROLLBACK_SMOKE_PATHS="${ROLLBACK_SMOKE_PATHS:-}"
 
 DEPLOY_PHASE="init"
 PRE_DEPLOY_COMMIT=""
@@ -187,6 +188,7 @@ run_health_check() {
 run_post_deploy_smoke() {
   local commit_short="$1"
   local force_run="${2:-0}"
+  local smoke_paths_override="${3:-${SMOKE_PATHS}}"
   if [[ "${RUN_POST_DEPLOY_SMOKE}" != "1" && "${force_run}" != "1" ]]; then
     return 0
   fi
@@ -200,7 +202,7 @@ run_post_deploy_smoke() {
     APP_SERVICE="${SERVICE_NAME}" \
     SMOKE_BASE_URL="${SMOKE_BASE_URL}" \
     SMOKE_HOST_HEADER="${SMOKE_HOST_HEADER}" \
-    SMOKE_PATHS="${SMOKE_PATHS}" \
+    SMOKE_PATHS="${smoke_paths_override}" \
     SMOKE_MAX_PUBLIC_LINKS="${SMOKE_MAX_PUBLIC_LINKS}" \
     POST_DEPLOY_ALERT_WEBHOOK_URL="${POST_DEPLOY_ALERT_WEBHOOK_URL}" \
     SMOKE_SUPPRESS_ALERTS="1" \
@@ -220,33 +222,49 @@ perform_rollback() {
   DEPLOY_PHASE="rollback_checkout"
   log "Rolling back to ${PRE_DEPLOY_SHORT}"
   if [[ "$(git rev-parse HEAD)" != "${PRE_DEPLOY_COMMIT}" ]]; then
-    git reset --hard "${PRE_DEPLOY_COMMIT}"
+    if ! git reset --hard "${PRE_DEPLOY_COMMIT}"; then
+      return 1
+    fi
   fi
 
   DEPLOY_PHASE="rollback_venv"
   if [[ ! -d "${VENV_DIR}" ]]; then
-    python3 -m venv "${VENV_DIR}"
+    if ! python3 -m venv "${VENV_DIR}"; then
+      return 1
+    fi
   fi
   # shellcheck source=/dev/null
-  source "${VENV_DIR}/bin/activate"
+  if ! source "${VENV_DIR}/bin/activate"; then
+    return 1
+  fi
 
   DEPLOY_PHASE="rollback_dependencies"
-  run_with_retry "${PIP_ATTEMPTS}" "${PIP_RETRY_DELAY_SECONDS}" \
-    pip install --disable-pip-version-check -r requirements.txt
+  if ! run_with_retry "${PIP_ATTEMPTS}" "${PIP_RETRY_DELAY_SECONDS}" \
+    pip install --disable-pip-version-check -r requirements.txt; then
+    return 1
+  fi
 
   if command -v systemctl >/dev/null 2>&1; then
     DEPLOY_PHASE="rollback_restart"
-    run_systemctl restart "${SERVICE_NAME}"
-    run_systemctl is-active --quiet "${SERVICE_NAME}"
+    if ! run_systemctl restart "${SERVICE_NAME}"; then
+      return 1
+    fi
+    if ! run_systemctl is-active --quiet "${SERVICE_NAME}"; then
+      return 1
+    fi
     log "Rollback service restart complete: ${SERVICE_NAME}"
   fi
 
   DEPLOY_PHASE="rollback_health"
-  run_health_check
+  if ! run_health_check; then
+    return 1
+  fi
 
   if [[ "${ROLLBACK_RUN_SMOKE}" == "1" ]]; then
     DEPLOY_PHASE="rollback_smoke"
-    run_post_deploy_smoke "${PRE_DEPLOY_SHORT}" "1"
+    if ! run_post_deploy_smoke "${PRE_DEPLOY_SHORT}" "1" "${ROLLBACK_SMOKE_PATHS}"; then
+      return 1
+    fi
   fi
 
   return 0
