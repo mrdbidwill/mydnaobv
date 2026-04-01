@@ -6,6 +6,7 @@ SMOKE_HOST_HEADER="${SMOKE_HOST_HEADER:-}"
 SMOKE_PATHS="${SMOKE_PATHS:-}"
 SMOKE_MAX_PUBLIC_LINKS="${SMOKE_MAX_PUBLIC_LINKS:-3}"
 POST_DEPLOY_ALERT_WEBHOOK_URL="${POST_DEPLOY_ALERT_WEBHOOK_URL:-}"
+SMOKE_SUPPRESS_ALERTS="${SMOKE_SUPPRESS_ALERTS:-0}"
 APP_COMMIT="${APP_COMMIT:-unknown}"
 APP_SERVICE="${APP_SERVICE:-mydnaobv}"
 
@@ -15,6 +16,9 @@ log() {
 
 send_alert() {
   local message="$1"
+  if [[ "${SMOKE_SUPPRESS_ALERTS}" == "1" ]]; then
+    return 0
+  fi
   if [[ -z "${POST_DEPLOY_ALERT_WEBHOOK_URL}" ]]; then
     return 0
   fi

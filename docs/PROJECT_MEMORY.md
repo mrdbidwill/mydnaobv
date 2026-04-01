@@ -278,7 +278,9 @@ Purpose: persistent decision/history log for future chat sessions and implementa
 - Deploy safety/notification hardening:
   - added `scripts/post_deploy_smoke.sh` to verify public artifact download endpoints after restart (auto-discovered links or explicit configured paths).
   - `deploy_server.sh` now runs post-deploy smoke by default (`RUN_POST_DEPLOY_SMOKE=1`) and fails deploy on smoke errors.
-  - optional webhook failure alert support added via `POST_DEPLOY_ALERT_WEBHOOK_URL` (plain text POST).
+  - deploy alerts now support primary+fallback webhook endpoints and payload formats (`plain`/`ntfy`/`slack`/`discord`).
+  - deploy failure handler now attempts automatic rollback (`ENABLE_AUTO_ROLLBACK=1` default): reset to pre-deploy commit, reinstall deps, restart service, rerun health + optional smoke.
+  - rollback result is included in alert/log output; DB migrations remain non-reverted and must stay backward-compatible.
   - `deploy_remote.sh` now forwards smoke-check settings/env to remote deploy runs.
 - County inclusion/parity invariants unchanged.
 

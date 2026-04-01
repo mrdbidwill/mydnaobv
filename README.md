@@ -316,14 +316,24 @@ Optional flags:
 - `SMOKE_HOST_HEADER=dna.mrdbid.com` Host header used by smoke checks when required by local vhost routing
 - `SMOKE_PATHS=/public/lists/212/artifacts/2899/download,/public/lists/212/artifacts/2900/download` optional explicit paths for smoke checks (otherwise script auto-discovers from homepage)
 - `SMOKE_MAX_PUBLIC_LINKS=3` number of auto-discovered public artifact links to verify
-- `POST_DEPLOY_ALERT_WEBHOOK_URL=https://...` optional webhook URL for smoke-failure alerts (plain text POST)
+- `POST_DEPLOY_ALERT_WEBHOOK_URL=https://...` primary alert endpoint for deploy/smoke failures
+- `POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL=https://...` secondary alert endpoint for redundancy
+- `DEPLOY_ALERT_FORMAT=plain` alert payload format: `plain`, `ntfy`, `slack`, or `discord`
+- `DEPLOY_ALERT_TIMEOUT_SECONDS=10` timeout for each alert webhook request
+- `DEPLOY_ALERT_ON_SUCCESS=0` set to `1` to send success alerts too
+- `ENABLE_AUTO_ROLLBACK=1` attempts automatic rollback to previous commit on deploy failure
+- `ROLLBACK_RUN_SMOKE=1` runs smoke checks again after rollback restart
 - `ALLOW_UNTRACKED=1` allows local untracked files on server (default)
 - `ALLOW_DIRTY=1` to bypass clean-worktree protection (not recommended)
 
-Post-deploy smoke failure behavior:
+Failure behavior:
 - deploy exits non-zero (manual deploy command fails immediately)
 - GitHub Actions deploy job fails when used in CI
-- optional webhook alert is sent when `POST_DEPLOY_ALERT_WEBHOOK_URL` is configured
+- if `ENABLE_AUTO_ROLLBACK=1`, deploy attempts rollback to the previous commit and restarts service
+- deploy failure + rollback result are logged and sent to configured alert webhooks
+
+Rollback note:
+- database migrations are not auto-reverted; keep migrations backward-compatible so previous app code can run safely after rollback.
 
 For one-command non-interactive deploys with `SYSTEMCTL_USE_SUDO=1`, grant limited sudo:
 
