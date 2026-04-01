@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 # Deploy myDNAobv on the server host.
 # Intended default layout from runbooks:
