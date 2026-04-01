@@ -300,6 +300,10 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - operator-process guardrail: if the same deploy validation fails repeatedly, stop automatic re-runs and switch to a single diagnostics pass + explicit operator decision before any further retry.
   - deploy operations simplified to manual-only path by request: removed GitHub Actions production deploy workflow and GitHub alert-secret sync helper script.
   - added canonical one-command production deploy wrapper: `scripts/deploy_production.sh` (local command delegates to hardened remote deploy script with production defaults).
+- 2026-04-01 rollback note (cost-control):
+  - after additional alert plumbing attempts, operator directed immediate rollback to last safe manual-deploy baseline commit (`be004fa` state) to stop iteration churn.
+  - unresolved alert finding to revisit later (single focused pass): `deploy_alert_validate_url(...)` can report `empty` for non-empty webhook strings in live deploy path; symptom seen as `Ignoring invalid ... (empty)` even when env-file lengths are non-zero.
+  - process reminder: do not run repeated failure drills without a bounded diagnostics plan and explicit operator approval between retries.
 - County inclusion/parity invariants unchanged.
 
 ## Routine Update Rule
