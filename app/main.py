@@ -25,7 +25,7 @@ from app.exports.service import (
     list_jobs_for_list,
     latest_completed_job_for_list,
 )
-from app.exports.publish import latest_artifact_exists, published_latest_url
+from app.exports.publish import has_latest_publish_marker, latest_artifact_exists, published_latest_url
 from app.exports.estimate import estimate_list_export_eta, estimate_precheck_from_observations
 from app.services.inat import fetch_observations_for_list
 from app.services.inat import estimate_total_observations
@@ -321,6 +321,12 @@ def _artifact_public_url(list_id: int, artifact: models.ExportArtifact | None) -
         if latest_url:
             return latest_url
     return f"/public/lists/{list_id}/artifacts/{artifact.id}/download"
+
+
+def _legacy_latest_redirect_allowed(list_id: int, artifact: models.ExportArtifact) -> bool:
+    if artifact.kind == "zip_chunk":
+        return False
+    return not has_latest_publish_marker(list_id)
 
 
 def _cleanup_list_export_files(job_ids: list[int], list_id: int) -> None:
@@ -1448,7 +1454,7 @@ def admin_download_export_artifact_by_job(
         return FileResponse(path=str(artifact_path), filename=artifact_path.name)
 
     # Fallback to published latest URL when local retention cleanup removed job files.
-    if latest_artifact_exists(job.list_id, artifact):
+    if latest_artifact_exists(job.list_id, artifact) or _legacy_latest_redirect_allowed(job.list_id, artifact):
         published_url = published_latest_url(job.list_id, artifact)
         if published_url:
             return RedirectResponse(url=published_url, status_code=307)
@@ -1483,7 +1489,9 @@ def public_download_latest_artifact(
         return FileResponse(path=str(artifact_path), filename=artifact_path.name)
 
     published_url = published_latest_url(list_id, artifact)
-    if published_url and latest_artifact_exists(list_id, artifact):
+    if published_url and (
+        latest_artifact_exists(list_id, artifact) or _legacy_latest_redirect_allowed(list_id, artifact)
+    ):
         return RedirectResponse(url=published_url, status_code=307)
 
     raise HTTPException(status_code=404, detail="File not available")

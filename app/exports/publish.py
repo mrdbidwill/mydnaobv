@@ -125,6 +125,13 @@ def is_latest_job_published(list_id: int, job_id: int) -> bool:
     return int(state.get("latest_job_id") or 0) >= int(job_id)
 
 
+def has_latest_publish_marker(list_id: int) -> bool:
+    if not publish_enabled():
+        return False
+    state = _load_publish_state(list_id)
+    return int(state.get("latest_job_id") or 0) > 0
+
+
 def cleanup_published_job(list_id: int, job_id: int) -> None:
     if _publish_backend() == BACKEND_S3:
         _delete_s3_prefix(_object_key(f"list_{list_id}/job_{job_id}/"))

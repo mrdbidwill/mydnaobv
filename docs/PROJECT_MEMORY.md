@@ -263,6 +263,16 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - required county scope + project membership + `DNA Barcode ITS` rule preserved.
   - county guide observation-completeness and numbering alignment behavior unchanged.
 
+## 2026-04-01
+- Public download regression fix for legacy publish-state gaps:
+  - incident observed: public app-routed artifact downloads returned `{"detail":"File not available"}` while R2 `latest/` files existed.
+  - trigger: strict `latest_artifact_exists(...)` gate on redirect path required local publish-state marker; older lists without marker were blocked after local retention cleanup.
+  - mitigation implemented:
+    - added publish helper `has_latest_publish_marker(list_id)`.
+    - public/admin artifact download routes now allow non-`zip_chunk` legacy redirect to published `latest/` URL when marker is absent for that list.
+    - strict filename-level publish-state checks remain unchanged for marker-present lists (including `zip_chunk` safety behavior).
+- County inclusion/parity invariants unchanged.
+
 ## Routine Update Rule
 On each major decision or architecture change:
 1. Add one dated entry in this file.
