@@ -226,6 +226,7 @@ jobs:
               git pull --ff-only origin '${branch}'; \
               chmod +x ./scripts/deploy_server.sh; \
               APP_DIR='${app_dir}' \
+              DEPLOY_ENV_FILE='' \
               BRANCH='${branch}' \
               SERVICE_NAME='${service_name}' \
               SYSTEMCTL_USE_SUDO='${systemctl_use_sudo}' \

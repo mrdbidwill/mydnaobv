@@ -139,6 +139,7 @@ alert_fallback_q="$(printf '%q' "${POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL}")"
 ssh "${ssh_opts_arr[@]}" "${USER_NAME}@${HOST}" \
   "cd '${APP_DIR}' && \
    APP_DIR='${APP_DIR}' \
+   DEPLOY_ENV_FILE='' \
    BRANCH='${BRANCH}' \
    SERVICE_NAME='${SERVICE_NAME}' \
    SYSTEMCTL_USE_SUDO='${SYSTEMCTL_USE_SUDO}' \

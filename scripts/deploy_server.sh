@@ -83,7 +83,7 @@ normalize_alert_url() {
     return 0
   fi
 
-  log "Ignoring invalid ${label} deploy alert webhook URL (${reason})."
+  log "Ignoring invalid ${label} deploy alert webhook URL (${reason})." >&2
   printf ''
 }
 
