@@ -22,17 +22,22 @@ if [[ -z "${PRIMARY}" ]]; then
   exit 1
 fi
 
-args=()
-if [[ -n "${REPO}" ]]; then
-  args+=(--repo "${REPO}")
-fi
+set_secret() {
+  local name="$1"
+  local value="$2"
+  if [[ -n "${REPO}" ]]; then
+    printf '%s' "${value}" | gh secret set "${name}" --repo "${REPO}" --body -
+  else
+    printf '%s' "${value}" | gh secret set "${name}" --body -
+  fi
+}
 
 echo "Setting GitHub secret DEPLOY_ALERT_WEBHOOK_URL"
-printf '%s' "${PRIMARY}" | gh secret set DEPLOY_ALERT_WEBHOOK_URL "${args[@]}" --body -
+set_secret "DEPLOY_ALERT_WEBHOOK_URL" "${PRIMARY}"
 
 if [[ -n "${FALLBACK}" ]]; then
   echo "Setting GitHub secret DEPLOY_ALERT_WEBHOOK_FALLBACK_URL"
-  printf '%s' "${FALLBACK}" | gh secret set DEPLOY_ALERT_WEBHOOK_FALLBACK_URL "${args[@]}" --body -
+  set_secret "DEPLOY_ALERT_WEBHOOK_FALLBACK_URL" "${FALLBACK}"
 fi
 
 echo "Done."
