@@ -57,7 +57,7 @@ def safe_name(base: str, max_len: int) -> str:
     return cleaned[:max_len]
 
 
-def verify_postgres(url, keep_dump: bool, dump_path: Path | None) -> None:
+def verify_postgres(url, keep_dump: bool, dump_path: Path | None, restore_db: str | None) -> None:
     require_tools("pg_dump", "pg_restore", "psql", "createdb", "dropdb")
     if not url.database:
         raise RuntimeError("DATABASE_URL is missing database name.")
@@ -65,6 +65,10 @@ def verify_postgres(url, keep_dump: bool, dump_path: Path | None) -> None:
     ts = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
     base_name = safe_name(url.database, 40)
     temp_db = safe_name(f"{base_name}_restorecheck_{ts}", 63)
+    target_db = (restore_db or "").strip() or temp_db
+    created_temp_db = False
+    if target_db == url.database:
+        raise RuntimeError("Refusing to restore into source production database.")
 
     env = os.environ.copy()
     if url.password:
@@ -77,12 +81,21 @@ def verify_postgres(url, keep_dump: bool, dump_path: Path | None) -> None:
     dump_file = dump_path or Path(tempfile.gettempdir()) / f"{base_name}_{ts}.dump"
 
     dump_cmd = ["pg_dump", "-Fc", "-f", str(dump_file), "-d", dbname]
-    create_cmd = ["createdb", temp_db]
-    restore_cmd = ["pg_restore", "--no-owner", "--no-privileges", "-d", temp_db, str(dump_file)]
+    create_cmd = ["createdb", target_db]
+    restore_cmd = [
+        "pg_restore",
+        "--clean",
+        "--if-exists",
+        "--no-owner",
+        "--no-privileges",
+        "-d",
+        target_db,
+        str(dump_file),
+    ]
     query_cmd = [
         "psql",
         "-d",
-        temp_db,
+        target_db,
         "-At",
         "-c",
         (
@@ -92,7 +105,7 @@ def verify_postgres(url, keep_dump: bool, dump_path: Path | None) -> None:
             "AND table_name IN ('observation_lists','export_jobs','alembic_version');"
         ),
     ]
-    drop_cmd = ["dropdb", temp_db]
+    drop_cmd = ["dropdb", target_db]
 
     if host:
         dump_cmd.extend(["-h", host])
@@ -115,7 +128,15 @@ def verify_postgres(url, keep_dump: bool, dump_path: Path | None) -> None:
 
     try:
         run(dump_cmd, env=env)
-        run(create_cmd, env=env)
+        if not restore_db:
+            try:
+                run(create_cmd, env=env)
+                created_temp_db = True
+            except subprocess.CalledProcessError as exc:
+                raise RuntimeError(
+                    "Unable to create temporary restore database. "
+                    "Grant CREATEDB or provide --restore-db with a pre-created scratch database."
+                ) from exc
         run(restore_cmd, env=env)
 
         proc = subprocess.run(query_cmd, check=True, capture_output=True, text=True, env=env)
@@ -123,12 +144,13 @@ def verify_postgres(url, keep_dump: bool, dump_path: Path | None) -> None:
         if table_count < 3:
             raise RuntimeError(f"Restore validation failed. Expected 3 core tables, got {table_count}.")
     finally:
-        subprocess.run(drop_cmd, env=env, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if created_temp_db:
+            subprocess.run(drop_cmd, env=env, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if not keep_dump:
             dump_file.unlink(missing_ok=True)
 
 
-def verify_mysql(url, keep_dump: bool, dump_path: Path | None) -> None:
+def verify_mysql(url, keep_dump: bool, dump_path: Path | None, restore_db: str | None) -> None:
     require_tools("mysqldump", "mysql")
     if not url.database:
         raise RuntimeError("DATABASE_URL is missing database name.")
@@ -136,6 +158,10 @@ def verify_mysql(url, keep_dump: bool, dump_path: Path | None) -> None:
     ts = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
     base_name = safe_name(url.database, 40)
     temp_db = safe_name(f"{base_name}_restorecheck_{ts}", 63)
+    target_db = (restore_db or "").strip() or temp_db
+    created_temp_db = False
+    if target_db == url.database:
+        raise RuntimeError("Refusing to restore into source production database.")
     dump_file = dump_path or Path(tempfile.gettempdir()) / f"{base_name}_{ts}.sql"
 
     env = os.environ.copy()
@@ -152,8 +178,8 @@ def verify_mysql(url, keep_dump: bool, dump_path: Path | None) -> None:
         common.extend(["-u", user])
 
     dump_cmd = ["mysqldump", *common, "--single-transaction", "--routines", "--events", "--triggers", dbname]
-    create_cmd = ["mysql", *common, "-e", f"CREATE DATABASE `{temp_db}`"]
-    drop_cmd = ["mysql", *common, "-e", f"DROP DATABASE IF EXISTS `{temp_db}`"]
+    create_cmd = ["mysql", *common, "-e", f"CREATE DATABASE `{target_db}`"]
+    drop_cmd = ["mysql", *common, "-e", f"DROP DATABASE IF EXISTS `{target_db}`"]
     check_cmd = [
         "mysql",
         *common,
@@ -164,22 +190,31 @@ def verify_mysql(url, keep_dump: bool, dump_path: Path | None) -> None:
             "WHERE table_schema=%s "
             "AND table_name IN ('observation_lists','export_jobs','alembic_version')"
         )
-        % repr(temp_db),
+        % repr(target_db),
     ]
 
     try:
         with dump_file.open("wb") as fp:
             run(dump_cmd, env=env, stdout=fp)
-        run(create_cmd, env=env)
+        if not restore_db:
+            try:
+                run(create_cmd, env=env)
+                created_temp_db = True
+            except subprocess.CalledProcessError as exc:
+                raise RuntimeError(
+                    "Unable to create temporary restore database. "
+                    "Grant CREATE DATABASE or provide --restore-db with a pre-created scratch database."
+                ) from exc
         with dump_file.open("rb") as fp:
-            subprocess.run(["mysql", *common, temp_db], check=True, env=env, stdin=fp)
+            subprocess.run(["mysql", *common, target_db], check=True, env=env, stdin=fp)
 
         proc = subprocess.run(check_cmd, check=True, capture_output=True, text=True, env=env)
         table_count = int((proc.stdout or "0").strip() or 0)
         if table_count < 3:
             raise RuntimeError(f"Restore validation failed. Expected 3 core tables, got {table_count}.")
     finally:
-        subprocess.run(drop_cmd, env=env, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if created_temp_db:
+            subprocess.run(drop_cmd, env=env, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if not keep_dump:
             dump_file.unlink(missing_ok=True)
 
@@ -189,6 +224,11 @@ def main() -> int:
     parser.add_argument("--database-url", default=os.getenv("DATABASE_URL", ""), help="DB URL. Defaults to env DATABASE_URL.")
     parser.add_argument("--keep-dump", action="store_true", help="Keep backup dump file after verification.")
     parser.add_argument("--dump-path", default="", help="Optional explicit dump file path.")
+    parser.add_argument(
+        "--restore-db",
+        default=os.getenv("DB_RESTORE_VERIFY_DATABASE", ""),
+        help="Optional pre-created scratch database for restore verification.",
+    )
     args = parser.parse_args()
 
     raw = (args.database_url or "").strip()
@@ -199,14 +239,15 @@ def main() -> int:
     url = parse_database_url(raw)
     driver = (url.drivername or "").lower()
     dump_path = Path(args.dump_path).expanduser() if args.dump_path else None
+    restore_db = (args.restore_db or "").strip() or None
 
     try:
         if driver.startswith("postgresql"):
             print("[db-verify] Engine: PostgreSQL")
-            verify_postgres(url, keep_dump=args.keep_dump, dump_path=dump_path)
+            verify_postgres(url, keep_dump=args.keep_dump, dump_path=dump_path, restore_db=restore_db)
         elif driver.startswith("mysql"):
             print("[db-verify] Engine: MySQL")
-            verify_mysql(url, keep_dump=args.keep_dump, dump_path=dump_path)
+            verify_mysql(url, keep_dump=args.keep_dump, dump_path=dump_path, restore_db=restore_db)
         else:
             print(f"[db-verify] Unsupported DATABASE_URL driver: {url.drivername}", file=sys.stderr)
             return 2

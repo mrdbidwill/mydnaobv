@@ -305,18 +305,7 @@ HOST=dna.mrdbid.com USER_NAME=mydnaobv APP_DIR=/opt/mydnaobv/app BRANCH=main SER
 Recommended: keep deploy alert URLs and defaults in a local, non-repo file:
 
 ```bash
-mkdir -p ~/.config/mydnaobv
-chmod 700 ~/.config/mydnaobv
-cat > ~/.config/mydnaobv/deploy.env <<'EOF'
-# Do not commit this file.
-POST_DEPLOY_ALERT_WEBHOOK_URL=https://ntfy.sh/<PRIMARY_RANDOM_TOPIC>
-POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL=https://ntfy.sh/<FALLBACK_RANDOM_TOPIC>
-DEPLOY_ALERT_FORMAT=ntfy
-ENABLE_AUTO_ROLLBACK=1
-RUN_POST_DEPLOY_SMOKE=1
-RUN_MIGRATION_COMPAT_CHECK=1
-EOF
-chmod 600 ~/.config/mydnaobv/deploy.env
+./scripts/init_local_deploy_env.sh
 ```
 
 `deploy_remote.sh` and `deploy_server.sh` auto-load this file from `DEPLOY_ENV_FILE` (default `~/.config/mydnaobv/deploy.env`).
@@ -438,6 +427,11 @@ Database backup+restore verification:
 ```
 
 Use this periodically on the server to verify backups are restorable, not just created.
+If the deploy DB user cannot create/drop databases, create a dedicated scratch DB once and reuse it:
+
+```bash
+./scripts/verify_db_backup_restore.py --restore-db mydnaobv_restore_verify
+```
 
 ## Environment variables
 
