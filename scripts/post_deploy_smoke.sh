@@ -47,9 +47,11 @@ request_body() {
   local url="$1"
   local body_file="$2"
   if [[ -n "${SMOKE_HOST_HEADER}" ]]; then
-    curl --fail --silent --show-error --max-time 30 -H "Host: ${SMOKE_HOST_HEADER}" "${url}" >"${body_file}"
+    curl --location --fail --silent --show-error --max-time 30 \
+      -H "Host: ${SMOKE_HOST_HEADER}" \
+      "${url}" >"${body_file}"
   else
-    curl --fail --silent --show-error --max-time 30 "${url}" >"${body_file}"
+    curl --location --fail --silent --show-error --max-time 30 "${url}" >"${body_file}"
   fi
 }
 
