@@ -21,6 +21,10 @@ log() {
 }
 
 normalize_smoke_alert_url() {
+  if [[ "${SMOKE_SUPPRESS_ALERTS}" == "1" ]]; then
+    return 0
+  fi
+
   local normalized=""
   local reason=""
   if deploy_alert_validate_url "${POST_DEPLOY_ALERT_WEBHOOK_URL}" normalized reason "${DEPLOY_ALERT_FORMAT}" "${DEPLOY_ALERT_NTFY_BASE_URL}"; then

@@ -47,6 +47,7 @@ DEPLOY_ALERT_FORMAT="${DEPLOY_ALERT_FORMAT:-plain}"
 DEPLOY_ALERT_NTFY_BASE_URL="${DEPLOY_ALERT_NTFY_BASE_URL:-https://ntfy.sh}"
 DEPLOY_ALERT_TIMEOUT_SECONDS="${DEPLOY_ALERT_TIMEOUT_SECONDS:-10}"
 DEPLOY_ALERT_ON_SUCCESS="${DEPLOY_ALERT_ON_SUCCESS:-0}"
+DEPLOY_ALERT_MAX_CHARS="${DEPLOY_ALERT_MAX_CHARS:-1800}"
 ENABLE_AUTO_ROLLBACK="${ENABLE_AUTO_ROLLBACK:-1}"
 ROLLBACK_RUN_SMOKE="${ROLLBACK_RUN_SMOKE:-1}"
 ROLLBACK_SMOKE_PATHS="${ROLLBACK_SMOKE_PATHS:-}"
@@ -87,45 +88,71 @@ normalize_alert_url() {
 }
 
 send_alert_to_webhook() {
-  local url="$1"
-  local message="$2"
-  if [[ -z "${url}" ]]; then
-    return 2
+  local label="${1:-endpoint}"
+  local url="$2"
+  local message="$3"
+  local body="${message}"
+  local max_chars="${DEPLOY_ALERT_MAX_CHARS}"
+  if [[ "${max_chars}" =~ ^[0-9]+$ ]] && (( max_chars > 32 )) && (( ${#body} > max_chars )); then
+    body="${body:0:max_chars} ... [truncated]"
   fi
-  if ! command -v curl >/dev/null 2>&1; then
-    log "curl not found; cannot send deploy webhook alert."
-    return 1
-  fi
+
+  local err_file
+  err_file="$(mktemp)"
+  local http_code=""
+  local curl_rc=0
 
   local fmt
   fmt="$(printf '%s' "${DEPLOY_ALERT_FORMAT}" | tr '[:upper:]' '[:lower:]')"
   case "${fmt}" in
     slack)
       local payload_slack
-      payload_slack="{\"text\":\"$(json_escape "${message}")\"}"
-      curl --silent --show-error --fail --location --max-time "${DEPLOY_ALERT_TIMEOUT_SECONDS}" --retry 2 --retry-delay 1 \
+      payload_slack="{\"text\":\"$(json_escape "${body}")\"}"
+      http_code="$(curl --silent --show-error --location --max-time "${DEPLOY_ALERT_TIMEOUT_SECONDS}" --retry 1 --retry-delay 1 \
         --request POST \
         -H "Content-Type: application/json" \
         --data "${payload_slack}" \
-        --url "${url}" >/dev/null 2>&1
+        --url "${url}" \
+        --output /dev/null \
+        --write-out '%{http_code}' 2>"${err_file}")" || curl_rc=$?
       ;;
     discord)
       local payload_discord
-      payload_discord="{\"content\":\"$(json_escape "${message}")\"}"
-      curl --silent --show-error --fail --location --max-time "${DEPLOY_ALERT_TIMEOUT_SECONDS}" --retry 2 --retry-delay 1 \
+      payload_discord="{\"content\":\"$(json_escape "${body}")\"}"
+      http_code="$(curl --silent --show-error --location --max-time "${DEPLOY_ALERT_TIMEOUT_SECONDS}" --retry 1 --retry-delay 1 \
         --request POST \
         -H "Content-Type: application/json" \
         --data "${payload_discord}" \
-        --url "${url}" >/dev/null 2>&1
+        --url "${url}" \
+        --output /dev/null \
+        --write-out '%{http_code}' 2>"${err_file}")" || curl_rc=$?
       ;;
     plain|ntfy|*)
-      curl --silent --show-error --fail --location --max-time "${DEPLOY_ALERT_TIMEOUT_SECONDS}" --retry 2 --retry-delay 1 \
+      http_code="$(curl --silent --show-error --location --max-time "${DEPLOY_ALERT_TIMEOUT_SECONDS}" --retry 1 --retry-delay 1 \
         --request POST \
         -H "Content-Type: text/plain; charset=utf-8" \
-        --data-binary "${message}" \
-        --url "${url}" >/dev/null 2>&1
+        --data-binary "${body}" \
+        --url "${url}" \
+        --output /dev/null \
+        --write-out '%{http_code}' 2>"${err_file}")" || curl_rc=$?
       ;;
   esac
+
+  if [[ "${curl_rc}" -ne 0 ]]; then
+    local err_msg=""
+    err_msg="$(tr '\n' ' ' < "${err_file}" | sed -e 's/[[:space:]]\\+/ /g' | cut -c1-200)"
+    rm -f "${err_file}"
+    log "Deploy alert ${label} failed (curl_exit=${curl_rc}, http_code=${http_code:-000}, err=${err_msg:-none})."
+    return 1
+  fi
+
+  rm -f "${err_file}"
+  if [[ ! "${http_code}" =~ ^2[0-9][0-9]$ ]]; then
+    log "Deploy alert ${label} failed (http_code=${http_code})."
+    return 1
+  fi
+
+  return 0
 }
 
 notify_alert() {
@@ -134,13 +161,13 @@ notify_alert() {
   local attempted=0
   if [[ -n "${POST_DEPLOY_ALERT_WEBHOOK_URL}" ]]; then
     attempted=1
-    if send_alert_to_webhook "${POST_DEPLOY_ALERT_WEBHOOK_URL}" "${message}"; then
+    if send_alert_to_webhook "primary" "${POST_DEPLOY_ALERT_WEBHOOK_URL}" "${message}"; then
       sent=1
     fi
   fi
   if [[ -n "${POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL}" ]]; then
     attempted=1
-    if send_alert_to_webhook "${POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL}" "${message}"; then
+    if send_alert_to_webhook "fallback" "${POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL}" "${message}"; then
       sent=1
     fi
   fi
