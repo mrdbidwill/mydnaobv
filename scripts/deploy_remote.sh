@@ -133,9 +133,6 @@ if [[ "${PRECHECK_SUDO}" == "1" && "${SYSTEMCTL_USE_SUDO}" == "1" ]]; then
     "sudo -n systemctl is-active --quiet '${SERVICE_NAME}'; rc=\$?; test \$rc -eq 0 -o \$rc -eq 3"
 fi
 
-alert_primary_q="$(printf '%q' "${POST_DEPLOY_ALERT_WEBHOOK_URL}")"
-alert_fallback_q="$(printf '%q' "${POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL}")"
-
 ssh "${ssh_opts_arr[@]}" "${USER_NAME}@${HOST}" \
   "cd '${APP_DIR}' && \
    APP_DIR='${APP_DIR}' \
@@ -152,8 +149,8 @@ ssh "${ssh_opts_arr[@]}" "${USER_NAME}@${HOST}" \
    SMOKE_HOST_HEADER='${SMOKE_HOST_HEADER}' \
    SMOKE_PATHS='${SMOKE_PATHS}' \
    SMOKE_MAX_PUBLIC_LINKS='${SMOKE_MAX_PUBLIC_LINKS}' \
-   POST_DEPLOY_ALERT_WEBHOOK_URL=${alert_primary_q} \
-   POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL=${alert_fallback_q} \
+   POST_DEPLOY_ALERT_WEBHOOK_URL='${POST_DEPLOY_ALERT_WEBHOOK_URL}' \
+   POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL='${POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL}' \
    DEPLOY_ALERT_FORMAT='${DEPLOY_ALERT_FORMAT}' \
    DEPLOY_ALERT_NTFY_BASE_URL='${DEPLOY_ALERT_NTFY_BASE_URL}' \
    DEPLOY_ALERT_TIMEOUT_SECONDS='${DEPLOY_ALERT_TIMEOUT_SECONDS}' \
