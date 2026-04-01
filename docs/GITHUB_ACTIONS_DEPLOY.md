@@ -14,6 +14,7 @@ Secrets:
 - `DEPLOY_SSH_KEY` (private SSH key text for `DEPLOY_USER`)
 - `DEPLOY_ALERT_WEBHOOK_URL` (optional but recommended; primary deploy failure alert endpoint)
 - `DEPLOY_ALERT_WEBHOOK_FALLBACK_URL` (optional; secondary alert endpoint)
+  - webhook values must be full `http://` or `https://` URLs with no whitespace/newlines.
 
 Variables (optional, defaults shown):
 - `DEPLOY_PORT=22`
@@ -72,6 +73,9 @@ Deploy noise controls included:
 
 - `Host key verification failed`:
   - workflow auto-adds host key with `ssh-keyscan`; verify `DEPLOY_HOST` and `DEPLOY_PORT`.
+
+- Deployment skipped due invalid alert webhook config:
+  - check `DEPLOY_ALERT_WEBHOOK_URL` / fallback secret format (must start `http://` or `https://`, no spaces/newlines, not starting with `-`).
 
 - Health check `404` at `127.0.0.1`:
   - set `DEPLOY_HEALTHCHECK_HOST_HEADER` to the site hostname used by nginx server block.

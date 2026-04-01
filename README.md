@@ -326,6 +326,7 @@ Optional flags:
 - `SMOKE_MAX_PUBLIC_LINKS=3` number of auto-discovered public artifact links to verify
 - `POST_DEPLOY_ALERT_WEBHOOK_URL=https://...` primary alert endpoint for deploy/smoke failures
 - `POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL=https://...` secondary alert endpoint for redundancy
+- webhook URLs must be full `http://` or `https://` values with no spaces/newlines
 - `DEPLOY_ALERT_FORMAT=plain` alert payload format: `plain`, `ntfy`, `slack`, or `discord`
 - `DEPLOY_ALERT_TIMEOUT_SECONDS=10` timeout for each alert webhook request
 - `DEPLOY_ALERT_ON_SUCCESS=0` set to `1` to send success alerts too

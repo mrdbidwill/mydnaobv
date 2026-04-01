@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+
+# Shared deploy alert helpers for URL normalization/validation.
+# Return codes for deploy_alert_validate_url:
+#   0 = valid URL (written to output variable)
+#   1 = empty/unspecified value
+#   2 = invalid value
+
+DEPLOY_ALERT_VALIDATE_REASON=""
+DEPLOY_ALERT_VALIDATED_URL=""
+
+deploy_alert_validate_url() {
+  local raw="${1:-}"
+  local out_var="${2:-DEPLOY_ALERT_VALIDATED_URL}"
+  local reason_var="${3:-DEPLOY_ALERT_VALIDATE_REASON}"
+  local normalized="${raw//$'\r'/}"
+
+  normalized="$(printf '%s' "${normalized}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+
+  printf -v "${out_var}" '%s' ""
+  printf -v "${reason_var}" '%s' ""
+  if [[ -z "${normalized}" ]]; then
+    printf -v "${reason_var}" '%s' "empty"
+    return 1
+  fi
+  if [[ "${normalized}" == -* ]]; then
+    printf -v "${reason_var}" '%s' "starts_with_dash"
+    return 2
+  fi
+  if [[ "${normalized}" =~ [[:space:]] ]]; then
+    printf -v "${reason_var}" '%s' "contains_whitespace"
+    return 2
+  fi
+  if [[ ! "${normalized}" =~ ^https?:// ]]; then
+    printf -v "${reason_var}" '%s' "invalid_scheme"
+    return 2
+  fi
+
+  printf -v "${out_var}" '%s' "${normalized}"
+  return 0
+}

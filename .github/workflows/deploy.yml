@@ -40,6 +40,8 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_ALERT_WEBHOOK_URL: ${{ secrets.DEPLOY_ALERT_WEBHOOK_URL }}
+          DEPLOY_ALERT_WEBHOOK_FALLBACK_URL: ${{ secrets.DEPLOY_ALERT_WEBHOOK_FALLBACK_URL }}
         run: |
           set -euo pipefail
           enabled="$(printf '%s' "${DEPLOY_ENABLED:-false}" | tr '[:upper:]' '[:lower:]')"
@@ -58,6 +60,37 @@ jobs:
           if (( ${#missing[@]} > 0 )); then
             echo "ready=false" >> "$GITHUB_OUTPUT"
             echo "reason=Missing required deploy configuration: ${missing[*]}." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          invalid=()
+          validate_alert_url_secret() {
+            local name="$1"
+            local value="$2"
+            value="${value//$'\r'/}"
+            value="$(printf '%s' "${value}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+            if [[ -z "${value}" ]]; then
+              return 0
+            fi
+            if [[ "${value}" == -* ]]; then
+              invalid+=("${name} starts with '-'")
+              return 0
+            fi
+            if [[ "${value}" =~ [[:space:]] ]]; then
+              invalid+=("${name} contains whitespace")
+              return 0
+            fi
+            if [[ ! "${value}" =~ ^https?:// ]]; then
+              invalid+=("${name} must start with http:// or https://")
+            fi
+          }
+
+          validate_alert_url_secret "DEPLOY_ALERT_WEBHOOK_URL (secret)" "${DEPLOY_ALERT_WEBHOOK_URL:-}"
+          validate_alert_url_secret "DEPLOY_ALERT_WEBHOOK_FALLBACK_URL (secret)" "${DEPLOY_ALERT_WEBHOOK_FALLBACK_URL:-}"
+
+          if (( ${#invalid[@]} > 0 )); then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "reason=Invalid deploy alert configuration: ${invalid[*]}." >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -159,6 +192,8 @@ jobs:
           deploy_alert_format="${DEPLOY_ALERT_FORMAT:-plain}"
           deploy_alert_timeout="${DEPLOY_ALERT_TIMEOUT_SECONDS:-10}"
           deploy_alert_on_success="${DEPLOY_ALERT_ON_SUCCESS:-0}"
+          deploy_alert_webhook_url_b64="$(printf '%s' "${DEPLOY_ALERT_WEBHOOK_URL:-}" | base64 | tr -d '\n')"
+          deploy_alert_webhook_fallback_url_b64="$(printf '%s' "${DEPLOY_ALERT_WEBHOOK_FALLBACK_URL:-}" | base64 | tr -d '\n')"
           ssh_attempts="${DEPLOY_SSH_ATTEMPTS:-3}"
           ssh_retry_delay_seconds="${DEPLOY_SSH_RETRY_DELAY_SECONDS:-6}"
           systemctl_use_sudo="${SYSTEMCTL_USE_SUDO:-1}"
@@ -201,8 +236,8 @@ jobs:
               DEPLOY_ALERT_FORMAT='${deploy_alert_format}' \
               DEPLOY_ALERT_TIMEOUT_SECONDS='${deploy_alert_timeout}' \
               DEPLOY_ALERT_ON_SUCCESS='${deploy_alert_on_success}' \
-              POST_DEPLOY_ALERT_WEBHOOK_URL='${DEPLOY_ALERT_WEBHOOK_URL}' \
-              POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL='${DEPLOY_ALERT_WEBHOOK_FALLBACK_URL}' \
+              POST_DEPLOY_ALERT_WEBHOOK_URL=\"\$(printf '%s' '${deploy_alert_webhook_url_b64}' | base64 -d)\" \
+              POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL=\"\$(printf '%s' '${deploy_alert_webhook_fallback_url_b64}' | base64 -d)\" \
               ./scripts/deploy_server.sh"; then
               break
             fi

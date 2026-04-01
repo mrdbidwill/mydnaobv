@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/deploy_alert_utils.sh"
+
 SMOKE_BASE_URL="${SMOKE_BASE_URL:-http://127.0.0.1}"
 SMOKE_HOST_HEADER="${SMOKE_HOST_HEADER:-}"
 SMOKE_PATHS="${SMOKE_PATHS:-}"
@@ -12,6 +16,22 @@ APP_SERVICE="${APP_SERVICE:-mydnaobv}"
 
 log() {
   printf '[post-deploy-smoke] %s\n' "$*"
+}
+
+normalize_smoke_alert_url() {
+  local normalized=""
+  local reason=""
+  if deploy_alert_validate_url "${POST_DEPLOY_ALERT_WEBHOOK_URL}" normalized reason; then
+    POST_DEPLOY_ALERT_WEBHOOK_URL="${normalized}"
+    return 0
+  fi
+  local rc=$?
+  if [[ "${rc}" -eq 1 ]]; then
+    POST_DEPLOY_ALERT_WEBHOOK_URL=""
+    return 0
+  fi
+  log "Ignoring invalid smoke alert webhook URL (${reason})."
+  POST_DEPLOY_ALERT_WEBHOOK_URL=""
 }
 
 send_alert() {
@@ -26,11 +46,11 @@ send_alert() {
     log "curl not found; cannot send webhook alert."
     return 0
   fi
-  if ! curl --silent --show-error --max-time 10 \
-    -X POST \
+  if ! curl --silent --show-error --fail --location --max-time 10 --retry 2 --retry-delay 1 \
+    --request POST \
     -H "Content-Type: text/plain; charset=utf-8" \
     --data-binary "${message}" \
-    "${POST_DEPLOY_ALERT_WEBHOOK_URL}" >/dev/null; then
+    --url "${POST_DEPLOY_ALERT_WEBHOOK_URL}" >/dev/null 2>&1; then
     log "Failed to send webhook alert."
   fi
 }
@@ -92,6 +112,8 @@ check_public_download_path() {
 }
 
 main() {
+  normalize_smoke_alert_url
+
   local -a paths=()
   if [[ -n "${SMOKE_PATHS}" ]]; then
     IFS=',' read -r -a paths <<< "${SMOKE_PATHS}"

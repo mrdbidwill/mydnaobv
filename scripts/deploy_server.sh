@@ -6,6 +6,10 @@ set -Eeuo pipefail
 # - repo path: /opt/mydnaobv/app
 # - service: mydnaobv
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/deploy_alert_utils.sh"
+
 DEPLOY_ENV_FILE="${DEPLOY_ENV_FILE:-$HOME/.config/mydnaobv/deploy.env}"
 if [[ -f "${DEPLOY_ENV_FILE}" ]]; then
   mode="$(stat -c '%a' "${DEPLOY_ENV_FILE}" 2>/dev/null || stat -f '%Lp' "${DEPLOY_ENV_FILE}" 2>/dev/null || true)"
@@ -61,11 +65,31 @@ json_escape() {
   printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
+normalize_alert_url() {
+  local label="$1"
+  local raw="$2"
+  local normalized=""
+  local reason=""
+  if deploy_alert_validate_url "${raw}" normalized reason; then
+    printf '%s' "${normalized}"
+    return 0
+  fi
+
+  local rc=$?
+  if [[ "${rc}" -eq 1 ]]; then
+    printf ''
+    return 0
+  fi
+
+  log "Ignoring invalid ${label} deploy alert webhook URL (${reason})."
+  printf ''
+}
+
 send_alert_to_webhook() {
   local url="$1"
   local message="$2"
   if [[ -z "${url}" ]]; then
-    return 0
+    return 2
   fi
   if ! command -v curl >/dev/null 2>&1; then
     log "curl not found; cannot send deploy webhook alert."
@@ -78,27 +102,27 @@ send_alert_to_webhook() {
     slack)
       local payload_slack
       payload_slack="{\"text\":\"$(json_escape "${message}")\"}"
-      curl --silent --show-error --max-time "${DEPLOY_ALERT_TIMEOUT_SECONDS}" \
-        -X POST \
+      curl --silent --show-error --fail --location --max-time "${DEPLOY_ALERT_TIMEOUT_SECONDS}" --retry 2 --retry-delay 1 \
+        --request POST \
         -H "Content-Type: application/json" \
         --data "${payload_slack}" \
-        "${url}" >/dev/null
+        --url "${url}" >/dev/null 2>&1
       ;;
     discord)
       local payload_discord
       payload_discord="{\"content\":\"$(json_escape "${message}")\"}"
-      curl --silent --show-error --max-time "${DEPLOY_ALERT_TIMEOUT_SECONDS}" \
-        -X POST \
+      curl --silent --show-error --fail --location --max-time "${DEPLOY_ALERT_TIMEOUT_SECONDS}" --retry 2 --retry-delay 1 \
+        --request POST \
         -H "Content-Type: application/json" \
         --data "${payload_discord}" \
-        "${url}" >/dev/null
+        --url "${url}" >/dev/null 2>&1
       ;;
     plain|ntfy|*)
-      curl --silent --show-error --max-time "${DEPLOY_ALERT_TIMEOUT_SECONDS}" \
-        -X POST \
+      curl --silent --show-error --fail --location --max-time "${DEPLOY_ALERT_TIMEOUT_SECONDS}" --retry 2 --retry-delay 1 \
+        --request POST \
         -H "Content-Type: text/plain; charset=utf-8" \
         --data-binary "${message}" \
-        "${url}" >/dev/null
+        --url "${url}" >/dev/null 2>&1
       ;;
   esac
 }
@@ -106,21 +130,33 @@ send_alert_to_webhook() {
 notify_alert() {
   local message="$1"
   local sent=0
-  if send_alert_to_webhook "${POST_DEPLOY_ALERT_WEBHOOK_URL}" "${message}"; then
-    sent=1
+  local attempted=0
+  if [[ -n "${POST_DEPLOY_ALERT_WEBHOOK_URL}" ]]; then
+    attempted=1
+    if send_alert_to_webhook "${POST_DEPLOY_ALERT_WEBHOOK_URL}" "${message}"; then
+      sent=1
+    fi
   fi
-  if send_alert_to_webhook "${POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL}" "${message}"; then
-    sent=1
+  if [[ -n "${POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL}" ]]; then
+    attempted=1
+    if send_alert_to_webhook "${POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL}" "${message}"; then
+      sent=1
+    fi
   fi
 
   if command -v logger >/dev/null 2>&1; then
     logger -t "mydnaobv-deploy" -- "${message}" || true
   fi
 
-  if [[ "${sent}" != "1" ]] && [[ -n "${POST_DEPLOY_ALERT_WEBHOOK_URL}${POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL}" ]]; then
+  if [[ "${attempted}" != "1" ]]; then
+    log "No valid deploy alert webhook configured; alert also written to syslog."
+  elif [[ "${sent}" != "1" ]]; then
     log "Failed to deliver deploy alert to configured webhook endpoints."
   fi
 }
+
+POST_DEPLOY_ALERT_WEBHOOK_URL="$(normalize_alert_url "primary" "${POST_DEPLOY_ALERT_WEBHOOK_URL}")"
+POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL="$(normalize_alert_url "fallback" "${POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL}")"
 
 abort_deploy() {
   local message="$1"
