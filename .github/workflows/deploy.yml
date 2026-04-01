@@ -66,9 +66,6 @@ jobs:
           fi
 
           invalid=()
-          alert_primary_len="${#DEPLOY_ALERT_WEBHOOK_URL}"
-          alert_fallback_len="${#DEPLOY_ALERT_WEBHOOK_FALLBACK_URL}"
-          echo "Deploy alert secret lengths (preflight): primary=${alert_primary_len}, fallback=${alert_fallback_len}"
           deploy_alert_format="$(printf '%s' "${DEPLOY_ALERT_FORMAT:-plain}" | tr '[:upper:]' '[:lower:]')"
           deploy_alert_ntfy_base_url="${DEPLOY_ALERT_NTFY_BASE_URL:-https://ntfy.sh}"
           deploy_alert_ntfy_base_url="${deploy_alert_ntfy_base_url%/}"
@@ -204,7 +201,6 @@ jobs:
           deploy_alert_ntfy_base_url="${DEPLOY_ALERT_NTFY_BASE_URL:-https://ntfy.sh}"
           deploy_alert_timeout="${DEPLOY_ALERT_TIMEOUT_SECONDS:-10}"
           deploy_alert_on_success="${DEPLOY_ALERT_ON_SUCCESS:-0}"
-          echo "Deploy alert secret lengths (deploy step): primary=${#DEPLOY_ALERT_WEBHOOK_URL}, fallback=${#DEPLOY_ALERT_WEBHOOK_FALLBACK_URL}"
           ssh_attempts="${DEPLOY_SSH_ATTEMPTS:-3}"
           ssh_retry_delay_seconds="${DEPLOY_SSH_RETRY_DELAY_SECONDS:-6}"
           systemctl_use_sudo="${SYSTEMCTL_USE_SUDO:-1}"

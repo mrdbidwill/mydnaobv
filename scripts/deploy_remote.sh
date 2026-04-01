@@ -8,6 +8,40 @@ set -euo pipefail
 #   ./scripts/deploy_remote.sh
 
 DEPLOY_ENV_FILE="${DEPLOY_ENV_FILE:-$HOME/.config/mydnaobv/deploy.env}"
+# shellcheck source=/dev/null
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/deploy_env_override_utils.sh"
+deploy_env_capture_overrides \
+  HOST \
+  USER_NAME \
+  APP_DIR \
+  BRANCH \
+  SERVICE_NAME \
+  SYSTEMCTL_USE_SUDO \
+  RUN_TESTS \
+  ALLOW_DIRTY \
+  HEALTHCHECK_URL \
+  HEALTHCHECK_HOST_HEADER \
+  RUN_POST_DEPLOY_SMOKE \
+  SMOKE_BASE_URL \
+  SMOKE_HOST_HEADER \
+  SMOKE_PATHS \
+  SMOKE_MAX_PUBLIC_LINKS \
+  POST_DEPLOY_ALERT_WEBHOOK_URL \
+  POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL \
+  DEPLOY_ALERT_FORMAT \
+  DEPLOY_ALERT_NTFY_BASE_URL \
+  DEPLOY_ALERT_TIMEOUT_SECONDS \
+  DEPLOY_ALERT_ON_SUCCESS \
+  ENABLE_AUTO_ROLLBACK \
+  ROLLBACK_RUN_SMOKE \
+  ROLLBACK_SMOKE_PATHS \
+  RUN_MIGRATION_COMPAT_CHECK \
+  ALLOW_BREAKING_MIGRATIONS \
+  SSH_OPTS \
+  PRECHECK_DNS \
+  PRECHECK_SSH \
+  PRECHECK_SUDO \
+  EXPECTED_HOST_IP
 if [[ -f "${DEPLOY_ENV_FILE}" ]]; then
   mode="$(stat -c '%a' "${DEPLOY_ENV_FILE}" 2>/dev/null || stat -f '%Lp' "${DEPLOY_ENV_FILE}" 2>/dev/null || true)"
   if [[ -n "${mode}" && "${mode}" != "600" ]]; then
@@ -16,6 +50,7 @@ if [[ -f "${DEPLOY_ENV_FILE}" ]]; then
   # shellcheck source=/dev/null
   source "${DEPLOY_ENV_FILE}"
 fi
+deploy_env_restore_overrides
 
 HOST="${HOST:-}"
 USER_NAME="${USER_NAME:-mydnaobv}"

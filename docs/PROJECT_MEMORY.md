@@ -291,6 +291,10 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - added `scripts/run_restore_verify_from_env.sh` for cron-safe monthly restore verification using `.env` `DATABASE_URL` and scratch restore DB.
   - added GitHub secret sync helper for deploy alert endpoints (`scripts/sync_deploy_alert_secrets_github.sh`) and wired deploy workflow support for new alert/smoke/rollback env controls.
   - `deploy_remote.sh` now forwards smoke-check settings/env to remote deploy runs.
+  - fixed deploy env precedence bug where `~/.config/mydnaobv/deploy.env` could overwrite explicit CI/inline env values (including alert webhook URLs) with blanks.
+  - added shared helper `scripts/deploy_env_override_utils.sh` and applied it to `deploy_server.sh`, `deploy_remote.sh`, and `sync_deploy_alert_secrets_github.sh` so invocation-time env always wins over defaults files.
+  - removed temporary deploy workflow/runner secret-length debug logging after precedence fix.
+  - added regression tests for env-override capture/restore behavior (`tests/test_deploy_env_override_utils.py`).
 - County inclusion/parity invariants unchanged.
 
 ## Routine Update Rule

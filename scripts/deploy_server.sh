@@ -9,8 +9,45 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/deploy_alert_utils.sh"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/deploy_env_override_utils.sh"
 
 DEPLOY_ENV_FILE="${DEPLOY_ENV_FILE:-$HOME/.config/mydnaobv/deploy.env}"
+deploy_env_capture_overrides \
+  APP_DIR \
+  BRANCH \
+  VENV_DIR \
+  SERVICE_NAME \
+  HEALTHCHECK_URL \
+  HEALTHCHECK_HOST_HEADER \
+  HEALTHCHECK_ATTEMPTS \
+  HEALTHCHECK_RETRY_DELAY_SECONDS \
+  ALLOW_DIRTY \
+  ALLOW_UNTRACKED \
+  RUN_TESTS \
+  SYSTEMCTL_USE_SUDO \
+  GIT_ATTEMPTS \
+  GIT_RETRY_DELAY_SECONDS \
+  PIP_ATTEMPTS \
+  PIP_RETRY_DELAY_SECONDS \
+  RUN_POST_DEPLOY_SMOKE \
+  SMOKE_BASE_URL \
+  SMOKE_HOST_HEADER \
+  SMOKE_PATHS \
+  SMOKE_MAX_PUBLIC_LINKS \
+  POST_DEPLOY_ALERT_WEBHOOK_URL \
+  POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL \
+  DEPLOY_ALERT_FORMAT \
+  DEPLOY_ALERT_NTFY_BASE_URL \
+  DEPLOY_ALERT_TIMEOUT_SECONDS \
+  DEPLOY_ALERT_ON_SUCCESS \
+  DEPLOY_ALERT_MAX_CHARS \
+  ENABLE_AUTO_ROLLBACK \
+  ROLLBACK_RUN_SMOKE \
+  ROLLBACK_SMOKE_PATHS \
+  RUN_MIGRATION_COMPAT_CHECK \
+  ALLOW_BREAKING_MIGRATIONS
+
 if [[ -f "${DEPLOY_ENV_FILE}" ]]; then
   mode="$(stat -c '%a' "${DEPLOY_ENV_FILE}" 2>/dev/null || stat -f '%Lp' "${DEPLOY_ENV_FILE}" 2>/dev/null || true)"
   if [[ -n "${mode}" && "${mode}" != "600" ]]; then
@@ -19,6 +56,7 @@ if [[ -f "${DEPLOY_ENV_FILE}" ]]; then
   # shellcheck source=/dev/null
   source "${DEPLOY_ENV_FILE}"
 fi
+deploy_env_restore_overrides
 
 APP_DIR="${APP_DIR:-/opt/mydnaobv/app}"
 BRANCH="${BRANCH:-main}"
@@ -185,7 +223,6 @@ notify_alert() {
 
 POST_DEPLOY_ALERT_WEBHOOK_URL="$(normalize_alert_url "primary" "${POST_DEPLOY_ALERT_WEBHOOK_URL}")"
 POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL="$(normalize_alert_url "fallback" "${POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL}")"
-log "Deploy alert endpoint lengths: primary=${#POST_DEPLOY_ALERT_WEBHOOK_URL}, fallback=${#POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL}, format=${DEPLOY_ALERT_FORMAT}"
 
 abort_deploy() {
   local message="$1"

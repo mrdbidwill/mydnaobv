@@ -3,11 +3,20 @@ set -euo pipefail
 
 DEPLOY_ENV_FILE="${DEPLOY_ENV_FILE:-$HOME/.config/mydnaobv/deploy.env}"
 REPO="${REPO:-}"
+# shellcheck source=/dev/null
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/deploy_env_override_utils.sh"
+deploy_env_capture_overrides \
+  REPO \
+  POST_DEPLOY_ALERT_WEBHOOK_URL \
+  POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL \
+  DEPLOY_ALERT_FORMAT \
+  DEPLOY_ALERT_NTFY_BASE_URL
 
 if [[ -f "${DEPLOY_ENV_FILE}" ]]; then
   # shellcheck source=/dev/null
   source "${DEPLOY_ENV_FILE}"
 fi
+deploy_env_restore_overrides
 
 PRIMARY="${POST_DEPLOY_ALERT_WEBHOOK_URL:-}"
 FALLBACK="${POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL:-}"
