@@ -271,6 +271,10 @@ Purpose: persistent decision/history log for future chat sessions and implementa
     - added publish helper `has_latest_publish_marker(list_id)`.
     - public/admin artifact download routes now allow non-`zip_chunk` legacy redirect to published `latest/` URL when marker is absent for that list.
     - strict filename-level publish-state checks remain unchanged for marker-present lists (including `zip_chunk` safety behavior).
+- Operational execution directive recorded:
+  - default mode is end-to-end fix operations (implement, test, deploy) unless the request explicitly says `Discussion only`, `Take no action, yet`, `Planning only`, or equivalent hold language.
+- Regression coverage expansion:
+  - added route-level tests for public artifact download behavior when local files are missing and publish-state marker is absent (legacy redirect allowed for non-`zip_chunk`; blocked for `zip_chunk`).
 - County inclusion/parity invariants unchanged.
 
 ## Routine Update Rule
