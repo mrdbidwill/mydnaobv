@@ -201,6 +201,12 @@ jobs:
           deploy_alert_ntfy_base_url="${DEPLOY_ALERT_NTFY_BASE_URL:-https://ntfy.sh}"
           deploy_alert_timeout="${DEPLOY_ALERT_TIMEOUT_SECONDS:-10}"
           deploy_alert_on_success="${DEPLOY_ALERT_ON_SUCCESS:-0}"
+          deploy_alert_webhook_url="${DEPLOY_ALERT_WEBHOOK_URL:-}"
+          deploy_alert_webhook_fallback_url="${DEPLOY_ALERT_WEBHOOK_FALLBACK_URL:-}"
+          deploy_alert_webhook_url="${deploy_alert_webhook_url//$'\r'/}"
+          deploy_alert_webhook_fallback_url="${deploy_alert_webhook_fallback_url//$'\r'/}"
+          deploy_alert_webhook_url="$(printf '%s' "${deploy_alert_webhook_url}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          deploy_alert_webhook_fallback_url="$(printf '%s' "${deploy_alert_webhook_fallback_url}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
           ssh_attempts="${DEPLOY_SSH_ATTEMPTS:-3}"
           ssh_retry_delay_seconds="${DEPLOY_SSH_RETRY_DELAY_SECONDS:-6}"
           systemctl_use_sudo="${SYSTEMCTL_USE_SUDO:-1}"
@@ -244,8 +250,8 @@ jobs:
               DEPLOY_ALERT_NTFY_BASE_URL='${deploy_alert_ntfy_base_url}' \
               DEPLOY_ALERT_TIMEOUT_SECONDS='${deploy_alert_timeout}' \
               DEPLOY_ALERT_ON_SUCCESS='${deploy_alert_on_success}' \
-              POST_DEPLOY_ALERT_WEBHOOK_URL='${DEPLOY_ALERT_WEBHOOK_URL}' \
-              POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL='${DEPLOY_ALERT_WEBHOOK_FALLBACK_URL}' \
+              POST_DEPLOY_ALERT_WEBHOOK_URL='${deploy_alert_webhook_url}' \
+              POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL='${deploy_alert_webhook_fallback_url}' \
               ./scripts/deploy_server.sh"; then
               break
             fi
