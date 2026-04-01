@@ -20,14 +20,13 @@ If validation says `parsed OK`, the sudo fix is active.
 
 ```bash
 cd /Users/wrj/PycharmProjects/myDNAobv
-EXPECTED_HOST_IP=85.31.233.192 \
-HOST=dna.mrdbid.com \
-USER_NAME=mydnaobv \
-APP_DIR=/opt/mydnaobv/app \
-BRANCH=main \
-SERVICE_NAME=mydnaobv \
-HEALTHCHECK_HOST_HEADER=dna.mrdbid.com \
-./scripts/deploy_remote.sh
+./scripts/deploy_production.sh
+```
+
+Optional override example:
+
+```bash
+RUN_TESTS=1 EXPECTED_HOST_IP=85.31.233.192 ./scripts/deploy_production.sh
 ```
 
 ## 3) Quick verify (optional, run locally)
@@ -44,7 +43,7 @@ Expected:
 
 `dna.mrdbid.com` must stay Cloudflare `DNS only` (gray cloud), not proxied, or SSH deploy will fail.
 
-## 5) If GitHub/SSH deploy fails with `.git/objects` permission errors
+## 5) If SSH deploy fails with `.git/objects` permission errors
 
 Symptom:
 - `error: insufficient permission for adding an object to repository database .git/objects`

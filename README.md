@@ -6,7 +6,7 @@ Admins seed/build county lists by state+project; public users browse/download fi
 Project continuity docs:
 - `docs/PROJECT_MEMORY.md` (dated decision/history log for future sessions)
 - `docs/KVM4_COUNTY_PIPELINE_ROADMAP.md` (staged plan for KVM4 + county-product pipeline)
-- `docs/GITHUB_ACTIONS_DEPLOY.md` (GitHub Actions deploy setup + troubleshooting)
+- `docs/DEPLOY_SUDO_FIX_AND_ONE_COMMAND_DEPLOY.md` (manual deploy runbook)
 - `docs/R2_ADSENSE_TRANSITION_PLAN.md` (object-storage + monetization rollout plan)
 
 ## Current flow
@@ -290,16 +290,27 @@ python scripts/export_license_issue_users.py --input reports/problem_observation
 
 Production deploy automation:
 
-On the server host:
+Canonical one-command deploy (run locally):
+
+```bash
+./scripts/deploy_production.sh
+```
+
+GitHub Actions production deploy is intentionally disabled for this repo.
+
+`deploy_production.sh` wraps `deploy_remote.sh` with production defaults:
+- `HOST=dna.mrdbid.com`
+- `USER_NAME=mydnaobv`
+- `APP_DIR=/opt/mydnaobv/app`
+- `BRANCH=main`
+- `SERVICE_NAME=mydnaobv`
+- `HEALTHCHECK_HOST_HEADER=dna.mrdbid.com`
+- `EXPECTED_HOST_IP=85.31.233.192`
+
+Emergency server-local deploy (run on server host):
 
 ```bash
 APP_DIR=/opt/mydnaobv/app BRANCH=main SERVICE_NAME=mydnaobv ./scripts/deploy_server.sh
-```
-
-From your local machine over SSH:
-
-```bash
-HOST=dna.mrdbid.com USER_NAME=mydnaobv APP_DIR=/opt/mydnaobv/app BRANCH=main SERVICE_NAME=mydnaobv HEALTHCHECK_HOST_HEADER=dna.mrdbid.com ./scripts/deploy_remote.sh
 ```
 
 Recommended: keep deploy alert URLs and defaults in a local, non-repo file:
@@ -308,7 +319,7 @@ Recommended: keep deploy alert URLs and defaults in a local, non-repo file:
 ./scripts/init_local_deploy_env.sh
 ```
 
-`deploy_remote.sh` and `deploy_server.sh` auto-load this file from `DEPLOY_ENV_FILE` (default `~/.config/mydnaobv/deploy.env`).
+`deploy_production.sh`, `deploy_remote.sh`, and `deploy_server.sh` auto-load this file from `DEPLOY_ENV_FILE` (default `~/.config/mydnaobv/deploy.env`).
 
 Optional flags:
 - `RUN_TESTS=1` to run tests during deploy
@@ -342,23 +353,11 @@ Optional flags:
 
 Failure behavior:
 - deploy exits non-zero (manual deploy command fails immediately)
-- GitHub Actions deploy job fails when used in CI
 - if `ENABLE_AUTO_ROLLBACK=1`, deploy attempts rollback to the previous commit and restarts service
 - deploy failure + rollback result are logged and sent to configured alert webhooks
 
 Rollback note:
 - database migrations are not auto-reverted; keep migrations backward-compatible so previous app code can run safely after rollback.
-
-GitHub Actions secret storage for alerts:
-
-```bash
-# Requires gh auth login
-./scripts/sync_deploy_alert_secrets_github.sh
-```
-
-This sets:
-- `DEPLOY_ALERT_WEBHOOK_URL` (required)
-- `DEPLOY_ALERT_WEBHOOK_FALLBACK_URL` (optional, if present)
 
 For one-command non-interactive deploys with `SYSTEMCTL_USE_SUDO=1`, grant limited sudo:
 
@@ -371,35 +370,6 @@ EOF
 chmod 440 /etc/sudoers.d/mydnaobv-systemctl
 visudo -cf /etc/sudoers.d/mydnaobv-systemctl
 ```
-
-GitHub Actions deploy:
-
-- Workflow file: `.github/workflows/deploy.yml`
-- Safe by default:
-  - push-to-main deploy is skipped unless repository variable `DEPLOY_ENABLED=true`
-  - missing deploy secrets cause a clean "skipped" run (not a failure)
-- Required repository secrets:
-  - `DEPLOY_HOST` (example: `dna.mrdbid.com`)
-  - `DEPLOY_USER` (example: `mydnaobv`)
-  - `DEPLOY_SSH_KEY` (private key for `DEPLOY_USER`)
-- Optional repository variables:
-  - `DEPLOY_PORT` (default `22`)
-  - `DEPLOY_APP_DIR` (default `/opt/mydnaobv/app`)
-  - `DEPLOY_BRANCH` (default `main`)
-  - `DEPLOY_SERVICE_NAME` (default `mydnaobv`)
-  - `DEPLOY_HEALTHCHECK_URL` (default `http://127.0.0.1/`)
-  - `DEPLOY_HEALTHCHECK_HOST_HEADER` (optional; set for nginx vhost host matching)
-  - `DEPLOY_HEALTHCHECK_ATTEMPTS` (default `6`)
-  - `DEPLOY_HEALTHCHECK_RETRY_DELAY_SECONDS` (default `5`)
-  - `DEPLOY_SSH_ATTEMPTS` (default `3`)
-  - `DEPLOY_SSH_RETRY_DELAY_SECONDS` (default `6`)
-  - `SYSTEMCTL_USE_SUDO` (default `1`)
-  - `DEPLOY_ALLOW_UNTRACKED` (default `1`)
-  - `DEPLOY_ALLOW_DIRTY` (default `0`)
-  - `DEPLOY_ENABLED` (`true` to enable auto deploy on push)
-- Manual deploy path:
-  - Actions -> "Deploy Production" -> "Run workflow"
-  - optional input `run_tests=true`
 
 ## Development notes
 

@@ -297,6 +297,9 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - deploy workflow now trims webhook secret values before SSH handoff so whitespace-only secret values cannot mask valid server-side defaults.
   - removed temporary deploy workflow/runner secret-length debug logging after precedence fix.
   - added regression tests for env-override capture/restore behavior (`tests/test_deploy_env_override_utils.py`).
+  - operator-process guardrail: if the same deploy validation fails repeatedly, stop automatic re-runs and switch to a single diagnostics pass + explicit operator decision before any further retry.
+  - deploy operations simplified to manual-only path by request: removed GitHub Actions production deploy workflow and GitHub alert-secret sync helper script.
+  - added canonical one-command production deploy wrapper: `scripts/deploy_production.sh` (local command delegates to hardened remote deploy script with production defaults).
 - County inclusion/parity invariants unchanged.
 
 ## Routine Update Rule
