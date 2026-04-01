@@ -433,6 +433,12 @@ If the deploy DB user cannot create/drop databases, create a dedicated scratch D
 ./scripts/verify_db_backup_restore.py --restore-db mydnaobv_restore_verify
 ```
 
+Monthly cron recommendation (server):
+
+```bash
+45 4 1 * * cd /opt/mydnaobv/app && /opt/mydnaobv/app/scripts/run_restore_verify_from_env.sh >> /opt/mydnaobv/exports/restore_verify.log 2>&1
+```
+
 ## Environment variables
 
 See `.env.example` for the full list.

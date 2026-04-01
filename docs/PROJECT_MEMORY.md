@@ -288,6 +288,7 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - added migration compatibility guard (`scripts/check_migration_backward_compat.py`) with deploy gate (`RUN_MIGRATION_COMPAT_CHECK=1` default; override only via `ALLOW_BREAKING_MIGRATIONS=1`).
   - added DB backup-restore verification utility (`scripts/verify_db_backup_restore.py`) to validate restorability for PostgreSQL/MySQL from `DATABASE_URL`.
   - restore verifier now supports `--restore-db` / `DB_RESTORE_VERIFY_DATABASE` for environments where app DB users cannot create/drop databases.
+  - added `scripts/run_restore_verify_from_env.sh` for cron-safe monthly restore verification using `.env` `DATABASE_URL` and scratch restore DB.
   - added GitHub secret sync helper for deploy alert endpoints (`scripts/sync_deploy_alert_secrets_github.sh`) and wired deploy workflow support for new alert/smoke/rollback env controls.
   - `deploy_remote.sh` now forwards smoke-check settings/env to remote deploy runs.
 - County inclusion/parity invariants unchanged.
