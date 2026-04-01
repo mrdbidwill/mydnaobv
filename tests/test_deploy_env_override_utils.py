@@ -41,14 +41,14 @@ def test_capture_restore_preserves_explicit_value() -> None:
     assert value == "from-invocation"
 
 
-def test_capture_restore_preserves_explicit_empty_value() -> None:
+def test_capture_restore_treats_explicit_empty_as_unset_default() -> None:
     is_set, value = _run_capture_restore(
         before="FOO=''",
         env_file_body="FOO=from-env-file",
         var_name="FOO",
     )
     assert is_set == "set"
-    assert value == ""
+    assert value == "from-env-file"
 
 
 def test_capture_restore_keeps_env_file_default_when_unset() -> None:

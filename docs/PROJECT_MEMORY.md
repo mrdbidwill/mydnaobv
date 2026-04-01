@@ -293,6 +293,7 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - `deploy_remote.sh` now forwards smoke-check settings/env to remote deploy runs.
   - fixed deploy env precedence bug where `~/.config/mydnaobv/deploy.env` could overwrite explicit CI/inline env values (including alert webhook URLs) with blanks.
   - added shared helper `scripts/deploy_env_override_utils.sh` and applied it to `deploy_server.sh`, `deploy_remote.sh`, and `sync_deploy_alert_secrets_github.sh` so invocation-time env always wins over defaults files.
+  - adjusted override semantics: empty invocation values are treated as unset, allowing non-empty server defaults (e.g., `deploy.env` webhook URLs) to remain active.
   - removed temporary deploy workflow/runner secret-length debug logging after precedence fix.
   - added regression tests for env-override capture/restore behavior (`tests/test_deploy_env_override_utils.py`).
 - County inclusion/parity invariants unchanged.

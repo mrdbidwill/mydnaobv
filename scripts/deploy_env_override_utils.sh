@@ -13,7 +13,7 @@ deploy_env_capture_overrides() {
 
   local name
   for name in "${DEPLOY_ENV_CAPTURE_NAMES[@]}"; do
-    if [[ "${!name+x}" == "x" ]]; then
+    if [[ "${!name+x}" == "x" && -n "${!name}" ]]; then
       DEPLOY_ENV_CAPTURE_SET+=("1")
       DEPLOY_ENV_CAPTURE_VALUES+=("${!name}")
     else
