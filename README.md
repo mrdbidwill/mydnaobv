@@ -311,8 +311,19 @@ Optional flags:
 - `PRECHECK_SUDO=1` (default) to validate non-interactive sudo for service restart/status
 - `HEALTHCHECK_URL=http://127.0.0.1/` to override health endpoint
 - `HEALTHCHECK_HOST_HEADER=dna.mrdbid.com` when local vhost routing needs a Host header
+- `RUN_POST_DEPLOY_SMOKE=1` to run post-deploy public-download smoke checks (default `1`)
+- `SMOKE_BASE_URL=http://127.0.0.1` base URL used by smoke checks on server
+- `SMOKE_HOST_HEADER=dna.mrdbid.com` Host header used by smoke checks when required by local vhost routing
+- `SMOKE_PATHS=/public/lists/212/artifacts/2899/download,/public/lists/212/artifacts/2900/download` optional explicit paths for smoke checks (otherwise script auto-discovers from homepage)
+- `SMOKE_MAX_PUBLIC_LINKS=3` number of auto-discovered public artifact links to verify
+- `POST_DEPLOY_ALERT_WEBHOOK_URL=https://...` optional webhook URL for smoke-failure alerts (plain text POST)
 - `ALLOW_UNTRACKED=1` allows local untracked files on server (default)
 - `ALLOW_DIRTY=1` to bypass clean-worktree protection (not recommended)
+
+Post-deploy smoke failure behavior:
+- deploy exits non-zero (manual deploy command fails immediately)
+- GitHub Actions deploy job fails when used in CI
+- optional webhook alert is sent when `POST_DEPLOY_ALERT_WEBHOOK_URL` is configured
 
 For one-command non-interactive deploys with `SYSTEMCTL_USE_SUDO=1`, grant limited sudo:
 

@@ -275,6 +275,11 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - default mode is end-to-end fix operations (implement, test, deploy) unless the request explicitly says `Discussion only`, `Take no action, yet`, `Planning only`, or equivalent hold language.
 - Regression coverage expansion:
   - added route-level tests for public artifact download behavior when local files are missing and publish-state marker is absent (legacy redirect allowed for non-`zip_chunk`; blocked for `zip_chunk`).
+- Deploy safety/notification hardening:
+  - added `scripts/post_deploy_smoke.sh` to verify public artifact download endpoints after restart (auto-discovered links or explicit configured paths).
+  - `deploy_server.sh` now runs post-deploy smoke by default (`RUN_POST_DEPLOY_SMOKE=1`) and fails deploy on smoke errors.
+  - optional webhook failure alert support added via `POST_DEPLOY_ALERT_WEBHOOK_URL` (plain text POST).
+  - `deploy_remote.sh` now forwards smoke-check settings/env to remote deploy runs.
 - County inclusion/parity invariants unchanged.
 
 ## Routine Update Rule

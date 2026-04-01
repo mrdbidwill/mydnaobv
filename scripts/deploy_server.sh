@@ -22,6 +22,12 @@ GIT_ATTEMPTS="${GIT_ATTEMPTS:-3}"
 GIT_RETRY_DELAY_SECONDS="${GIT_RETRY_DELAY_SECONDS:-3}"
 PIP_ATTEMPTS="${PIP_ATTEMPTS:-3}"
 PIP_RETRY_DELAY_SECONDS="${PIP_RETRY_DELAY_SECONDS:-4}"
+RUN_POST_DEPLOY_SMOKE="${RUN_POST_DEPLOY_SMOKE:-1}"
+SMOKE_BASE_URL="${SMOKE_BASE_URL:-http://127.0.0.1}"
+SMOKE_HOST_HEADER="${SMOKE_HOST_HEADER:-${HEALTHCHECK_HOST_HEADER}}"
+SMOKE_PATHS="${SMOKE_PATHS:-}"
+SMOKE_MAX_PUBLIC_LINKS="${SMOKE_MAX_PUBLIC_LINKS:-3}"
+POST_DEPLOY_ALERT_WEBHOOK_URL="${POST_DEPLOY_ALERT_WEBHOOK_URL:-}"
 
 log() {
   printf '[deploy] %s\n' "$*"
@@ -153,6 +159,22 @@ if command -v curl >/dev/null 2>&1; then
   fi
 else
   log "curl not found; skipping health check"
+fi
+
+if [[ "${RUN_POST_DEPLOY_SMOKE}" == "1" ]]; then
+  if [[ ! -x "./scripts/post_deploy_smoke.sh" ]]; then
+    log "post deploy smoke script not executable; skipping."
+  else
+    log "Running post-deploy smoke checks"
+    APP_COMMIT="$(git rev-parse --short HEAD)" \
+      APP_SERVICE="${SERVICE_NAME}" \
+      SMOKE_BASE_URL="${SMOKE_BASE_URL}" \
+      SMOKE_HOST_HEADER="${SMOKE_HOST_HEADER}" \
+      SMOKE_PATHS="${SMOKE_PATHS}" \
+      SMOKE_MAX_PUBLIC_LINKS="${SMOKE_MAX_PUBLIC_LINKS}" \
+      POST_DEPLOY_ALERT_WEBHOOK_URL="${POST_DEPLOY_ALERT_WEBHOOK_URL}" \
+      ./scripts/post_deploy_smoke.sh
+  fi
 fi
 
 log "Deployed commit $(git rev-parse --short HEAD)"
