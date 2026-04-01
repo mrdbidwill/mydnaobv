@@ -77,10 +77,6 @@ jobs:
             if [[ -z "${value}" ]]; then
               return 0
             fi
-            if [[ "${value}" == -* ]]; then
-              invalid+=("${name} starts with '-'")
-              return 0
-            fi
             if [[ "${value}" =~ [[:space:]] ]]; then
               invalid+=("${name} contains whitespace")
               return 0

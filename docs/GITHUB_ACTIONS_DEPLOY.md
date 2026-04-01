@@ -78,7 +78,7 @@ Deploy noise controls included:
 
 - Deployment skipped due invalid alert webhook config:
   - check `DEPLOY_ALERT_WEBHOOK_URL` / fallback secret format:
-    - ntfy mode: full URL or bare topic, no spaces/newlines, not starting with `-`
+    - ntfy mode: full URL or bare topic, no spaces/newlines
     - non-ntfy mode: full `http://` or `https://` URL
 
 - Health check `404` at `127.0.0.1`:
