@@ -57,7 +57,7 @@ if [[ -f "${DEPLOY_ENV_FILE}" ]]; then
   source "${DEPLOY_ENV_FILE}"
 fi
 deploy_env_restore_overrides
-log "Deploy env file status: path=${DEPLOY_ENV_FILE} exists=$([[ -f "${DEPLOY_ENV_FILE}" ]] && echo 1 || echo 0)"
+printf '[deploy] Deploy env file status: path=%s exists=%s\n' "${DEPLOY_ENV_FILE}" "$([[ -f "${DEPLOY_ENV_FILE}" ]] && echo 1 || echo 0)"
 
 APP_DIR="${APP_DIR:-/opt/mydnaobv/app}"
 BRANCH="${BRANCH:-main}"
@@ -92,7 +92,7 @@ ROLLBACK_RUN_SMOKE="${ROLLBACK_RUN_SMOKE:-1}"
 ROLLBACK_SMOKE_PATHS="${ROLLBACK_SMOKE_PATHS:-}"
 RUN_MIGRATION_COMPAT_CHECK="${RUN_MIGRATION_COMPAT_CHECK:-1}"
 ALLOW_BREAKING_MIGRATIONS="${ALLOW_BREAKING_MIGRATIONS:-0}"
-log "Deploy alert raw lengths before normalize: primary=${#POST_DEPLOY_ALERT_WEBHOOK_URL}, fallback=${#POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL}, format=${DEPLOY_ALERT_FORMAT}"
+printf '[deploy] Deploy alert raw lengths before normalize: primary=%s, fallback=%s, format=%s\n' "${#POST_DEPLOY_ALERT_WEBHOOK_URL}" "${#POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL}" "${DEPLOY_ALERT_FORMAT}"
 
 DEPLOY_PHASE="init"
 PRE_DEPLOY_COMMIT=""
