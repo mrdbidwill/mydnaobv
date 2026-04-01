@@ -300,7 +300,6 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - operator-process guardrail: if the same deploy validation fails repeatedly, stop automatic re-runs and switch to a single diagnostics pass + explicit operator decision before any further retry.
   - deploy operations simplified to manual-only path by request: removed GitHub Actions production deploy workflow and GitHub alert-secret sync helper script.
   - added canonical one-command production deploy wrapper: `scripts/deploy_production.sh` (local command delegates to hardened remote deploy script with production defaults).
-  - remote/manual deploy alert source-of-truth hardened: `deploy_remote.sh` no longer forwards local alert URL vars; `deploy_server.sh` reads alert settings from server-side deploy env file to avoid local-empty override paths.
 - County inclusion/parity invariants unchanged.
 
 ## Routine Update Rule
