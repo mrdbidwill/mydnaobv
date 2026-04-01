@@ -320,6 +320,7 @@ Recommended: keep deploy alert URLs and defaults in a local, non-repo file:
 ```
 
 `deploy_production.sh`, `deploy_remote.sh`, and `deploy_server.sh` auto-load this file from `DEPLOY_ENV_FILE` (default `~/.config/mydnaobv/deploy.env`).
+For remote/manual deploy alerts, server-side `deploy_server.sh` uses the server env file (`/opt/mydnaobv/.config/mydnaobv/deploy.env`) as the alert source of truth.
 
 Optional flags:
 - `RUN_TESTS=1` to run tests during deploy
@@ -335,14 +336,9 @@ Optional flags:
 - `SMOKE_HOST_HEADER=dna.mrdbid.com` Host header used by smoke checks when required by local vhost routing
 - `SMOKE_PATHS=/public/lists/212/artifacts/2899/download,/public/lists/212/artifacts/2900/download` optional explicit paths for smoke checks (otherwise script auto-discovers from homepage)
 - `SMOKE_MAX_PUBLIC_LINKS=3` number of auto-discovered public artifact links to verify
-- `POST_DEPLOY_ALERT_WEBHOOK_URL=https://...` primary alert endpoint for deploy/smoke failures
-- `POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL=https://...` secondary alert endpoint for redundancy
+- alert vars (`POST_DEPLOY_ALERT_WEBHOOK_URL`, fallback URL, `DEPLOY_ALERT_*`) are read from the server env file for remote/manual deploys
 - for `DEPLOY_ALERT_FORMAT=ntfy`, you may use either full URL (`https://ntfy.sh/topic`) or bare topic (`topic`); bare topics auto-expand via `DEPLOY_ALERT_NTFY_BASE_URL` (default `https://ntfy.sh`)
 - non-ntfy formats require full `http://` or `https://` URLs with no spaces/newlines
-- `DEPLOY_ALERT_FORMAT=plain` alert payload format: `plain`, `ntfy`, `slack`, or `discord`
-- `DEPLOY_ALERT_NTFY_BASE_URL=https://ntfy.sh` base URL used when ntfy topic shorthand is provided
-- `DEPLOY_ALERT_TIMEOUT_SECONDS=10` timeout for each alert webhook request
-- `DEPLOY_ALERT_ON_SUCCESS=0` set to `1` to send success alerts too
 - `ENABLE_AUTO_ROLLBACK=1` attempts automatic rollback to previous commit on deploy failure
 - `ROLLBACK_RUN_SMOKE=1` runs smoke checks again after rollback restart
 - `ROLLBACK_SMOKE_PATHS=/public/lists/...` optional explicit rollback smoke paths; default is empty (auto-discover homepage links)

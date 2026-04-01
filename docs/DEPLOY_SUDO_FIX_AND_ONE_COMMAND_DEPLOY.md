@@ -29,6 +29,9 @@ Optional override example:
 RUN_TESTS=1 EXPECTED_HOST_IP=85.31.233.192 ./scripts/deploy_production.sh
 ```
 
+Alert endpoints for deploy failures/smoke failures should be configured on the server in:
+- `/opt/mydnaobv/.config/mydnaobv/deploy.env`
+
 ## 3) Quick verify (optional, run locally)
 
 ```bash

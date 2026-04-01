@@ -223,6 +223,7 @@ notify_alert() {
 
 POST_DEPLOY_ALERT_WEBHOOK_URL="$(normalize_alert_url "primary" "${POST_DEPLOY_ALERT_WEBHOOK_URL}")"
 POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL="$(normalize_alert_url "fallback" "${POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL}")"
+log "Deploy alert endpoints configured: primary=$([[ -n "${POST_DEPLOY_ALERT_WEBHOOK_URL}" ]] && echo 1 || echo 0), fallback=$([[ -n "${POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL}" ]] && echo 1 || echo 0), format=${DEPLOY_ALERT_FORMAT}"
 
 abort_deploy() {
   local message="$1"
