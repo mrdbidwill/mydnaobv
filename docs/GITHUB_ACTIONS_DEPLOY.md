@@ -14,7 +14,8 @@ Secrets:
 - `DEPLOY_SSH_KEY` (private SSH key text for `DEPLOY_USER`)
 - `DEPLOY_ALERT_WEBHOOK_URL` (optional but recommended; primary deploy failure alert endpoint)
 - `DEPLOY_ALERT_WEBHOOK_FALLBACK_URL` (optional; secondary alert endpoint)
-  - webhook values must be full `http://` or `https://` URLs with no whitespace/newlines.
+  - for `DEPLOY_ALERT_FORMAT=ntfy`, these may be full URLs or bare topic names.
+  - for other formats, use full `http://` or `https://` URLs (no whitespace/newlines).
 
 Variables (optional, defaults shown):
 - `DEPLOY_PORT=22`
@@ -39,6 +40,7 @@ Variables (optional, defaults shown):
 - `DEPLOY_RUN_MIGRATION_COMPAT_CHECK=1`
 - `DEPLOY_ALLOW_BREAKING_MIGRATIONS=0`
 - `DEPLOY_ALERT_FORMAT=plain` (`ntfy`, `slack`, `discord` also supported)
+- `DEPLOY_ALERT_NTFY_BASE_URL=https://ntfy.sh` (used when ntfy topic shorthand is provided)
 - `DEPLOY_ALERT_TIMEOUT_SECONDS=10`
 - `DEPLOY_ALERT_ON_SUCCESS=0`
 - `DEPLOY_ALLOW_UNTRACKED=1`
@@ -75,7 +77,9 @@ Deploy noise controls included:
   - workflow auto-adds host key with `ssh-keyscan`; verify `DEPLOY_HOST` and `DEPLOY_PORT`.
 
 - Deployment skipped due invalid alert webhook config:
-  - check `DEPLOY_ALERT_WEBHOOK_URL` / fallback secret format (must start `http://` or `https://`, no spaces/newlines, not starting with `-`).
+  - check `DEPLOY_ALERT_WEBHOOK_URL` / fallback secret format:
+    - ntfy mode: full URL or bare topic, no spaces/newlines, not starting with `-`
+    - non-ntfy mode: full `http://` or `https://` URL
 
 - Health check `404` at `127.0.0.1`:
   - set `DEPLOY_HEALTHCHECK_HOST_HEADER` to the site hostname used by nginx server block.

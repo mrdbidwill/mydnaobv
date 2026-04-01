@@ -44,6 +44,7 @@ SMOKE_MAX_PUBLIC_LINKS="${SMOKE_MAX_PUBLIC_LINKS:-3}"
 POST_DEPLOY_ALERT_WEBHOOK_URL="${POST_DEPLOY_ALERT_WEBHOOK_URL:-}"
 POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL="${POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL:-}"
 DEPLOY_ALERT_FORMAT="${DEPLOY_ALERT_FORMAT:-plain}"
+DEPLOY_ALERT_NTFY_BASE_URL="${DEPLOY_ALERT_NTFY_BASE_URL:-https://ntfy.sh}"
 DEPLOY_ALERT_TIMEOUT_SECONDS="${DEPLOY_ALERT_TIMEOUT_SECONDS:-10}"
 DEPLOY_ALERT_ON_SUCCESS="${DEPLOY_ALERT_ON_SUCCESS:-0}"
 ENABLE_AUTO_ROLLBACK="${ENABLE_AUTO_ROLLBACK:-1}"
@@ -70,7 +71,7 @@ normalize_alert_url() {
   local raw="$2"
   local normalized=""
   local reason=""
-  if deploy_alert_validate_url "${raw}" normalized reason; then
+  if deploy_alert_validate_url "${raw}" normalized reason "${DEPLOY_ALERT_FORMAT}" "${DEPLOY_ALERT_NTFY_BASE_URL}"; then
     printf '%s' "${normalized}"
     return 0
   fi
@@ -256,6 +257,8 @@ run_post_deploy_smoke() {
     SMOKE_PATHS="${smoke_paths_override}" \
     SMOKE_MAX_PUBLIC_LINKS="${SMOKE_MAX_PUBLIC_LINKS}" \
     POST_DEPLOY_ALERT_WEBHOOK_URL="${POST_DEPLOY_ALERT_WEBHOOK_URL}" \
+    DEPLOY_ALERT_FORMAT="${DEPLOY_ALERT_FORMAT}" \
+    DEPLOY_ALERT_NTFY_BASE_URL="${DEPLOY_ALERT_NTFY_BASE_URL}" \
     SMOKE_SUPPRESS_ALERTS="1" \
     ./scripts/post_deploy_smoke.sh
 }

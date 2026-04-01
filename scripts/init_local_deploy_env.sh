@@ -23,4 +23,4 @@ ROLLBACK_RUN_SMOKE=1
 EOF
 
 chmod 600 "${DEPLOY_ENV_FILE}"
-echo "Created ${DEPLOY_ENV_FILE} (permissions 600). Fill in alert webhook URLs."
+echo "Created ${DEPLOY_ENV_FILE} (permissions 600). Fill in alert webhook URLs (or ntfy topic names when DEPLOY_ALERT_FORMAT=ntfy)."

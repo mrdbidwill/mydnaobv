@@ -10,6 +10,8 @@ SMOKE_HOST_HEADER="${SMOKE_HOST_HEADER:-}"
 SMOKE_PATHS="${SMOKE_PATHS:-}"
 SMOKE_MAX_PUBLIC_LINKS="${SMOKE_MAX_PUBLIC_LINKS:-3}"
 POST_DEPLOY_ALERT_WEBHOOK_URL="${POST_DEPLOY_ALERT_WEBHOOK_URL:-}"
+DEPLOY_ALERT_FORMAT="${DEPLOY_ALERT_FORMAT:-plain}"
+DEPLOY_ALERT_NTFY_BASE_URL="${DEPLOY_ALERT_NTFY_BASE_URL:-https://ntfy.sh}"
 SMOKE_SUPPRESS_ALERTS="${SMOKE_SUPPRESS_ALERTS:-0}"
 APP_COMMIT="${APP_COMMIT:-unknown}"
 APP_SERVICE="${APP_SERVICE:-mydnaobv}"
@@ -21,7 +23,7 @@ log() {
 normalize_smoke_alert_url() {
   local normalized=""
   local reason=""
-  if deploy_alert_validate_url "${POST_DEPLOY_ALERT_WEBHOOK_URL}" normalized reason; then
+  if deploy_alert_validate_url "${POST_DEPLOY_ALERT_WEBHOOK_URL}" normalized reason "${DEPLOY_ALERT_FORMAT}" "${DEPLOY_ALERT_NTFY_BASE_URL}"; then
     POST_DEPLOY_ALERT_WEBHOOK_URL="${normalized}"
     return 0
   fi

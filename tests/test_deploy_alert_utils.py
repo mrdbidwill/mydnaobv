@@ -9,12 +9,16 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 UTILS_PATH = REPO_ROOT / "scripts" / "deploy_alert_utils.sh"
 
 
-def _run_validation(raw_value: str) -> tuple[int, str, str]:
+def _run_validation(
+    raw_value: str,
+    alert_format: str = "plain",
+    ntfy_base_url: str = "https://ntfy.sh",
+) -> tuple[int, str, str]:
     cmd = (
         f"source {shlex.quote(str(UTILS_PATH))}; "
         "out=''; "
         "reason=''; "
-        f"deploy_alert_validate_url {shlex.quote(raw_value)} out reason; "
+        f"deploy_alert_validate_url {shlex.quote(raw_value)} out reason {shlex.quote(alert_format)} {shlex.quote(ntfy_base_url)}; "
         "rc=$?; "
         "printf '%s\\n%s\\n%s\\n' \"$rc\" \"$out\" \"$reason\""
     )
@@ -62,3 +66,10 @@ def test_validate_url_rejects_non_http_scheme() -> None:
     assert rc == 2
     assert value == ""
     assert reason == "invalid_scheme"
+
+
+def test_validate_url_accepts_ntfy_topic_shorthand() -> None:
+    rc, value, reason = _run_validation("my-topic", alert_format="ntfy", ntfy_base_url="https://ntfy.sh")
+    assert rc == 0
+    assert value == "https://ntfy.sh/my-topic"
+    assert reason == ""

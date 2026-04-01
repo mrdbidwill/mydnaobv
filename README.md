@@ -326,8 +326,10 @@ Optional flags:
 - `SMOKE_MAX_PUBLIC_LINKS=3` number of auto-discovered public artifact links to verify
 - `POST_DEPLOY_ALERT_WEBHOOK_URL=https://...` primary alert endpoint for deploy/smoke failures
 - `POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL=https://...` secondary alert endpoint for redundancy
-- webhook URLs must be full `http://` or `https://` values with no spaces/newlines
+- for `DEPLOY_ALERT_FORMAT=ntfy`, you may use either full URL (`https://ntfy.sh/topic`) or bare topic (`topic`); bare topics auto-expand via `DEPLOY_ALERT_NTFY_BASE_URL` (default `https://ntfy.sh`)
+- non-ntfy formats require full `http://` or `https://` URLs with no spaces/newlines
 - `DEPLOY_ALERT_FORMAT=plain` alert payload format: `plain`, `ntfy`, `slack`, or `discord`
+- `DEPLOY_ALERT_NTFY_BASE_URL=https://ntfy.sh` base URL used when ntfy topic shorthand is provided
 - `DEPLOY_ALERT_TIMEOUT_SECONDS=10` timeout for each alert webhook request
 - `DEPLOY_ALERT_ON_SUCCESS=0` set to `1` to send success alerts too
 - `ENABLE_AUTO_ROLLBACK=1` attempts automatic rollback to previous commit on deploy failure
