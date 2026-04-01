@@ -188,7 +188,10 @@ run_health_check() {
 run_post_deploy_smoke() {
   local commit_short="$1"
   local force_run="${2:-0}"
-  local smoke_paths_override="${3:-${SMOKE_PATHS}}"
+  local smoke_paths_override="${3-__USE_DEFAULT__}"
+  if [[ "${smoke_paths_override}" == "__USE_DEFAULT__" ]]; then
+    smoke_paths_override="${SMOKE_PATHS}"
+  fi
   if [[ "${RUN_POST_DEPLOY_SMOKE}" != "1" && "${force_run}" != "1" ]]; then
     return 0
   fi
