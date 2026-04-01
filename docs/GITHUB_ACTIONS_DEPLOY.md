@@ -12,6 +12,8 @@ Secrets:
 - `DEPLOY_HOST` (example: `dna.mrdbid.com`)
 - `DEPLOY_USER` (example: `mydnaobv`)
 - `DEPLOY_SSH_KEY` (private SSH key text for `DEPLOY_USER`)
+- `DEPLOY_ALERT_WEBHOOK_URL` (optional but recommended; primary deploy failure alert endpoint)
+- `DEPLOY_ALERT_WEBHOOK_FALLBACK_URL` (optional; secondary alert endpoint)
 
 Variables (optional, defaults shown):
 - `DEPLOY_PORT=22`
@@ -25,6 +27,19 @@ Variables (optional, defaults shown):
 - `DEPLOY_SSH_ATTEMPTS=3`
 - `DEPLOY_SSH_RETRY_DELAY_SECONDS=6`
 - `SYSTEMCTL_USE_SUDO=1`
+- `DEPLOY_RUN_POST_DEPLOY_SMOKE=1`
+- `DEPLOY_SMOKE_BASE_URL=http://127.0.0.1`
+- `DEPLOY_SMOKE_HOST_HEADER=dna.mrdbid.com`
+- `DEPLOY_SMOKE_PATHS=` (optional explicit path list)
+- `DEPLOY_SMOKE_MAX_PUBLIC_LINKS=3`
+- `DEPLOY_ENABLE_AUTO_ROLLBACK=1`
+- `DEPLOY_ROLLBACK_RUN_SMOKE=1`
+- `DEPLOY_ROLLBACK_SMOKE_PATHS=` (optional explicit rollback path list)
+- `DEPLOY_RUN_MIGRATION_COMPAT_CHECK=1`
+- `DEPLOY_ALLOW_BREAKING_MIGRATIONS=0`
+- `DEPLOY_ALERT_FORMAT=plain` (`ntfy`, `slack`, `discord` also supported)
+- `DEPLOY_ALERT_TIMEOUT_SECONDS=10`
+- `DEPLOY_ALERT_ON_SUCCESS=0`
 - `DEPLOY_ALLOW_UNTRACKED=1`
 - `DEPLOY_ALLOW_DIRTY=0`
 - `DEPLOY_ENABLED=false` (set to `true` when you want auto deploy on push)

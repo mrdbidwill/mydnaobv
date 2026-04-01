@@ -115,6 +115,21 @@ jobs:
           DEPLOY_HEALTHCHECK_HOST_HEADER: ${{ vars.DEPLOY_HEALTHCHECK_HOST_HEADER }}
           DEPLOY_HEALTHCHECK_ATTEMPTS: ${{ vars.DEPLOY_HEALTHCHECK_ATTEMPTS }}
           DEPLOY_HEALTHCHECK_RETRY_DELAY_SECONDS: ${{ vars.DEPLOY_HEALTHCHECK_RETRY_DELAY_SECONDS }}
+          DEPLOY_RUN_POST_DEPLOY_SMOKE: ${{ vars.DEPLOY_RUN_POST_DEPLOY_SMOKE }}
+          DEPLOY_SMOKE_BASE_URL: ${{ vars.DEPLOY_SMOKE_BASE_URL }}
+          DEPLOY_SMOKE_HOST_HEADER: ${{ vars.DEPLOY_SMOKE_HOST_HEADER }}
+          DEPLOY_SMOKE_PATHS: ${{ vars.DEPLOY_SMOKE_PATHS }}
+          DEPLOY_SMOKE_MAX_PUBLIC_LINKS: ${{ vars.DEPLOY_SMOKE_MAX_PUBLIC_LINKS }}
+          DEPLOY_ENABLE_AUTO_ROLLBACK: ${{ vars.DEPLOY_ENABLE_AUTO_ROLLBACK }}
+          DEPLOY_ROLLBACK_RUN_SMOKE: ${{ vars.DEPLOY_ROLLBACK_RUN_SMOKE }}
+          DEPLOY_ROLLBACK_SMOKE_PATHS: ${{ vars.DEPLOY_ROLLBACK_SMOKE_PATHS }}
+          DEPLOY_RUN_MIGRATION_COMPAT_CHECK: ${{ vars.DEPLOY_RUN_MIGRATION_COMPAT_CHECK }}
+          DEPLOY_ALLOW_BREAKING_MIGRATIONS: ${{ vars.DEPLOY_ALLOW_BREAKING_MIGRATIONS }}
+          DEPLOY_ALERT_FORMAT: ${{ vars.DEPLOY_ALERT_FORMAT }}
+          DEPLOY_ALERT_TIMEOUT_SECONDS: ${{ vars.DEPLOY_ALERT_TIMEOUT_SECONDS }}
+          DEPLOY_ALERT_ON_SUCCESS: ${{ vars.DEPLOY_ALERT_ON_SUCCESS }}
+          DEPLOY_ALERT_WEBHOOK_URL: ${{ secrets.DEPLOY_ALERT_WEBHOOK_URL }}
+          DEPLOY_ALERT_WEBHOOK_FALLBACK_URL: ${{ secrets.DEPLOY_ALERT_WEBHOOK_FALLBACK_URL }}
           DEPLOY_SSH_ATTEMPTS: ${{ vars.DEPLOY_SSH_ATTEMPTS }}
           DEPLOY_SSH_RETRY_DELAY_SECONDS: ${{ vars.DEPLOY_SSH_RETRY_DELAY_SECONDS }}
           SYSTEMCTL_USE_SUDO: ${{ vars.SYSTEMCTL_USE_SUDO }}
@@ -131,6 +146,19 @@ jobs:
           healthcheck_host_header="${DEPLOY_HEALTHCHECK_HOST_HEADER:-}"
           healthcheck_attempts="${DEPLOY_HEALTHCHECK_ATTEMPTS:-6}"
           healthcheck_retry_delay_seconds="${DEPLOY_HEALTHCHECK_RETRY_DELAY_SECONDS:-5}"
+          run_post_deploy_smoke="${DEPLOY_RUN_POST_DEPLOY_SMOKE:-1}"
+          smoke_base_url="${DEPLOY_SMOKE_BASE_URL:-http://127.0.0.1}"
+          smoke_host_header="${DEPLOY_SMOKE_HOST_HEADER:-${healthcheck_host_header}}"
+          smoke_paths="${DEPLOY_SMOKE_PATHS:-}"
+          smoke_max_links="${DEPLOY_SMOKE_MAX_PUBLIC_LINKS:-3}"
+          enable_auto_rollback="${DEPLOY_ENABLE_AUTO_ROLLBACK:-1}"
+          rollback_run_smoke="${DEPLOY_ROLLBACK_RUN_SMOKE:-1}"
+          rollback_smoke_paths="${DEPLOY_ROLLBACK_SMOKE_PATHS:-}"
+          run_migration_compat_check="${DEPLOY_RUN_MIGRATION_COMPAT_CHECK:-1}"
+          allow_breaking_migrations="${DEPLOY_ALLOW_BREAKING_MIGRATIONS:-0}"
+          deploy_alert_format="${DEPLOY_ALERT_FORMAT:-plain}"
+          deploy_alert_timeout="${DEPLOY_ALERT_TIMEOUT_SECONDS:-10}"
+          deploy_alert_on_success="${DEPLOY_ALERT_ON_SUCCESS:-0}"
           ssh_attempts="${DEPLOY_SSH_ATTEMPTS:-3}"
           ssh_retry_delay_seconds="${DEPLOY_SSH_RETRY_DELAY_SECONDS:-6}"
           systemctl_use_sudo="${SYSTEMCTL_USE_SUDO:-1}"
@@ -160,6 +188,21 @@ jobs:
               HEALTHCHECK_HOST_HEADER='${healthcheck_host_header}' \
               HEALTHCHECK_ATTEMPTS='${healthcheck_attempts}' \
               HEALTHCHECK_RETRY_DELAY_SECONDS='${healthcheck_retry_delay_seconds}' \
+              RUN_POST_DEPLOY_SMOKE='${run_post_deploy_smoke}' \
+              SMOKE_BASE_URL='${smoke_base_url}' \
+              SMOKE_HOST_HEADER='${smoke_host_header}' \
+              SMOKE_PATHS='${smoke_paths}' \
+              SMOKE_MAX_PUBLIC_LINKS='${smoke_max_links}' \
+              ENABLE_AUTO_ROLLBACK='${enable_auto_rollback}' \
+              ROLLBACK_RUN_SMOKE='${rollback_run_smoke}' \
+              ROLLBACK_SMOKE_PATHS='${rollback_smoke_paths}' \
+              RUN_MIGRATION_COMPAT_CHECK='${run_migration_compat_check}' \
+              ALLOW_BREAKING_MIGRATIONS='${allow_breaking_migrations}' \
+              DEPLOY_ALERT_FORMAT='${deploy_alert_format}' \
+              DEPLOY_ALERT_TIMEOUT_SECONDS='${deploy_alert_timeout}' \
+              DEPLOY_ALERT_ON_SUCCESS='${deploy_alert_on_success}' \
+              POST_DEPLOY_ALERT_WEBHOOK_URL='${DEPLOY_ALERT_WEBHOOK_URL}' \
+              POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL='${DEPLOY_ALERT_WEBHOOK_FALLBACK_URL}' \
               ./scripts/deploy_server.sh"; then
               break
             fi

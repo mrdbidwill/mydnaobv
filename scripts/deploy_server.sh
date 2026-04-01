@@ -6,6 +6,16 @@ set -Eeuo pipefail
 # - repo path: /opt/mydnaobv/app
 # - service: mydnaobv
 
+DEPLOY_ENV_FILE="${DEPLOY_ENV_FILE:-$HOME/.config/mydnaobv/deploy.env}"
+if [[ -f "${DEPLOY_ENV_FILE}" ]]; then
+  mode="$(stat -c '%a' "${DEPLOY_ENV_FILE}" 2>/dev/null || stat -f '%Lp' "${DEPLOY_ENV_FILE}" 2>/dev/null || true)"
+  if [[ -n "${mode}" && "${mode}" != "600" ]]; then
+    printf '[deploy] Warning: expected 600 permissions on %s (got %s)\n' "${DEPLOY_ENV_FILE}" "${mode}" >&2
+  fi
+  # shellcheck source=/dev/null
+  source "${DEPLOY_ENV_FILE}"
+fi
+
 APP_DIR="${APP_DIR:-/opt/mydnaobv/app}"
 BRANCH="${BRANCH:-main}"
 VENV_DIR="${VENV_DIR:-.venv}"
@@ -35,6 +45,8 @@ DEPLOY_ALERT_ON_SUCCESS="${DEPLOY_ALERT_ON_SUCCESS:-0}"
 ENABLE_AUTO_ROLLBACK="${ENABLE_AUTO_ROLLBACK:-1}"
 ROLLBACK_RUN_SMOKE="${ROLLBACK_RUN_SMOKE:-1}"
 ROLLBACK_SMOKE_PATHS="${ROLLBACK_SMOKE_PATHS:-}"
+RUN_MIGRATION_COMPAT_CHECK="${RUN_MIGRATION_COMPAT_CHECK:-1}"
+ALLOW_BREAKING_MIGRATIONS="${ALLOW_BREAKING_MIGRATIONS:-0}"
 
 DEPLOY_PHASE="init"
 PRE_DEPLOY_COMMIT=""
@@ -353,6 +365,14 @@ git checkout "${BRANCH}"
 DEPLOY_PHASE="git_merge"
 run_with_retry "${GIT_ATTEMPTS}" "${GIT_RETRY_DELAY_SECONDS}" \
   git merge --ff-only "refs/remotes/origin/${BRANCH}"
+
+if [[ "${RUN_MIGRATION_COMPAT_CHECK}" == "1" ]]; then
+  DEPLOY_PHASE="migration_compat_check"
+  ALLOW_BREAKING_MIGRATIONS="${ALLOW_BREAKING_MIGRATIONS}" \
+    python3 ./scripts/check_migration_backward_compat.py \
+    --base "${PRE_DEPLOY_COMMIT}" \
+    --head "$(git rev-parse HEAD)"
+fi
 
 DEPLOY_PHASE="venv_prepare"
 if [[ ! -d "${VENV_DIR}" ]]; then

@@ -302,6 +302,25 @@ From your local machine over SSH:
 HOST=dna.mrdbid.com USER_NAME=mydnaobv APP_DIR=/opt/mydnaobv/app BRANCH=main SERVICE_NAME=mydnaobv HEALTHCHECK_HOST_HEADER=dna.mrdbid.com ./scripts/deploy_remote.sh
 ```
 
+Recommended: keep deploy alert URLs and defaults in a local, non-repo file:
+
+```bash
+mkdir -p ~/.config/mydnaobv
+chmod 700 ~/.config/mydnaobv
+cat > ~/.config/mydnaobv/deploy.env <<'EOF'
+# Do not commit this file.
+POST_DEPLOY_ALERT_WEBHOOK_URL=https://ntfy.sh/<PRIMARY_RANDOM_TOPIC>
+POST_DEPLOY_ALERT_WEBHOOK_FALLBACK_URL=https://ntfy.sh/<FALLBACK_RANDOM_TOPIC>
+DEPLOY_ALERT_FORMAT=ntfy
+ENABLE_AUTO_ROLLBACK=1
+RUN_POST_DEPLOY_SMOKE=1
+RUN_MIGRATION_COMPAT_CHECK=1
+EOF
+chmod 600 ~/.config/mydnaobv/deploy.env
+```
+
+`deploy_remote.sh` and `deploy_server.sh` auto-load this file from `DEPLOY_ENV_FILE` (default `~/.config/mydnaobv/deploy.env`).
+
 Optional flags:
 - `RUN_TESTS=1` to run tests during deploy
 - `SYSTEMCTL_USE_SUDO=0` if service user can restart without sudo
@@ -324,6 +343,8 @@ Optional flags:
 - `ENABLE_AUTO_ROLLBACK=1` attempts automatic rollback to previous commit on deploy failure
 - `ROLLBACK_RUN_SMOKE=1` runs smoke checks again after rollback restart
 - `ROLLBACK_SMOKE_PATHS=/public/lists/...` optional explicit rollback smoke paths; default is empty (auto-discover homepage links)
+- `RUN_MIGRATION_COMPAT_CHECK=1` checks changed Alembic migrations for potentially breaking operations before applying them
+- `ALLOW_BREAKING_MIGRATIONS=1` bypasses migration compatibility block (for planned breaking changes only)
 - `ALLOW_UNTRACKED=1` allows local untracked files on server (default)
 - `ALLOW_DIRTY=1` to bypass clean-worktree protection (not recommended)
 
@@ -335,6 +356,17 @@ Failure behavior:
 
 Rollback note:
 - database migrations are not auto-reverted; keep migrations backward-compatible so previous app code can run safely after rollback.
+
+GitHub Actions secret storage for alerts:
+
+```bash
+# Requires gh auth login
+./scripts/sync_deploy_alert_secrets_github.sh
+```
+
+This sets:
+- `DEPLOY_ALERT_WEBHOOK_URL` (required)
+- `DEPLOY_ALERT_WEBHOOK_FALLBACK_URL` (optional, if present)
 
 For one-command non-interactive deploys with `SYSTEMCTL_USE_SUDO=1`, grant limited sudo:
 
@@ -397,6 +429,15 @@ GitHub Actions deploy:
 - Pages are server-rendered (Jinja2) for simplicity and durability.
 - The app uses PostgreSQL via SQLAlchemy 2.0.
 - The homepage includes pagination for county download catalog.
+
+Database backup+restore verification:
+
+```bash
+# Uses DATABASE_URL and auto-detects PostgreSQL/MySQL.
+./scripts/verify_db_backup_restore.py
+```
+
+Use this periodically on the server to verify backups are restorable, not just created.
 
 ## Environment variables
 

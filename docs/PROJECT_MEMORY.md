@@ -283,6 +283,10 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - rollback result is included in alert/log output; DB migrations remain non-reverted and must stay backward-compatible.
   - follow-up fix: enabled `ERR` trap propagation in deploy script (`set -E`) so failures raised inside helper functions (including post-deploy smoke) trigger rollback handler reliably.
   - follow-up fix: rollback path now uses explicit command-status checks (robust under error-handler context) and can run rollback smoke with independent path config (`ROLLBACK_SMOKE_PATHS`, default auto-discovery).
+  - deploy scripts now support secure local env-file loading (`DEPLOY_ENV_FILE`, default `~/.config/mydnaobv/deploy.env`) for non-repo alert URL storage.
+  - added migration compatibility guard (`scripts/check_migration_backward_compat.py`) with deploy gate (`RUN_MIGRATION_COMPAT_CHECK=1` default; override only via `ALLOW_BREAKING_MIGRATIONS=1`).
+  - added DB backup-restore verification utility (`scripts/verify_db_backup_restore.py`) to validate restorability for PostgreSQL/MySQL from `DATABASE_URL`.
+  - added GitHub secret sync helper for deploy alert endpoints (`scripts/sync_deploy_alert_secrets_github.sh`) and wired deploy workflow support for new alert/smoke/rollback env controls.
   - `deploy_remote.sh` now forwards smoke-check settings/env to remote deploy runs.
 - County inclusion/parity invariants unchanged.
 

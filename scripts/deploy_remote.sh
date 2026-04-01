@@ -7,6 +7,16 @@ set -euo pipefail
 # HOST=your.server.tld USER=mydnaobv APP_DIR=/opt/mydnaobv/app \
 #   ./scripts/deploy_remote.sh
 
+DEPLOY_ENV_FILE="${DEPLOY_ENV_FILE:-$HOME/.config/mydnaobv/deploy.env}"
+if [[ -f "${DEPLOY_ENV_FILE}" ]]; then
+  mode="$(stat -c '%a' "${DEPLOY_ENV_FILE}" 2>/dev/null || stat -f '%Lp' "${DEPLOY_ENV_FILE}" 2>/dev/null || true)"
+  if [[ -n "${mode}" && "${mode}" != "600" ]]; then
+    printf '[deploy-remote] Warning: expected 600 permissions on %s (got %s)\n' "${DEPLOY_ENV_FILE}" "${mode}" >&2
+  fi
+  # shellcheck source=/dev/null
+  source "${DEPLOY_ENV_FILE}"
+fi
+
 HOST="${HOST:-}"
 USER_NAME="${USER_NAME:-mydnaobv}"
 APP_DIR="${APP_DIR:-/opt/mydnaobv/app}"
@@ -30,6 +40,8 @@ DEPLOY_ALERT_ON_SUCCESS="${DEPLOY_ALERT_ON_SUCCESS:-0}"
 ENABLE_AUTO_ROLLBACK="${ENABLE_AUTO_ROLLBACK:-1}"
 ROLLBACK_RUN_SMOKE="${ROLLBACK_RUN_SMOKE:-1}"
 ROLLBACK_SMOKE_PATHS="${ROLLBACK_SMOKE_PATHS:-}"
+RUN_MIGRATION_COMPAT_CHECK="${RUN_MIGRATION_COMPAT_CHECK:-1}"
+ALLOW_BREAKING_MIGRATIONS="${ALLOW_BREAKING_MIGRATIONS:-0}"
 SSH_OPTS="${SSH_OPTS:--o BatchMode=yes -o ConnectTimeout=8}"
 PRECHECK_DNS="${PRECHECK_DNS:-1}"
 PRECHECK_SSH="${PRECHECK_SSH:-1}"
@@ -143,4 +155,6 @@ ssh "${ssh_opts_arr[@]}" "${USER_NAME}@${HOST}" \
    ENABLE_AUTO_ROLLBACK='${ENABLE_AUTO_ROLLBACK}' \
    ROLLBACK_RUN_SMOKE='${ROLLBACK_RUN_SMOKE}' \
    ROLLBACK_SMOKE_PATHS='${ROLLBACK_SMOKE_PATHS}' \
+   RUN_MIGRATION_COMPAT_CHECK='${RUN_MIGRATION_COMPAT_CHECK}' \
+   ALLOW_BREAKING_MIGRATIONS='${ALLOW_BREAKING_MIGRATIONS}' \
    ./scripts/deploy_server.sh"
