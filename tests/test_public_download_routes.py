@@ -92,3 +92,71 @@ def test_public_download_zip_chunk_no_marker_still_404(monkeypatch):
         assert exc.value.detail == "File not available"
     finally:
         db.close()
+
+
+def test_public_download_genera_count_inline_when_local_file_exists(monkeypatch, tmp_path):
+    db = _session()
+    try:
+        list_id, artifact_id = _seed_public_artifact(db, kind="genera_count")
+        genera_file = tmp_path / "baldwin-county-al_genera_count.txt"
+        genera_file.write_text("1. Agaricus (2)\n", encoding="utf-8")
+
+        monkeypatch.setattr(main, "artifact_abspath", lambda _artifact: genera_file)
+        response = main.public_download_latest_artifact(list_id=list_id, artifact_id=artifact_id, db=db)
+
+        disposition = response.headers.get("content-disposition", "")
+        assert response.status_code == 200
+        assert disposition.startswith("inline;")
+    finally:
+        db.close()
+
+
+def test_public_download_genera_count_attachment_when_download_true(monkeypatch, tmp_path):
+    db = _session()
+    try:
+        list_id, artifact_id = _seed_public_artifact(db, kind="genera_count")
+        genera_file = tmp_path / "baldwin-county-al_genera_count.txt"
+        genera_file.write_text("1. Agaricus (2)\n", encoding="utf-8")
+
+        monkeypatch.setattr(main, "artifact_abspath", lambda _artifact: genera_file)
+        response = main.public_download_latest_artifact(
+            list_id=list_id,
+            artifact_id=artifact_id,
+            download=True,
+            db=db,
+        )
+
+        disposition = response.headers.get("content-disposition", "")
+        assert response.status_code == 200
+        assert disposition.startswith("attachment;")
+    finally:
+        db.close()
+
+
+def test_public_download_genera_count_attachment_proxies_latest_when_local_missing(monkeypatch):
+    db = _session()
+    try:
+        list_id, artifact_id = _seed_public_artifact(db, kind="genera_count")
+
+        monkeypatch.setattr(main, "artifact_abspath", lambda _artifact: Path("/tmp/not-found-public-artifact"))
+        monkeypatch.setattr(main, "latest_artifact_exists", lambda _list_id, _artifact: True)
+        monkeypatch.setattr(
+            main,
+            "published_latest_url",
+            lambda _list_id, _artifact: "https://downloads.example.org/list_1/latest/genera.txt?v=20",
+        )
+        monkeypatch.setattr(main, "_fetch_published_genera_count_text", lambda _url: "1. Agaricus (2)\n")
+
+        response = main.public_download_latest_artifact(
+            list_id=list_id,
+            artifact_id=artifact_id,
+            download=True,
+            db=db,
+        )
+
+        disposition = response.headers.get("content-disposition", "")
+        assert response.status_code == 200
+        assert disposition.startswith("attachment;")
+        assert response.body.decode("utf-8") == "1. Agaricus (2)\n"
+    finally:
+        db.close()

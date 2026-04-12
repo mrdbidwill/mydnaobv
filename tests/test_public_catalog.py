@@ -25,6 +25,12 @@ def test_artifact_by_kind_finds_observation_index_pdf():
     assert chosen.kind == "observations_index_pdf"
 
 
+def test_artifact_public_download_url_builds_download_query():
+    artifact = SimpleNamespace(id=20)
+    url = main._artifact_public_download_url(7, artifact)
+    assert url == "/public/lists/7/artifacts/20/download?download=1"
+
+
 def test_refresh_summary_due_when_missing_sync():
     payload = _refresh_summary(None)
     assert payload["is_due"] is True
