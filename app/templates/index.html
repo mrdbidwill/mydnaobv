@@ -6,6 +6,7 @@
         <h2>AMS DNA Observation Catalog</h2>
         <p class="muted">Get list of all AMS DNA sequenced observations.</p>
         <a class="btn secondary" href="/catalog">Open DNA Observation List</a>
+        <a class="btn secondary" href="/methodology" style="margin-left: 6px;">Data Methodology</a>
       </div>
     {% endif %}
 
@@ -25,6 +26,13 @@
         <input type="hidden" name="page" value="1" />
         <button class="btn secondary" type="submit">Apply filter</button>
       </form>
+    </div>
+
+    <div class="card">
+      <h3>How to Read This Data</h3>
+      <p class="muted">Each row represents a county or project product built from iNaturalist observations that include the <strong>DNA Barcode ITS</strong> field. County results are limited to the county/state scope and are de-duplicated by iNaturalist observation ID.</p>
+      <p class="muted">Use the Observation PDF to review index-level records and source links. Use the County PDF/ZIP for printable pages and image exports. If image export is unavailable for an observation, the county output still preserves index parity with a placeholder page and iNaturalist link.</p>
+      <p class="muted">Taxon labels may change as DNA-informed identifications evolve. For critical decisions, review the linked iNaturalist record, comments, and supporting sequence context.</p>
     </div>
 
     <div class="card">
@@ -184,6 +192,15 @@
                 <td>
                   {{ row.display_title }}
                   <div class="muted">{{ list.inat_project_id if list.inat_project_id else "" }}</div>
+                  {% if row.project_reference %}
+                    <div class="muted" style="margin-top: 6px;">{{ row.project_reference.description }}</div>
+                    <div class="muted" style="margin-top: 4px;">
+                      <a href="{{ row.project_reference.inat_url }}" target="_blank" rel="noreferrer">View iNaturalist project results</a>
+                    </div>
+                    <div class="muted" style="margin-top: 4px;">{{ row.project_reference.snapshot_label }}</div>
+                    <div class="muted" style="margin-top: 4px;">{{ row.project_reference.stats_all }}</div>
+                    <div class="muted">{{ row.project_reference.stats_dna }}</div>
+                  {% endif %}
                 </td>
                 <td>
                   {{ row.last_refreshed_label }}

@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime, timedelta
+from html import escape
 import json
 from pathlib import Path
 import re
@@ -10,7 +11,7 @@ from urllib.request import Request as UrlRequest, urlopen
 from fastapi import FastAPI, Request, Form, Depends, Query, HTTPException, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
@@ -67,11 +68,159 @@ GENUS_QUALIFIER_TOKENS = {
     "var",
     "forma",
 }
+PROJECT_REFERENCE_DATA: dict[str, dict[str, object]] = {
+    "251751": {
+        "name": "Alabama First Provisionals",
+        "description": "Collection of sequenced specimens for species first documented in Alabama.",
+        "inat_url": "https://www.inaturalist.org/observations?project_id=251751&field:DNA%20Barcode%20ITS",
+        "stats_all": "Observations 160 | Species 80 | Identifiers 58 | Observers 30",
+        "stats_dna": "With DNA Barcode ITS: Observations 154 | Species 80 | Identifiers 57 | Observers 30",
+    },
+    "124358": {
+        "name": "AMS Fungal Diversity Project- Collection",
+        "description": "Project for fungi being collected for the AMS Alabama Fungal Diversity Project.",
+        "inat_url": "https://www.inaturalist.org/observations?project_id=124358&field:DNA%20Barcode%20ITS",
+        "stats_all": "Observations 1805 | Species 557 | Identifiers 227 | Observers 24",
+        "stats_dna": "With DNA Barcode ITS: Observations 430 | Species 260 | Identifiers 123 | Observers 11",
+    },
+    "184305": {
+        "name": "Fungi of Alabama- AMS FunDiS Local Project",
+        "description": "Collection project for the Fungal Diversity Survey local sequencing effort.",
+        "inat_url": "https://www.inaturalist.org/observations?project_id=184305&field:DNA%20Barcode%20ITS",
+        "stats_all": "Observations 1003 | Species 431 | Identifiers 164 | Observers 23",
+        "stats_dna": "With DNA Barcode ITS: Observations 773 | Species 376 | Identifiers 149 | Observers 22",
+    },
+    "132913": {
+        "name": "AMS Sequenced Specimens",
+        "description": "Specimens sequenced by or for the Alabama Mushroom Society, added when splits are ready for shipment.",
+        "inat_url": "https://www.inaturalist.org/observations?project_id=132913&field:DNA%20Barcode%20ITS",
+        "stats_all": "Observations 2863 | Species 859 | Identifiers 301 | Observers 105",
+        "stats_dna": "With DNA Barcode ITS: Observations 1632 | Species 656 | Identifiers 237 | Observers 79",
+    },
+}
+PROJECT_REFERENCE_SNAPSHOT_LABEL = (
+    "Stats snapshot: April 14, 2026 (from reference file; live iNaturalist totals may differ)."
+)
 
 
 @app.get("/favicon.ico", include_in_schema=False)
 def favicon() -> FileResponse:
     return FileResponse("app/static/images/favicon.svg", media_type="image/svg+xml")
+
+
+def _adsense_enabled_for_runtime() -> bool:
+    if "adsense_enabled" in settings.model_fields_set:
+        return bool(settings.adsense_enabled)
+    return (settings.env or "").strip().lower() == "production"
+
+
+def _adsense_publisher_id() -> str | None:
+    client_id = (settings.adsense_client_id or DEFAULT_ADSENSE_CLIENT_ID).strip()
+    if not client_id:
+        return None
+    if client_id.startswith("ca-"):
+        client_id = client_id[3:]
+    if not client_id.startswith("pub-"):
+        return None
+    return client_id
+
+
+def _absolute_public_url(request: Request, path_or_url: str) -> str:
+    if path_or_url.startswith("http://") or path_or_url.startswith("https://"):
+        return path_or_url
+    base = str(request.base_url).rstrip("/")
+    if not path_or_url.startswith("/"):
+        path_or_url = f"/{path_or_url}"
+    return f"{base}{path_or_url}"
+
+
+@app.get("/ads.txt", include_in_schema=False)
+def ads_txt() -> PlainTextResponse:
+    publisher_id = _adsense_publisher_id()
+    if not publisher_id:
+        raise HTTPException(status_code=404, detail="Not found")
+    return PlainTextResponse(f"google.com, {publisher_id}, DIRECT, f08c47fec0942fa0")
+
+
+@app.get("/robots.txt", include_in_schema=False)
+def robots_txt(request: Request) -> PlainTextResponse:
+    sitemap_url = _absolute_public_url(request, "/sitemap.xml")
+    body = "\n".join(
+        [
+            "User-agent: *",
+            "Allow: /",
+            "Disallow: /admin",
+            f"Sitemap: {sitemap_url}",
+        ]
+    )
+    return PlainTextResponse(body)
+
+
+def _sitemap_entries(request: Request, db: Session) -> list[str]:
+    entries: list[str] = [
+        _absolute_public_url(request, "/"),
+        _absolute_public_url(request, "/methodology"),
+    ]
+
+    county_total = (
+        db.query(func.count(models.ObservationList.id))
+        .filter(
+            models.ObservationList.product_type == "county",
+            models.ObservationList.is_public_download.is_(True),
+        )
+        .scalar()
+        or 0
+    )
+    county_pages = max(1, (int(county_total) + PUBLIC_COUNTY_PAGE_SIZE - 1) // PUBLIC_COUNTY_PAGE_SIZE)
+    for page_number in range(2, county_pages + 1):
+        entries.append(_absolute_public_url(request, f"/?page={page_number}"))
+
+    if settings.enable_data_catalog:
+        entries.append(_absolute_public_url(request, "/catalog"))
+        catalog_total = (
+            db.query(func.count(models.CatalogObservation.id))
+            .filter(models.CatalogObservation.has_dna_its.is_(True))
+            .scalar()
+            or 0
+        )
+        catalog_pages = max(1, (int(catalog_total) + CATALOG_PAGE_SIZE - 1) // CATALOG_PAGE_SIZE)
+        for page_number in range(2, catalog_pages + 1):
+            entries.append(_absolute_public_url(request, f"/catalog?page={page_number}"))
+
+    public_lists = (
+        db.query(models.ObservationList)
+        .filter(models.ObservationList.is_public_download.is_(True))
+        .all()
+    )
+    for obs_list in public_lists:
+        latest_job = latest_completed_job_for_list(db, obs_list.id)
+        if not latest_job:
+            continue
+        artifacts = list_artifacts_for_job(db, latest_job.id)
+        for artifact in artifacts:
+            if artifact.kind not in ("observations_index_pdf", "merged_pdf", "zip", "genera_count"):
+                continue
+            entries.append(
+                _absolute_public_url(
+                    request,
+                    f"/public/lists/{obs_list.id}/artifacts/{artifact.id}/download",
+                )
+            )
+
+    return sorted(set(entries))
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+def sitemap_xml(request: Request, db: Session = Depends(get_db)) -> Response:
+    entries = _sitemap_entries(request, db)
+    url_nodes = "\n".join(f"  <url><loc>{escape(url)}</loc></url>" for url in entries)
+    body = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        f"{url_nodes}\n"
+        "</urlset>\n"
+    )
+    return Response(content=body, media_type="application/xml")
 
 
 def template_response(
@@ -84,7 +233,7 @@ def template_response(
 ):
     adsense_client_id = (settings.adsense_client_id or DEFAULT_ADSENSE_CLIENT_ID).strip()
     adsense_banner_slot = (settings.adsense_banner_slot or "").strip()
-    render_ads = bool(show_ads and settings.adsense_enabled and adsense_client_id)
+    render_ads = bool(show_ads and _adsense_enabled_for_runtime() and adsense_client_id)
     payload = {
         "request": request,
         "show_adsense": render_ads,
@@ -312,6 +461,20 @@ def _project_display_title(obs_list: models.ObservationList) -> str:
     if obs_list.inat_project_id:
         return f"Project {obs_list.inat_project_id}"
     return f"Project list {obs_list.id}"
+
+
+def _project_reference(project_id: str | None) -> dict[str, object] | None:
+    token = (project_id or "").strip()
+    if not token:
+        return None
+    digits_only = "".join(ch for ch in token if ch.isdigit())
+    key = digits_only or token
+    payload = PROJECT_REFERENCE_DATA.get(key)
+    if not payload:
+        return None
+    merged = dict(payload)
+    merged.setdefault("snapshot_label", PROJECT_REFERENCE_SNAPSHOT_LABEL)
+    return merged
 
 
 def _artifact_public_url(list_id: int, artifact: models.ExportArtifact | None) -> str | None:
@@ -628,6 +791,7 @@ def load_public_project_rows(db: Session) -> list[dict[str, object]]:
             {
                 "list": obs_list,
                 "display_title": _project_display_title(obs_list),
+                "project_reference": _project_reference(obs_list.inat_project_id),
                 "latest_job": latest_job,
                 "county_artifact": county_artifact,
                 "index_artifact": index_artifact,
@@ -825,6 +989,18 @@ def index(
             "pages": pages,
             "state_options": state_options,
             "state_code": normalized_state,
+        },
+        show_ads=True,
+    )
+
+
+@app.get("/methodology")
+def methodology_page(request: Request):
+    return template_response(
+        request,
+        "methodology.html",
+        {
+            "title": "Data Methodology",
         },
         show_ads=True,
     )

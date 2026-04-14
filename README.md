@@ -28,6 +28,8 @@ This is a separate feature from the county/project PDF pipeline.
 - Public catalog: `/catalog`
   - Text-first observation list with filters and sorting (genus/date/location/text).
   - Images are linked to iNaturalist URLs (not downloaded/stored by this feature).
+- Public methodology: `/methodology`
+  - Explains county/project PDF generation, offline usage, and packaging behavior.
 - Admin catalog controls: `/admin/catalog`
   - Add project source by iNaturalist project ID/slug.
   - Sync one source or all active sources.
@@ -187,13 +189,14 @@ AdSense public-page gating:
 
 ```env
 ADSENSE_ENABLED=true
-ADSENSE_CLIENT_ID=ca-pub-1234567890123456
-# Optional fixed banner slot; leave empty for Auto Ads only.
+ADSENSE_CLIENT_ID=ca-pub-8323362126637830
+# Optional fixed banner slot (not required for basic Auto Ads setup).
 ADSENSE_BANNER_SLOT=
 ```
 
-- Ads are rendered on public template responses only (`/` in current app).
+- Ads are rendered on public template responses only (`/` and `/catalog`).
 - Admin and authenticated pages do not include the AdSense script.
+- Public crawl surfaces now include `/ads.txt`, `/robots.txt`, and `/sitemap.xml`.
 
 Recommended staged-throughput timing profile (keeps iNaturalist guardrails unchanged):
 

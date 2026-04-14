@@ -306,6 +306,19 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - process reminder: do not run repeated failure drills without a bounded diagnostics plan and explicit operator approval between retries.
 - County inclusion/parity invariants unchanged.
 
+## 2026-04-14
+- Public monetization/crawlability hardening for `dna.mrdbid.com`:
+  - switched public-page ad rendering to basic AdSense Auto Ads bootstrap on public HTML pages (`/`, `/catalog`) using configured/fallback publisher client ID.
+  - added explicit public crawl endpoints:
+    - `/ads.txt` (publisher authorization line)
+    - `/robots.txt` (allow crawl + sitemap location)
+    - `/sitemap.xml` (public HTML + public artifact URLs)
+- Public content/context improvements:
+  - expanded explanatory text on homepage and catalog page to describe inclusion logic, data interpretation, and usage workflow.
+  - added public `/methodology` page for user-facing explanation of county/project PDF access and offline/download behavior.
+  - ad placement remains outside download-action tables (header/page-chrome injection only).
+- County inclusion/parity invariants unchanged.
+
 ## Routine Update Rule
 On each major decision or architecture change:
 1. Add one dated entry in this file.

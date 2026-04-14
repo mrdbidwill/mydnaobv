@@ -54,3 +54,16 @@ def test_configured_public_states_all_keyword(monkeypatch):
     states = main._configured_public_states()
     assert "AL" in states
     assert "TX" in states
+
+
+def test_project_reference_lookup_by_numeric_id():
+    payload = main._project_reference("184305")
+    assert payload is not None
+    assert payload["name"] == "Fungi of Alabama- AMS FunDiS Local Project"
+    assert "snapshot_label" in payload
+
+
+def test_project_reference_lookup_with_non_numeric_text():
+    payload = main._project_reference("project #132913")
+    assert payload is not None
+    assert "With DNA Barcode ITS" in payload["stats_dna"]

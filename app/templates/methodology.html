@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="grid">
+    <div class="card">
+      <h2>Data Methodology</h2>
+      <p class="muted">The PDFs created provide mushroom foragers and identifiers a list of mushrooms that have been processed to match a mushroom's DNA sequencing with images of that mushroom.</p>
+      <p class="muted">There are different ways to access the data: by county or by project. Any user can freely download all PDFs for Alabama counties that have DNA sequencing data.</p>
+      <p class="muted">This can be very helpful for new and inexperienced foragers, especially having a list of mushrooms for the specific county they are in.</p>
+      <p class="muted">Project downloads can also be used to cover larger sets of mushrooms and broader geographic areas. Expert users have long had the ability to retrieve iNaturalist search results; this workflow makes that access available to everyone.</p>
+      <p class="muted">These PDFs can be used in areas without internet access as long as they have been downloaded ahead of time.</p>
+      <p class="muted">The PDFs are updated periodically to reflect new data. Some files can become large, so they may be packaged in ZIP files and broken into multiple PDFs as needed.</p>
+      <div style="margin-top: 16px;">
+        <a class="btn secondary" href="/">Back to downloads</a>
+        <a class="btn secondary" href="/catalog">Open DNA Observation List</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
