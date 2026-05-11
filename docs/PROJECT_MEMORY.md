@@ -372,10 +372,11 @@ Purpose: persistent decision/history log for future chat sessions and implementa
 ## 2026-05-11 (Stage 3 start)
 - Added deferred-sync auto-refresh cooldown to prevent immediate force-sync requeue churn after cache-based project exports (no DB migration):
   - new env/config knob: `EXPORT_SYNC_DEFER_RETRY_MINUTES` (default `360`)
-  - public auto-refresh enqueue now skips lists whose latest completed export message indicates `Sync deferred (...)` and whose completion time is still inside cooldown.
+  - public auto-refresh enqueue now skips lists when latest completed export is still inside cooldown and the list sync timestamp did not advance past that export start time (with message marker fallback).
   - once cooldown expires, normal force-sync auto-refresh retries resume.
 - Added regression tests for:
   - skip behavior during deferred-sync cooldown.
+  - skip behavior for recent unsynced completion even if finalized message no longer includes defer marker.
   - retry behavior after deferred-sync cooldown.
 - County inclusion/parity invariants unchanged.
 

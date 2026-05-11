@@ -55,7 +55,7 @@ Reduce large-export turnaround time and move to a curated, prebuilt county-produ
 ## 2026-05-11 Stage 3 Start Note
 - Added auto-refresh retry damping for deferred-sync cache exports:
   - new control: `EXPORT_SYNC_DEFER_RETRY_MINUTES` (default `360`).
-  - when latest completed list export was a deferred-sync cache run, auto-refresh skips immediate requeue until cooldown elapses, then retries force-sync normally.
+  - when latest completed list export is recent and list sync timestamp still predates that export start, auto-refresh skips immediate requeue until cooldown elapses, then retries force-sync normally.
 - Purpose:
   - prevent continuous rebuild churn on stale `last_sync_at` while iNaturalist throttling persists.
   - keep sync retry pressure bounded without changing county inclusion/parity rules.

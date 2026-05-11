@@ -264,6 +264,38 @@ def test_enqueue_due_public_refresh_jobs_retries_after_sync_defer_cooldown(monke
         db.close()
 
 
+def test_enqueue_due_public_refresh_jobs_skips_recent_unsynced_completion_without_marker(monkeypatch):
+    db = _session()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    try:
+        project = _mk_list(db, 18, product_type="project", is_public=True)
+        project.last_sync_at = now - timedelta(days=20)
+        db.add(
+            models.ExportJob(
+                list_id=project.id,
+                status="partial_ready",
+                phase="done",
+                message="Export complete: observations index PDF and ZIP with split county guide parts ready.",
+                created_at=now - timedelta(minutes=12),
+                started_at=now - timedelta(minutes=12),
+                updated_at=now - timedelta(minutes=10),
+                finished_at=now - timedelta(minutes=10),
+            )
+        )
+        db.commit()
+
+        monkeypatch.setattr(
+            export_service,
+            "export_config",
+            replace(export_service.export_config, sync_defer_retry_minutes=180),
+        )
+
+        queued = export_service.enqueue_due_public_refresh_jobs(db, limit=10)
+        assert queued == 0
+    finally:
+        db.close()
+
+
 def test_phase_plan_marks_waiting_quota_on_sync_429(monkeypatch):
     db = _session()
     now = datetime.now(UTC).replace(tzinfo=None)

@@ -272,16 +272,29 @@ def _job_completed_or_updated_at(job: models.ExportJob | None) -> datetime | Non
     )
 
 
-def _is_sync_defer_retry_in_cooldown(job: models.ExportJob | None, now: datetime) -> bool:
+def _is_sync_defer_retry_in_cooldown(
+    obs_list: models.ObservationList,
+    job: models.ExportJob | None,
+    now: datetime,
+) -> bool:
     cooldown_minutes = max(0, int(export_config.sync_defer_retry_minutes))
     if cooldown_minutes <= 0:
         return False
-    if job is None or not _is_sync_defer_message(job.message):
+    if job is None:
         return False
     completed_at = _job_completed_or_updated_at(job)
     if completed_at is None:
         return False
-    return completed_at + timedelta(minutes=cooldown_minutes) > now
+    if completed_at + timedelta(minutes=cooldown_minutes) <= now:
+        return False
+
+    list_last_sync = normalize_naive_utc(obs_list.last_sync_at)
+    job_started = normalize_naive_utc(job.started_at) or normalize_naive_utc(job.created_at)
+    if list_last_sync is None:
+        return True
+    if job_started is not None and list_last_sync < job_started:
+        return True
+    return _is_sync_defer_message(job.message)
 
 
 def is_list_export_stale(
@@ -381,7 +394,7 @@ def enqueue_due_public_refresh_jobs(db: Session, limit: int = 2) -> int:
     for obs_list in due_lists:
         if obs_list.id in active_list_ids:
             continue
-        if _is_sync_defer_retry_in_cooldown(latest_completed_by_list.get(obs_list.id), now):
+        if _is_sync_defer_retry_in_cooldown(obs_list, latest_completed_by_list.get(obs_list.id), now):
             continue
         _, was_queued, _ = enqueue_export_job_for_list(
             db,
