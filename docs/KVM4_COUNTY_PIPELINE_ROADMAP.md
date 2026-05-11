@@ -52,6 +52,14 @@ Reduce large-export turnaround time and move to a curated, prebuilt county-produ
   - project products may proceed from cache while sync is deferred.
   - county inclusion/parity logic unchanged; county invariants remain intact.
 
+## 2026-05-11 Stage 3 Start Note
+- Added auto-refresh retry damping for deferred-sync cache exports:
+  - new control: `EXPORT_SYNC_DEFER_RETRY_MINUTES` (default `360`).
+  - when latest completed list export was a deferred-sync cache run, auto-refresh skips immediate requeue until cooldown elapses, then retries force-sync normally.
+- Purpose:
+  - prevent continuous rebuild churn on stale `last_sync_at` while iNaturalist throttling persists.
+  - keep sync retry pressure bounded without changing county inclusion/parity rules.
+
 ## Phase 1 (Now): KVM4 Readiness Without Architecture Rewrite
 - Keep the current queue/worker model.
 - Tune runtime throttles conservatively after KVM4 migration:

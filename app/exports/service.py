@@ -230,6 +230,60 @@ def latest_completed_job_for_list(db: Session, list_id: int) -> models.ExportJob
     )
 
 
+def _latest_completed_jobs_for_lists(
+    db: Session,
+    list_ids: set[int],
+) -> dict[int, models.ExportJob]:
+    if not list_ids:
+        return {}
+
+    latest_by_list = (
+        db.query(
+            models.ExportJob.list_id.label("list_id"),
+            func.max(models.ExportJob.id).label("job_id"),
+        )
+        .filter(
+            models.ExportJob.list_id.in_(list_ids),
+            models.ExportJob.status.in_(("ready", "partial_ready")),
+        )
+        .group_by(models.ExportJob.list_id)
+        .subquery()
+    )
+    rows = (
+        db.query(models.ExportJob)
+        .join(latest_by_list, models.ExportJob.id == latest_by_list.c.job_id)
+        .all()
+    )
+    return {int(job.list_id): job for job in rows if job.list_id is not None}
+
+
+def _is_sync_defer_message(message: str | None) -> bool:
+    text = (message or "").strip().lower()
+    return "sync deferred (" in text and "cached observations" in text
+
+
+def _job_completed_or_updated_at(job: models.ExportJob | None) -> datetime | None:
+    if job is None:
+        return None
+    return (
+        normalize_naive_utc(job.finished_at)
+        or normalize_naive_utc(job.updated_at)
+        or normalize_naive_utc(job.created_at)
+    )
+
+
+def _is_sync_defer_retry_in_cooldown(job: models.ExportJob | None, now: datetime) -> bool:
+    cooldown_minutes = max(0, int(export_config.sync_defer_retry_minutes))
+    if cooldown_minutes <= 0:
+        return False
+    if job is None or not _is_sync_defer_message(job.message):
+        return False
+    completed_at = _job_completed_or_updated_at(job)
+    if completed_at is None:
+        return False
+    return completed_at + timedelta(minutes=cooldown_minutes) > now
+
+
 def is_list_export_stale(
     obs_list: models.ObservationList,
     latest_job: models.ExportJob | None,
@@ -320,10 +374,14 @@ def enqueue_due_public_refresh_jobs(db: Session, limit: int = 2) -> int:
         .order_by(models.ObservationList.last_sync_at.asc().nullsfirst(), models.ObservationList.id.asc())
         .all()
     )
+    due_list_ids = {int(obs_list.id) for obs_list in due_lists if obs_list.id is not None}
+    latest_completed_by_list = _latest_completed_jobs_for_lists(db, due_list_ids)
 
     queued = 0
     for obs_list in due_lists:
         if obs_list.id in active_list_ids:
+            continue
+        if _is_sync_defer_retry_in_cooldown(latest_completed_by_list.get(obs_list.id), now):
             continue
         _, was_queued, _ = enqueue_export_job_for_list(
             db,

@@ -369,6 +369,16 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - `429` + cached observations => continue to export.
 - County inclusion/parity invariants unchanged.
 
+## 2026-05-11 (Stage 3 start)
+- Added deferred-sync auto-refresh cooldown to prevent immediate force-sync requeue churn after cache-based project exports (no DB migration):
+  - new env/config knob: `EXPORT_SYNC_DEFER_RETRY_MINUTES` (default `360`)
+  - public auto-refresh enqueue now skips lists whose latest completed export message indicates `Sync deferred (...)` and whose completion time is still inside cooldown.
+  - once cooldown expires, normal force-sync auto-refresh retries resume.
+- Added regression tests for:
+  - skip behavior during deferred-sync cooldown.
+  - retry behavior after deferred-sync cooldown.
+- County inclusion/parity invariants unchanged.
+
 ## Routine Update Rule
 On each major decision or architecture change:
 1. Add one dated entry in this file.

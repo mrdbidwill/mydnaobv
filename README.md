@@ -259,6 +259,7 @@ Note:
   - `EXPORT_SYNC_BACKOFF_MAX_SECONDS`
   - `EXPORT_SYNC_BACKOFF_JITTER_RATIO`
   - `EXPORT_SYNC_DEFER_TO_CACHE_PRODUCTS` (default `project`)
+  - `EXPORT_SYNC_DEFER_RETRY_MINUTES` (default `360`, auto-refresh retry cooldown after deferred-sync cache exports)
 
 Dry-run orphan export/publish directory cleanup (folders left behind with no DB rows):
 

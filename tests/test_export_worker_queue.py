@@ -173,6 +173,97 @@ def test_enqueue_due_public_refresh_jobs_includes_project_lists():
         db.close()
 
 
+def test_enqueue_due_public_refresh_jobs_skips_recent_sync_defer_completion(monkeypatch):
+    db = _session()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    try:
+        project = _mk_list(db, 16, product_type="project", is_public=True)
+        project.last_sync_at = now - timedelta(days=20)
+        db.add(
+            models.ExportJob(
+                list_id=project.id,
+                status="ready",
+                phase="done",
+                message=(
+                    "Sync deferred (iNaturalist throttling HTTP 429 backoff_attempt=1). "
+                    "Proceeding with 42 cached observations from last sync at 2026-03-27T12:12:12.265356 UTC."
+                ),
+                created_at=now - timedelta(minutes=10),
+                updated_at=now - timedelta(minutes=10),
+                finished_at=now - timedelta(minutes=10),
+            )
+        )
+        db.commit()
+
+        monkeypatch.setattr(
+            export_service,
+            "export_config",
+            replace(export_service.export_config, sync_defer_retry_minutes=180),
+        )
+
+        queued = export_service.enqueue_due_public_refresh_jobs(db, limit=10)
+        assert queued == 0
+
+        active_auto = (
+            db.query(models.ExportJob)
+            .filter(
+                models.ExportJob.list_id == project.id,
+                models.ExportJob.requested_by == "auto-refresh",
+            )
+            .all()
+        )
+        assert active_auto == []
+    finally:
+        db.close()
+
+
+def test_enqueue_due_public_refresh_jobs_retries_after_sync_defer_cooldown(monkeypatch):
+    db = _session()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    try:
+        project = _mk_list(db, 17, product_type="project", is_public=True)
+        project.last_sync_at = now - timedelta(days=20)
+        db.add(
+            models.ExportJob(
+                list_id=project.id,
+                status="ready",
+                phase="done",
+                message=(
+                    "Sync deferred (iNaturalist throttling HTTP 429 backoff_attempt=1). "
+                    "Proceeding with 84 cached observations from last sync at 2026-03-27T12:12:12.265356 UTC."
+                ),
+                created_at=now - timedelta(hours=8),
+                updated_at=now - timedelta(hours=8),
+                finished_at=now - timedelta(hours=8),
+            )
+        )
+        db.commit()
+
+        monkeypatch.setattr(
+            export_service,
+            "export_config",
+            replace(export_service.export_config, sync_defer_retry_minutes=120),
+        )
+
+        queued = export_service.enqueue_due_public_refresh_jobs(db, limit=10)
+        assert queued == 1
+
+        active_auto = (
+            db.query(models.ExportJob)
+            .filter(
+                models.ExportJob.list_id == project.id,
+                models.ExportJob.requested_by == "auto-refresh",
+            )
+            .order_by(models.ExportJob.id.desc())
+            .first()
+        )
+        assert active_auto is not None
+        assert active_auto.force_sync is True
+        assert active_auto.status == "queued"
+    finally:
+        db.close()
+
+
 def test_phase_plan_marks_waiting_quota_on_sync_429(monkeypatch):
     db = _session()
     now = datetime.now(UTC).replace(tzinfo=None)
