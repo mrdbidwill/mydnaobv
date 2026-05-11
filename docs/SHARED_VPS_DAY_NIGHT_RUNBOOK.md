@@ -23,7 +23,7 @@ Use these as operating targets, not hard limits:
 | Disk iowait | <5% | 5-10% | >10% sustained |
 | Web p95 latency | within SLO | +25% over baseline | +50% over baseline |
 | 5xx error rate | <0.5% | 0.5-1.0% | >1.0% |
-| Oldest queued export age | <1 minute | 1-5 minutes | >10 minutes |
+| Oldest runnable queued export age | <1 minute | 1-5 minutes | >10 minutes |
 
 ## Operating Profiles
 
@@ -85,6 +85,22 @@ Why this is safe in current code:
   - schedule state-wide bulk rebuilds in night window.
 - Keep stale-detector behavior enabled so unchanged lists do not create duplicate jobs.
 - Keep iNaturalist API/media guardrail settings unchanged during throughput tuning.
+- Keep Stage 3 deferred-sync retry damping enabled for project refreshes:
+  - `EXPORT_SYNC_DEFER_RETRY_MINUTES=360` (or a tuned value)
+  - prevents immediate force-sync requeue churn when sync remains throttled.
+
+## Disk Capacity Hygiene
+
+Large repeated project runs can accumulate multi-GB `job_*` payloads quickly under `/opt/mydnaobv/exports`.
+
+Operational checks:
+- monitor root filesystem with `df -h /` at least daily during backlog push.
+- treat disk usage >85% as warning and >90% as critical rollback/cleanup threshold.
+
+Cleanup guidance:
+- keep daily worker cleanup cron enabled.
+- remove stale retained `job_*` directories when they are no longer needed for active/public downloads.
+- verify free-space headroom before deploy operations (target: >=10-15 GB free).
 
 ## Optional Systemd Isolation (Recommended)
 

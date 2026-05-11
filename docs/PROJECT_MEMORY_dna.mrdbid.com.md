@@ -40,3 +40,12 @@ Purpose: portfolio-level continuity pointer for the `myDNAobv` codebase in this 
 - Current operations preference:
   - maintain all-photo/full-data outputs.
   - optimize delivery and completion reliability around that full-data requirement.
+
+## 2026-05-11
+- Sync/export throttling resiliency rollout:
+  - Stage 1: global sync semaphore + bounded exponential 429 backoff.
+  - Stage 2: project exports can proceed from cached observations when sync is throttled.
+  - Stage 3: added deferred-sync auto-refresh cooldown (`EXPORT_SYNC_DEFER_RETRY_MINUTES`) to prevent immediate force-sync requeue churn.
+- Production operations finding:
+  - repeated large project runs can fill root filesystem via retained export `job_*` folders and block deploy operations.
+  - deploy preflight now must include disk-capacity check (`df -h /`) and cleanup when disk usage approaches critical threshold.

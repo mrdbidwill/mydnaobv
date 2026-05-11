@@ -29,6 +29,19 @@ Optional override example:
 RUN_TESTS=1 EXPECTED_HOST_IP=85.31.233.192 ./scripts/deploy_production.sh
 ```
 
+### Preflight: Disk Capacity Guardrail (Required for Reliable Deploys)
+
+Before running deploy, verify root filesystem free space on server:
+
+```bash
+ssh -T mydnaobv@dna.mrdbid.com "df -h /"
+```
+
+Guidance:
+- If `/` usage is above ~90%, deploy may fail during `git fetch` or `pip` temp-dir creation.
+- Keep free space headroom before deploy (target: at least 10-15 GB free).
+- If space is low, clean retained export payloads first (old `job_*` folders under `/opt/mydnaobv/exports`) and rerun deploy.
+
 ## 3) Quick verify (optional, run locally)
 
 ```bash

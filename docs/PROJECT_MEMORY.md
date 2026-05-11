@@ -380,6 +380,15 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - retry behavior after deferred-sync cooldown.
 - County inclusion/parity invariants unchanged.
 
+## 2026-05-11 (Stage 3 deploy ops note)
+- Production deploy encountered root filesystem exhaustion (`No space left on device`) during `git fetch`/`pip` temp-dir creation.
+- Mitigation applied:
+  - removed oversized retained `job_*` export folders created by repeated large project runs.
+  - reran deploy successfully after restoring disk headroom.
+- Operational guardrail added:
+  - always preflight `df -h /` before deploy; treat >90% disk usage as deploy-blocking until cleanup is completed.
+- County inclusion/parity invariants unchanged.
+
 ## Routine Update Rule
 On each major decision or architecture change:
 1. Add one dated entry in this file.

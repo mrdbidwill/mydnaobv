@@ -4,6 +4,14 @@ Date: March 8, 2026
 
 Goal: increase queue throughput while keeping iNaturalist safety limits unchanged.
 
+Status:
+- Historical baseline only.
+- Superseded for current production by:
+  - `docs/CRONTAB_DAY_NIGHT_AMERICA_CHICAGO.md`
+  - `docs/SHARED_VPS_DAY_NIGHT_RUNBOOK.md`
+  - Stage 1/2/3 notes in `docs/PROJECT_MEMORY.md` and `docs/KVM4_COUNTY_PIPELINE_ROADMAP.md`
+- Do not apply this runbook directly on current production without reconciling newer settings (`EXPORT_SYNC_*`, backlog 3-lane cron, Stage 3 cooldown).
+
 For shared-VPS day/night scheduling and cross-app capacity partitioning (Rails + Python), use:
 - `docs/SHARED_VPS_DAY_NIGHT_RUNBOOK.md`
 

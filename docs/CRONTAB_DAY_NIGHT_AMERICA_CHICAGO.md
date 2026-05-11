@@ -46,6 +46,9 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # Daily cleanup.
 17 3 * * * cd /opt/mydnaobv/app && /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --cleanup
+
+# Monthly DB backup restore verification.
+45 4 1 * * cd /opt/mydnaobv/app && /opt/mydnaobv/app/scripts/run_restore_verify_from_env.sh >> /opt/mydnaobv/exports/restore_verify.log 2>&1
 ```
 
 Verify:
@@ -88,6 +91,9 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # Daily cleanup.
 17 3 * * * cd /opt/mydnaobv/app && /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --cleanup
+
+# Monthly DB backup restore verification.
+45 4 1 * * cd /opt/mydnaobv/app && /opt/mydnaobv/app/scripts/run_restore_verify_from_env.sh >> /opt/mydnaobv/exports/restore_verify.log 2>&1
 ```
 
 Verify:
@@ -102,5 +108,6 @@ sudo crontab -l
 - Use either backlog profile or steady-state profile, not both at once.
 - When queue age is healthy again, disable backlog lines and enable steady-state lines.
 - Keep iNaturalist request/media guardrail environment values unchanged while applying this scheduler.
+- For Stage 3 retry damping after deferred-sync cache exports, set `EXPORT_SYNC_DEFER_RETRY_MINUTES` in `.env` (default `360`).
 - Daylight Saving Time is handled automatically by `CRON_TZ=America/Chicago` (CST/CDT).
-- Queue guardrail target: oldest queued export under 10 minutes during backlog push.
+- Queue guardrail target: oldest runnable queued export under 10 minutes during backlog push (`waiting_quota` retries can remain scheduled into the future by design).

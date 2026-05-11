@@ -60,6 +60,15 @@ Reduce large-export turnaround time and move to a curated, prebuilt county-produ
   - prevent continuous rebuild churn on stale `last_sync_at` while iNaturalist throttling persists.
   - keep sync retry pressure bounded without changing county inclusion/parity rules.
 
+## 2026-05-11 Operations Note (Disk Capacity)
+- Observed deployment failure mode under backlog churn:
+  - root filesystem reached 100% due accumulated large `job_*` export folders.
+  - deploy failed at `git fetch`/`pip` temp-dir creation until cleanup restored space.
+- Added operating requirement:
+  - preflight `df -h /` before deploys.
+  - keep disk usage below warning/critical thresholds in shared-VPS runbook.
+  - treat export-retention cleanup as first-class backlog operation, not optional housekeeping.
+
 ## Phase 1 (Now): KVM4 Readiness Without Architecture Rewrite
 - Keep the current queue/worker model.
 - Tune runtime throttles conservatively after KVM4 migration:
@@ -70,7 +79,7 @@ Reduce large-export turnaround time and move to a curated, prebuilt county-produ
   - `EXPORT_*_CADENCE_MINUTES`
   - daily/hourly media and API request caps
 - Re-check export timing and system metrics after each tuning step.
-- Stage 1/2 baseline profile selected:
+- Historical Stage 1/2 baseline (March 2026, superseded by May 2026 backlog profile):
   - `EXPORT_RUN_TIMEOUT_SECONDS=90`
   - `EXPORT_XS/S/M/L_CADENCE_MINUTES=2/4/8/20`
   - `EXPORT_L_WINDOW_START_HOUR=0`, `EXPORT_L_WINDOW_END_HOUR=12`
