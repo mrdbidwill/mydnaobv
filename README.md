@@ -240,13 +240,15 @@ ENABLE_PDF_EXPORTS=true
 Run once manually:
 
 ```bash
-python3 -m app.exports.worker --once
+cd /opt/mydnaobv/app
+/opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --once
 ```
 
 Cleanup expired artifacts:
 
 ```bash
-python3 -m app.exports.worker --cleanup
+cd /opt/mydnaobv/app
+/opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --cleanup
 ```
 
 Note:
@@ -259,12 +261,20 @@ python scripts/cleanup_orphan_exports.py
 python scripts/cleanup_orphan_exports.py --apply
 ```
 
-Suggested cron entries (staged throughput):
+Suggested cron entries (upgraded throughput):
 
 ```cron
-# Single-lane fallback profile
-*/2 * * * * flock -n /var/lock/mydnaobv_export.lock timeout 300s nice -n 15 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
-17 3 * * * /usr/bin/python3 -m app.exports.worker --cleanup
+# Backlog push profile: three lanes every minute (temporary while queue is stale).
+* * * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_export_backlog_a.lock timeout 900s nice -n 6 ionice -c2 -n6 /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --once
+* * * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_export_backlog_b.lock timeout 900s nice -n 6 ionice -c2 -n6 /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --once
+* * * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_export_backlog_c.lock timeout 900s nice -n 6 ionice -c2 -n6 /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --once
+
+# Steady-state profile: reduce to one daytime lane + two night lanes.
+*/2 7-22 * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_export_day.lock timeout 600s nice -n 12 ionice -c2 -n7 /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --once
+*/2 23,0-6 * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_export_night_a.lock timeout 900s nice -n 8 ionice -c2 -n6 /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --once
+*/2 23,0-6 * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_export_night_b.lock timeout 900s nice -n 8 ionice -c2 -n6 /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --once
+
+17 3 * * * cd /opt/mydnaobv/app && /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --cleanup
 ```
 
 Recommended production day/night profile (with longer timeouts for large finalize/zip jobs) is documented in:

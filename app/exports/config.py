@@ -13,6 +13,8 @@ class ExportConfig:
     retention_hours: int
     run_timeout_seconds: int
     part_size: int
+    max_part_size_single_photo: int
+    max_part_size_all_photos: int
     download_chunk_size: int
     download_byte_budget_mb: int
     image_cache_enabled: bool
@@ -106,6 +108,8 @@ export_config = ExportConfig(
     retention_hours=settings.export_retention_hours,
     run_timeout_seconds=settings.export_run_timeout_seconds,
     part_size=settings.export_part_size,
+    max_part_size_single_photo=settings.export_max_part_size_single_photo,
+    max_part_size_all_photos=settings.export_max_part_size_all_photos,
     download_chunk_size=settings.export_download_chunk_size,
     download_byte_budget_mb=settings.export_download_byte_budget_mb,
     image_cache_enabled=settings.export_image_cache_enabled,

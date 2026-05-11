@@ -1,11 +1,11 @@
 # Shared VPS Day/Night Operations Runbook
 
-Date: March 30, 2026
+Date: May 10, 2026
 
 Goal: maximize PDF build throughput on a shared VPS while preserving web responsiveness and maintainability.
 
 Scope assumptions:
-- Hostinger VPS on Ubuntu 24.04 LTS (KVM2 class, 2 vCPU expected).
+- Hostinger VPS on Ubuntu 24.04 LTS (upgraded class with additional CPU/RAM headroom).
 - `myDNAobv` Python export pipeline is the dominant compute user.
 - `mrdbid.com`, `auto-glossary.com`, and `mycowriter.com` Rails apps are low traffic and should stay responsive with small reserved capacity.
 
@@ -16,7 +16,7 @@ Use these as operating targets, not hard limits:
 | Metric | Healthy target | Warning | Critical |
 | --- | --- | --- | --- |
 | CPU average (5m) | 35-60% | 60-75% | >85% for 10+ minutes |
-| Load average (5m, 2 vCPU host) | <1.2 | 1.2-1.8 | >2.0 sustained |
+| Load average (5m) | <60% of vCPU count | 60-85% of vCPU count | >100% of vCPU count sustained |
 | Memory used | 50-70% | 70-80% | >85% or OOM |
 | Swap I/O | near zero | sustained bursts | steady swap-in/out |
 | Disk used | <70% | 70-85% | >90% |
@@ -27,44 +27,44 @@ Use these as operating targets, not hard limits:
 
 ## Operating Profiles
 
-### Day Profile (UX-first, default)
+### Backlog Push Profile (temporary)
 
-Use for local daytime traffic window.
+Use while oldest queued export age is stale.
 
-- Rails apps:
-  - keep web concurrency intentionally small (for Puma: `WEB_CONCURRENCY=1`, `RAILS_MAX_THREADS=3`).
-  - if background jobs are enabled in Rails repos, keep worker concurrency low (`SIDEKIQ_CONCURRENCY=2` starting point).
 - Python export workers:
-  - run one lane only.
-  - keep lower priority (`nice -n 15`, `ionice -c2 -n7`).
-  - keep per-run slice moderate (`timeout 300s`).
-
-### Night/Rebuild Profile (throughput-first)
-
-Use for low-traffic windows and initial/major backlog builds.
-
+  - run three lanes in parallel (separate flock lock files) every minute.
+  - use `timeout 900s` to reduce finalize/zip interruption.
+  - use moderate priority (`nice -n 6`, `ionice -c2 -n6`).
 - Rails apps:
-  - keep same small baseline to preserve login/admin responsiveness.
+  - keep baseline small web concurrency while backlog push is active.
+
+### Steady-State Profile
+
+Use after backlog is current.
+
 - Python export workers:
-  - run two lanes in parallel (separate flock lock files).
-  - reduce nice penalty (`nice -n 8`, same `ionice -c2 -n7`).
-  - allow longer per-run slice (`timeout 600s`).
-  - queue bulk rebuild actions in this window.
+  - daytime: one lane (`timeout 600s`, lower priority).
+  - night: two lanes (`timeout 900s`).
+- Rails apps:
+  - keep same baseline settings used during backlog push.
 
 ## Cron Template (Current Architecture)
 
 Example schedule in `America/Chicago`:
 
 ```cron
-# Day profile: single export lane during daytime.
-*/2 7-22 * * * flock -n /var/lock/mydnaobv_export_day.lock timeout 300s nice -n 15 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
+# Backlog push profile (temporary): three lanes every minute.
+* * * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_export_backlog_a.lock timeout 900s nice -n 6 ionice -c2 -n6 /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --once
+* * * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_export_backlog_b.lock timeout 900s nice -n 6 ionice -c2 -n6 /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --once
+* * * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_export_backlog_c.lock timeout 900s nice -n 6 ionice -c2 -n6 /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --once
 
-# Night profile: dual export lanes for backlog/rebuild throughput.
-*/2 23,0-6 * * * flock -n /var/lock/mydnaobv_export_night_a.lock timeout 600s nice -n 8 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
-*/2 23,0-6 * * * flock -n /var/lock/mydnaobv_export_night_b.lock timeout 600s nice -n 8 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
+# Steady-state profile: enable after backlog is healthy.
+# */2 7-22 * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_export_day.lock timeout 600s nice -n 12 ionice -c2 -n7 /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --once
+# */2 23,0-6 * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_export_night_a.lock timeout 900s nice -n 8 ionice -c2 -n6 /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --once
+# */2 23,0-6 * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_export_night_b.lock timeout 900s nice -n 8 ionice -c2 -n6 /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --once
 
 # Daily cleanup.
-17 3 * * * /usr/bin/python3 -m app.exports.worker --cleanup
+17 3 * * * cd /opt/mydnaobv/app && /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --cleanup
 ```
 
 Why this is safe in current code:
@@ -72,10 +72,11 @@ Why this is safe in current code:
 - pick loop only claims `queued` / `waiting_quota`, and stale `running` jobs are auto-requeued.
 - publish now runs outside finalize; long R2 uploads no longer block jobs from reaching `ready` / `partial_ready`.
 
-## 2026-03-31 Operational Note
+## 2026-05-10 Operational Note
 
-- Timeouts were raised from `120/150s` to `300/600s` (day/night) after observing large finalize/zip phases for all-photo jobs.
-- Keep this higher timeout profile unless guardrail metrics regress; short external timeouts can force stale-lock recovery loops on large jobs.
+- Backlog profile now uses `900s` run slices to avoid repeated cutoff of large finalize/zip phases.
+- `cd /opt/mydnaobv/app` plus venv python is required in cron to avoid module/import path issues.
+- After queue age stabilizes, move back to steady-state profile.
 
 ## Queue Policy
 
@@ -103,7 +104,7 @@ If/when moving worker execution from cron to dedicated systemd services/timers:
 
 Immediately drop to single-lane export mode and daytime nice/timeout values when any occurs:
 - CPU >85% for 10+ minutes.
-- load average >2.0 sustained on 2 vCPU host.
+- load average exceeds total vCPU count for 10+ minutes.
 - web p95 latency >50% above baseline for 10+ minutes.
 - 5xx >1%.
 - sustained swap activity.

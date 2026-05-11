@@ -1,8 +1,8 @@
 # Crontab Templates (America/Chicago)
 
-Date: March 30, 2026
+Date: May 10, 2026
 
-Purpose: ready-to-paste cron entries for `myDNAobv` day/night export scheduling with explicit Central Time handling.
+Purpose: ready-to-paste cron entries for `myDNAobv` backlog push + steady-state scheduling with explicit Central Time handling.
 
 ## Choose One Owner
 
@@ -33,15 +33,19 @@ CRON_TZ=America/Chicago
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-# Day profile: single export lane during daytime.
-*/2 7-22 * * * flock -n /var/lock/mydnaobv_export_day.lock timeout 300s nice -n 15 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
+# Backlog push profile (temporary): three lanes every minute.
+* * * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_export_backlog_a.lock timeout 900s nice -n 6 ionice -c2 -n6 /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --once
+* * * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_export_backlog_b.lock timeout 900s nice -n 6 ionice -c2 -n6 /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --once
+* * * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_export_backlog_c.lock timeout 900s nice -n 6 ionice -c2 -n6 /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --once
 
-# Night profile: dual export lanes for backlog/rebuild throughput.
-*/2 23,0-6 * * * flock -n /var/lock/mydnaobv_export_night_a.lock timeout 600s nice -n 8 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
-*/2 23,0-6 * * * flock -n /var/lock/mydnaobv_export_night_b.lock timeout 600s nice -n 8 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
+# Steady-state profile: one daytime lane and two night lanes.
+# Keep these commented while backlog profile is active.
+# */2 7-22 * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_export_day.lock timeout 600s nice -n 12 ionice -c2 -n7 /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --once
+# */2 23,0-6 * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_export_night_a.lock timeout 900s nice -n 8 ionice -c2 -n6 /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --once
+# */2 23,0-6 * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_export_night_b.lock timeout 900s nice -n 8 ionice -c2 -n6 /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --once
 
 # Daily cleanup.
-17 3 * * * /usr/bin/python3 -m app.exports.worker --cleanup
+17 3 * * * cd /opt/mydnaobv/app && /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --cleanup
 ```
 
 Verify:
@@ -71,15 +75,19 @@ CRON_TZ=America/Chicago
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-# Day profile: single export lane during daytime.
-*/2 7-22 * * * flock -n /var/lock/mydnaobv_export_day.lock timeout 300s nice -n 15 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
+# Backlog push profile (temporary): three lanes every minute.
+* * * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_export_backlog_a.lock timeout 900s nice -n 6 ionice -c2 -n6 /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --once
+* * * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_export_backlog_b.lock timeout 900s nice -n 6 ionice -c2 -n6 /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --once
+* * * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_export_backlog_c.lock timeout 900s nice -n 6 ionice -c2 -n6 /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --once
 
-# Night profile: dual export lanes for backlog/rebuild throughput.
-*/2 23,0-6 * * * flock -n /var/lock/mydnaobv_export_night_a.lock timeout 600s nice -n 8 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
-*/2 23,0-6 * * * flock -n /var/lock/mydnaobv_export_night_b.lock timeout 600s nice -n 8 ionice -c2 -n7 /usr/bin/python3 -m app.exports.worker --once
+# Steady-state profile: one daytime lane and two night lanes.
+# Keep these commented while backlog profile is active.
+# */2 7-22 * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_export_day.lock timeout 600s nice -n 12 ionice -c2 -n7 /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --once
+# */2 23,0-6 * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_export_night_a.lock timeout 900s nice -n 8 ionice -c2 -n6 /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --once
+# */2 23,0-6 * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_export_night_b.lock timeout 900s nice -n 8 ionice -c2 -n6 /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --once
 
 # Daily cleanup.
-17 3 * * * /usr/bin/python3 -m app.exports.worker --cleanup
+17 3 * * * cd /opt/mydnaobv/app && /opt/mydnaobv/app/.venv/bin/python -m app.exports.worker --cleanup
 ```
 
 Verify:
@@ -90,7 +98,9 @@ sudo crontab -l
 
 ## Notes
 
-- If an older single-lane worker line exists (`mydnaobv_export.lock`), remove it when enabling this profile.
+- `cd /opt/mydnaobv/app` and venv python are required so module imports and env loading stay consistent in cron.
+- Use either backlog profile or steady-state profile, not both at once.
+- When queue age is healthy again, disable backlog lines and enable steady-state lines.
 - Keep iNaturalist request/media guardrail environment values unchanged while applying this scheduler.
 - Daylight Saving Time is handled automatically by `CRON_TZ=America/Chicago` (CST/CDT).
-- 2026-03-31: timeout profile raised to `300s` day / `600s` night to avoid cutting off large finalize/zip phases.
+- Queue guardrail target: oldest queued export under 10 minutes during backlog push.

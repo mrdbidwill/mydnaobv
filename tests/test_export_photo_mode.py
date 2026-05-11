@@ -77,3 +77,27 @@ def test_indexed_item_title_prefixes_observation_number():
     title = export_service._indexed_item_title(obs, 3, "photo 1/4")
     assert title.startswith("3. Amanita suballiacea")
     assert "(photo 1/4)" in title
+
+
+def test_recommended_part_size_uses_single_photo_cap(monkeypatch):
+    cfg = replace(
+        export_service.export_config,
+        include_all_photos=False,
+        part_size=320,
+        max_part_size_single_photo=280,
+    )
+    monkeypatch.setattr(export_service, "export_config", cfg)
+
+    assert export_service._recommended_part_size() == 280
+
+
+def test_recommended_part_size_uses_all_photo_cap(monkeypatch):
+    cfg = replace(
+        export_service.export_config,
+        include_all_photos=True,
+        part_size=260,
+        max_part_size_all_photos=180,
+    )
+    monkeypatch.setattr(export_service, "export_config", cfg)
+
+    assert export_service._recommended_part_size() == 180

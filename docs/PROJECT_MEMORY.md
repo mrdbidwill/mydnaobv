@@ -319,6 +319,31 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - ad placement remains outside download-action tables (header/page-chrome injection only).
 - County inclusion/parity invariants unchanged.
 
+## 2026-05-10
+- Throughput tuning update for upgraded VPS + Cloudflare-backed download delivery:
+  - raised recommended export runtime profile in `.env.example`:
+    - `EXPORT_RUN_TIMEOUT_SECONDS=300`
+    - `EXPORT_DOWNLOAD_CHUNK_SIZE=16`
+    - `EXPORT_DOWNLOAD_BYTE_BUDGET_MB=256`
+    - `EXPORT_REQUEST_INTERVAL_SECONDS=0.5`
+    - `EXPORT_XS/S/M/L_CADENCE_MINUTES=1/2/4/8`
+    - `EXPORT_L_WINDOW_END_HOUR=24`
+  - raised packaging defaults for large public artifacts:
+    - `EXPORT_ZIP_ONLY_PART_THRESHOLD=10`
+    - `EXPORT_ZIP_CHUNK_SIZE_MB=1024`
+    - `EXPORT_PUBLISH_JOBS_PER_RUN=3`
+- Export part-size control hardening (no DB migration):
+  - added env/config knobs for maximum pages per part:
+    - `EXPORT_MAX_PART_SIZE_SINGLE_PHOTO` (default `400`)
+    - `EXPORT_MAX_PART_SIZE_ALL_PHOTOS` (default `200`)
+  - `_recommended_part_size()` now uses configurable caps instead of fixed `150/75` limits.
+- Worker execution guidance update:
+  - cron templates now run with explicit app-directory `cd` and venv interpreter path to avoid module/env drift.
+  - added explicit backlog push profile (three lanes every minute) and steady-state fallback profile.
+- Validation coverage:
+  - added tests asserting part-size cap behavior for single-photo and all-photo modes.
+- County inclusion/parity invariants unchanged.
+
 ## Routine Update Rule
 On each major decision or architecture change:
 1. Add one dated entry in this file.

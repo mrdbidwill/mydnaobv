@@ -1275,10 +1275,12 @@ def _schedule_next_run(job: models.ExportJob, now: datetime) -> None:
 
 
 def _recommended_part_size() -> int:
-    # KVM 1 defaults: keep parts conservative to avoid merge pressure.
+    # Keep a floor to avoid tiny parts, and allow configurable caps by photo mode.
     if export_config.include_all_photos:
-        return max(30, min(export_config.part_size, 75))
-    return max(50, min(export_config.part_size, 150))
+        max_cap = max(30, export_config.max_part_size_all_photos)
+        return max(30, min(export_config.part_size, max_cap))
+    max_cap = max(50, export_config.max_part_size_single_photo)
+    return max(50, min(export_config.part_size, max_cap))
 
 
 def _zip_compression_for_arcname(arcname: str) -> int:

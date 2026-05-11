@@ -1,6 +1,6 @@
 # KVM4 + County Pipeline Roadmap
 
-Last updated: March 30, 2026
+Last updated: May 10, 2026
 
 ## Objective
 Reduce large-export turnaround time and move to a curated, prebuilt county-product model that protects shared VPS resources.
@@ -17,6 +17,23 @@ Reduce large-export turnaround time and move to a curated, prebuilt county-produ
   - Rails apps remain low-concurrency baseline to preserve UX floor
 - Added guardrail table and rollback triggers in `docs/SHARED_VPS_DAY_NIGHT_RUNBOOK.md`.
 - Operational policy: queue bulk/state rebuilds in night window; keep daytime focused on user-facing/smaller jobs.
+
+## 2026-05-10 Sync Note
+- Upgraded throughput profile for backlog recovery:
+  - temporary backlog push mode: three export worker lanes every minute
+  - steady-state mode retained as one daytime lane + two night lanes
+  - cron commands now explicitly run from app directory with venv python path
+- Throughput tuning defaults raised for upgraded VPS:
+  - `EXPORT_RUN_TIMEOUT_SECONDS=300`
+  - `EXPORT_DOWNLOAD_CHUNK_SIZE=16`
+  - `EXPORT_DOWNLOAD_BYTE_BUDGET_MB=256`
+  - `EXPORT_REQUEST_INTERVAL_SECONDS=0.5`
+  - `EXPORT_XS/S/M/L_CADENCE_MINUTES=1/2/4/8`
+  - `EXPORT_L_WINDOW_START_HOUR=0`, `EXPORT_L_WINDOW_END_HOUR=24`
+- Large dataset packaging adjustments:
+  - `EXPORT_ZIP_ONLY_PART_THRESHOLD=10`
+  - `EXPORT_ZIP_CHUNK_SIZE_MB=1024`
+  - new part-size cap knobs: `EXPORT_MAX_PART_SIZE_SINGLE_PHOTO`, `EXPORT_MAX_PART_SIZE_ALL_PHOTOS`
 
 ## Phase 1 (Now): KVM4 Readiness Without Architecture Rewrite
 - Keep the current queue/worker model.

@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     export_retention_hours: int = Field(default=48, alias="EXPORT_RETENTION_HOURS")
     export_run_timeout_seconds: int = Field(default=35, alias="EXPORT_RUN_TIMEOUT_SECONDS")
     export_part_size: int = Field(default=100, alias="EXPORT_PART_SIZE")
+    export_max_part_size_single_photo: int = Field(default=400, alias="EXPORT_MAX_PART_SIZE_SINGLE_PHOTO")
+    export_max_part_size_all_photos: int = Field(default=200, alias="EXPORT_MAX_PART_SIZE_ALL_PHOTOS")
     export_download_chunk_size: int = Field(default=8, alias="EXPORT_DOWNLOAD_CHUNK_SIZE")
     export_download_byte_budget_mb: int = Field(default=64, alias="EXPORT_DOWNLOAD_BYTE_BUDGET_MB")
     export_image_cache_enabled: bool = Field(default=True, alias="EXPORT_IMAGE_CACHE_ENABLED")
