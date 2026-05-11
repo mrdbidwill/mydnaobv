@@ -344,6 +344,21 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - added tests asserting part-size cap behavior for single-photo and all-photo modes.
 - County inclusion/parity invariants unchanged.
 
+## 2026-05-11
+- Stage 1 sync-throttling hardening implemented for export plan-phase stability (no DB migration):
+  - added global sync semaphore controls:
+    - `EXPORT_SYNC_MAX_CONCURRENT` (default `1`)
+    - `EXPORT_SYNC_SLOT_RETRY_SECONDS` (default `120`)
+  - export `plan` phase now defers force-sync when sync slot is full and retries later instead of competing across all worker lanes.
+  - sync `429` handling now applies bounded exponential backoff + jitter across repeated retries:
+    - `EXPORT_SYNC_BACKOFF_MAX_SECONDS` (default `21600`)
+    - `EXPORT_SYNC_BACKOFF_JITTER_RATIO` (default `0.15`)
+  - `429` job message now records `backoff_attempt=<n>` for operator visibility.
+- Added regression tests for:
+  - wait-state behavior when sync slot is full.
+  - deterministic sync `429` exponential backoff behavior.
+- County inclusion/parity invariants unchanged.
+
 ## Routine Update Rule
 On each major decision or architecture change:
 1. Add one dated entry in this file.

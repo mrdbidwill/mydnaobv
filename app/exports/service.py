@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
+import fcntl
 import hashlib
 import json
 from pathlib import Path
+import random
 import re
 import shutil
 import time
+from typing import TextIO
 import zipfile
 
 import httpx
@@ -44,6 +47,22 @@ GENUS_QUALIFIER_TOKENS = {
     "var",
     "forma",
 }
+
+
+class _SyncSlotHandle:
+    def __init__(self, file_handle: TextIO, slot_id: int):
+        self.file_handle = file_handle
+        self.slot_id = slot_id
+
+    def release(self) -> None:
+        try:
+            fcntl.flock(self.file_handle.fileno(), fcntl.LOCK_UN)
+        except Exception:
+            pass
+        try:
+            self.file_handle.close()
+        except Exception:
+            pass
 
 
 def utc_now_naive() -> datetime:
@@ -594,6 +613,30 @@ def _process_phase(db: Session, job: models.ExportJob, deadline: float) -> bool:
     return True
 
 
+def _sync_lock_dir() -> Path:
+    lock_dir = _storage_root() / "sync_locks"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    return lock_dir
+
+
+def _try_acquire_sync_slot(max_concurrent: int) -> _SyncSlotHandle | None:
+    total_slots = max(1, int(max_concurrent or 1))
+    lock_dir = _sync_lock_dir()
+    for slot_id in range(1, total_slots + 1):
+        lock_path = lock_dir / f"slot_{slot_id:02d}.lock"
+        handle = lock_path.open("a+", encoding="utf-8")
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return _SyncSlotHandle(handle, slot_id)
+        except BlockingIOError:
+            handle.close()
+            continue
+        except OSError:
+            handle.close()
+            continue
+    return None
+
+
 def _phase_plan(db: Session, job: models.ExportJob) -> bool:
     existing_count = db.query(func.count(models.ExportItem.id)).filter(models.ExportItem.job_id == job.id).scalar() or 0
     if existing_count > 0:
@@ -608,14 +651,33 @@ def _phase_plan(db: Session, job: models.ExportJob) -> bool:
             job.message = "List not found for sync."
             job.finished_at = utc_now_naive()
             return True
+        sync_slot = _try_acquire_sync_slot(export_config.sync_max_concurrent)
+        if sync_slot is None:
+            now = utc_now_naive()
+            wait_seconds = max(30, int(export_config.sync_slot_retry_seconds))
+            retry_at = now + timedelta(seconds=wait_seconds)
+            job.status = "waiting_quota"
+            job.phase = "plan"
+            job.next_run_at = retry_at
+            job.last_run_at = now
+            job.message = (
+                "Sync waiting for global iNaturalist sync slot "
+                f"({max(1, int(export_config.sync_max_concurrent))} max concurrent). "
+                f"Retry after {wait_seconds}s at {retry_at.isoformat()} UTC."
+            )
+            return False
         try:
             synced = sync_list_observations(db, obs_list)
-            job.message = f"Sync complete: {synced} observations refreshed."
+            job.message = (
+                f"Sync complete: {synced} observations refreshed "
+                f"(sync slot {sync_slot.slot_id})."
+            )
             job.force_sync = False
         except Exception as exc:
             db.rollback()
-            throttle_delay_seconds = _sync_throttle_delay_seconds(exc)
-            if throttle_delay_seconds is not None:
+            throttle_delay = _sync_throttle_delay_seconds(exc, previous_message=job.message)
+            if throttle_delay is not None:
+                throttle_delay_seconds, backoff_attempt = throttle_delay
                 now = utc_now_naive()
                 retry_at = now + timedelta(seconds=throttle_delay_seconds)
                 job.status = "waiting_quota"
@@ -624,6 +686,7 @@ def _phase_plan(db: Session, job: models.ExportJob) -> bool:
                 job.last_run_at = now
                 job.message = (
                     "Sync paused by iNaturalist throttling (HTTP 429). "
+                    f"backoff_attempt={backoff_attempt}. "
                     f"Retry after {throttle_delay_seconds}s at {retry_at.isoformat()} UTC."
                 )
                 return False
@@ -632,6 +695,8 @@ def _phase_plan(db: Session, job: models.ExportJob) -> bool:
             job.message = f"Sync failed before export: {exc}"
             job.finished_at = utc_now_naive()
             return True
+        finally:
+            sync_slot.release()
 
     observations = (
         db.query(models.Observation)
@@ -1368,7 +1433,24 @@ def _append_job_note(message: str | None, note: str) -> str:
     return f"{current} {clean_note}"
 
 
-def _sync_throttle_delay_seconds(exc: Exception) -> int | None:
+def _sync_backoff_attempt_from_message(message: str | None) -> int:
+    text = (message or "").strip()
+    if not text:
+        return 0
+    match = re.search(r"backoff_attempt=(\d+)", text)
+    if not match:
+        return 0
+    try:
+        return max(0, int(match.group(1)))
+    except Exception:
+        return 0
+
+
+def _sync_throttle_delay_seconds(
+    exc: Exception,
+    *,
+    previous_message: str | None = None,
+) -> tuple[int, int] | None:
     if not isinstance(exc, httpx.HTTPStatusError):
         return None
 
@@ -1377,9 +1459,20 @@ def _sync_throttle_delay_seconds(exc: Exception) -> int | None:
         return None
 
     retry_after = _retry_after_seconds(response.headers.get("Retry-After"))
-    if retry_after is None:
-        return 30 * 60
-    return max(60, min(retry_after, 6 * 60 * 60))
+    base_delay = retry_after if retry_after is not None else 30 * 60
+    previous_attempt = _sync_backoff_attempt_from_message(previous_message)
+    backoff_attempt = previous_attempt + 1
+
+    # Respect Retry-After while spacing repeated throttles further apart.
+    delay = max(60, int(base_delay)) * (2 ** max(0, backoff_attempt - 1))
+    delay = min(delay, max(60, int(export_config.sync_backoff_max_seconds)))
+
+    jitter_ratio = max(0.0, min(float(export_config.sync_backoff_jitter_ratio), 0.5))
+    if jitter_ratio > 0:
+        spread = max(1, int(delay * jitter_ratio))
+        delay += random.randint(-spread, spread)
+
+    return max(60, delay), backoff_attempt
 
 
 def _retry_after_seconds(raw_value: str | None) -> int | None:

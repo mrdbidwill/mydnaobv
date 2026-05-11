@@ -15,6 +15,10 @@ class ExportConfig:
     part_size: int
     max_part_size_single_photo: int
     max_part_size_all_photos: int
+    sync_max_concurrent: int
+    sync_slot_retry_seconds: int
+    sync_backoff_max_seconds: int
+    sync_backoff_jitter_ratio: float
     download_chunk_size: int
     download_byte_budget_mb: int
     image_cache_enabled: bool
@@ -110,6 +114,10 @@ export_config = ExportConfig(
     part_size=settings.export_part_size,
     max_part_size_single_photo=settings.export_max_part_size_single_photo,
     max_part_size_all_photos=settings.export_max_part_size_all_photos,
+    sync_max_concurrent=settings.export_sync_max_concurrent,
+    sync_slot_retry_seconds=settings.export_sync_slot_retry_seconds,
+    sync_backoff_max_seconds=settings.export_sync_backoff_max_seconds,
+    sync_backoff_jitter_ratio=settings.export_sync_backoff_jitter_ratio,
     download_chunk_size=settings.export_download_chunk_size,
     download_byte_budget_mb=settings.export_download_byte_budget_mb,
     image_cache_enabled=settings.export_image_cache_enabled,

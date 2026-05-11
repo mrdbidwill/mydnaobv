@@ -185,18 +185,103 @@ def test_phase_plan_marks_waiting_quota_on_sync_429(monkeypatch):
             "sync_list_observations",
             lambda _db, _list: (_ for _ in ()).throw(throttle_error),
         )
+        monkeypatch.setattr(
+            export_service,
+            "export_config",
+            replace(
+                export_service.export_config,
+                sync_backoff_jitter_ratio=0.0,
+                sync_backoff_max_seconds=7200,
+                sync_max_concurrent=1,
+            ),
+        )
 
         progressed = export_service._phase_plan(db, job)
         assert progressed is False
         assert job.status == "waiting_quota"
         assert job.phase == "plan"
         assert "HTTP 429" in (job.message or "")
+        assert "backoff_attempt=1" in (job.message or "")
         assert job.next_run_at is not None
         assert job.next_run_at > now
         assert job.finished_at is None
         assert job.force_sync is True
     finally:
         db.close()
+
+
+def test_phase_plan_waits_when_sync_slot_is_full(tmp_path, monkeypatch):
+    db = _session()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    try:
+        _mk_list(db, 13, product_type="project", is_public=True)
+        job = models.ExportJob(
+            list_id=13,
+            status="queued",
+            phase="plan",
+            force_sync=True,
+            updated_at=now,
+            created_at=now,
+            next_run_at=now - timedelta(seconds=1),
+        )
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+
+        monkeypatch.setattr(
+            export_service,
+            "export_config",
+            replace(
+                export_service.export_config,
+                storage_dir=str(tmp_path),
+                sync_max_concurrent=1,
+                sync_slot_retry_seconds=90,
+            ),
+        )
+
+        slot = export_service._try_acquire_sync_slot(1)
+        assert slot is not None
+        try:
+            progressed = export_service._phase_plan(db, job)
+        finally:
+            slot.release()
+
+        assert progressed is False
+        assert job.status == "waiting_quota"
+        assert job.phase == "plan"
+        assert "global iNaturalist sync slot" in (job.message or "")
+        assert job.next_run_at is not None
+        assert job.next_run_at > now
+        assert job.force_sync is True
+    finally:
+        db.close()
+
+
+def test_sync_throttle_delay_seconds_uses_exponential_backoff(monkeypatch):
+    request = httpx.Request("GET", "https://api.inaturalist.org/v1/observations?page=2")
+    response = httpx.Response(429, request=request, headers={"Retry-After": "120"})
+    throttle_error = httpx.HTTPStatusError("normal_throttling", request=request, response=response)
+
+    monkeypatch.setattr(
+        export_service,
+        "export_config",
+        replace(
+            export_service.export_config,
+            sync_backoff_jitter_ratio=0.0,
+            sync_backoff_max_seconds=5000,
+        ),
+    )
+
+    delay_1, attempt_1 = export_service._sync_throttle_delay_seconds(throttle_error)
+    delay_2, attempt_2 = export_service._sync_throttle_delay_seconds(
+        throttle_error,
+        previous_message="Sync paused by iNaturalist throttling (HTTP 429). backoff_attempt=1.",
+    )
+
+    assert attempt_1 == 1
+    assert delay_1 == 120
+    assert attempt_2 == 2
+    assert delay_2 == 240
 
 
 def test_schedule_next_run_preserves_waiting_quota_retry_time():

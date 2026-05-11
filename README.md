@@ -253,6 +253,11 @@ cd /opt/mydnaobv/app
 
 Note:
 - `--once` now also performs scheduled maintenance (interval-based export cleanup + image-cache pruning) and auto-queues due public county/project refresh jobs.
+- Sync-pressure guardrails are controlled by:
+  - `EXPORT_SYNC_MAX_CONCURRENT` (default `1`)
+  - `EXPORT_SYNC_SLOT_RETRY_SECONDS`
+  - `EXPORT_SYNC_BACKOFF_MAX_SECONDS`
+  - `EXPORT_SYNC_BACKOFF_JITTER_RATIO`
 
 Dry-run orphan export/publish directory cleanup (folders left behind with no DB rows):
 

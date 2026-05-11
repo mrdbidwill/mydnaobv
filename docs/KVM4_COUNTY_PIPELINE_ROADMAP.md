@@ -1,6 +1,6 @@
 # KVM4 + County Pipeline Roadmap
 
-Last updated: May 10, 2026
+Last updated: May 11, 2026
 
 ## Objective
 Reduce large-export turnaround time and move to a curated, prebuilt county-product model that protects shared VPS resources.
@@ -34,6 +34,15 @@ Reduce large-export turnaround time and move to a curated, prebuilt county-produ
   - `EXPORT_ZIP_ONLY_PART_THRESHOLD=10`
   - `EXPORT_ZIP_CHUNK_SIZE_MB=1024`
   - new part-size cap knobs: `EXPORT_MAX_PART_SIZE_SINGLE_PHOTO`, `EXPORT_MAX_PART_SIZE_ALL_PHOTOS`
+
+## 2026-05-11 Sync Note
+- Stage 1 sync-throttling hardening started to reduce iNaturalist `429` loop pressure:
+  - added global iNaturalist sync semaphore in export plan phase (`EXPORT_SYNC_MAX_CONCURRENT`, default `1`)
+  - when sync slot is full, jobs remain in `plan` and retry with short delay (`EXPORT_SYNC_SLOT_RETRY_SECONDS`)
+  - sync `429` retry now uses exponential backoff with jitter and bounded max:
+    - `EXPORT_SYNC_BACKOFF_MAX_SECONDS`
+    - `EXPORT_SYNC_BACKOFF_JITTER_RATIO`
+- Scope intentionally limited to sync-pressure control (no county inclusion/parity behavior changes).
 
 ## Phase 1 (Now): KVM4 Readiness Without Architecture Rewrite
 - Keep the current queue/worker model.
