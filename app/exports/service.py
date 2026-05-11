@@ -637,6 +637,42 @@ def _try_acquire_sync_slot(max_concurrent: int) -> _SyncSlotHandle | None:
     return None
 
 
+def _cached_observation_count(db: Session, list_id: int) -> int:
+    return (
+        db.query(func.count(models.Observation.id))
+        .filter(models.Observation.list_id == list_id)
+        .scalar()
+        or 0
+    )
+
+
+def _should_defer_sync_to_cache(
+    obs_list: models.ObservationList,
+    cached_count: int,
+) -> bool:
+    if cached_count <= 0:
+        return False
+    product = (obs_list.product_type or "").strip().lower()
+    return product in export_config.sync_defer_to_cache_products
+
+
+def _sync_defer_message(
+    *,
+    reason: str,
+    cached_count: int,
+    obs_list: models.ObservationList,
+) -> str:
+    last_sync = normalize_naive_utc(obs_list.last_sync_at)
+    if last_sync is not None:
+        last_sync_text = f"{last_sync.isoformat()} UTC"
+    else:
+        last_sync_text = "unknown time"
+    return (
+        f"Sync deferred ({reason}). "
+        f"Proceeding with {cached_count} cached observations from last sync at {last_sync_text}."
+    )
+
+
 def _phase_plan(db: Session, job: models.ExportJob) -> bool:
     existing_count = db.query(func.count(models.ExportItem.id)).filter(models.ExportItem.job_id == job.id).scalar() or 0
     if existing_count > 0:
@@ -653,19 +689,32 @@ def _phase_plan(db: Session, job: models.ExportJob) -> bool:
             return True
         sync_slot = _try_acquire_sync_slot(export_config.sync_max_concurrent)
         if sync_slot is None:
-            now = utc_now_naive()
-            wait_seconds = max(30, int(export_config.sync_slot_retry_seconds))
-            retry_at = now + timedelta(seconds=wait_seconds)
-            job.status = "waiting_quota"
-            job.phase = "plan"
-            job.next_run_at = retry_at
-            job.last_run_at = now
-            job.message = (
-                "Sync waiting for global iNaturalist sync slot "
-                f"({max(1, int(export_config.sync_max_concurrent))} max concurrent). "
-                f"Retry after {wait_seconds}s at {retry_at.isoformat()} UTC."
-            )
-            return False
+            cached_count = _cached_observation_count(db, job.list_id)
+            if _should_defer_sync_to_cache(obs_list, cached_count):
+                job.force_sync = False
+                job.message = _append_job_note(
+                    job.message,
+                    _sync_defer_message(
+                        reason="sync slot busy",
+                        cached_count=cached_count,
+                        obs_list=obs_list,
+                    ),
+                )
+                return True
+            else:
+                now = utc_now_naive()
+                wait_seconds = max(30, int(export_config.sync_slot_retry_seconds))
+                retry_at = now + timedelta(seconds=wait_seconds)
+                job.status = "waiting_quota"
+                job.phase = "plan"
+                job.next_run_at = retry_at
+                job.last_run_at = now
+                job.message = (
+                    "Sync waiting for global iNaturalist sync slot "
+                    f"({max(1, int(export_config.sync_max_concurrent))} max concurrent). "
+                    f"Retry after {wait_seconds}s at {retry_at.isoformat()} UTC."
+                )
+                return False
         try:
             synced = sync_list_observations(db, obs_list)
             job.message = (
@@ -678,18 +727,31 @@ def _phase_plan(db: Session, job: models.ExportJob) -> bool:
             throttle_delay = _sync_throttle_delay_seconds(exc, previous_message=job.message)
             if throttle_delay is not None:
                 throttle_delay_seconds, backoff_attempt = throttle_delay
-                now = utc_now_naive()
-                retry_at = now + timedelta(seconds=throttle_delay_seconds)
-                job.status = "waiting_quota"
-                job.phase = "plan"
-                job.next_run_at = retry_at
-                job.last_run_at = now
-                job.message = (
-                    "Sync paused by iNaturalist throttling (HTTP 429). "
-                    f"backoff_attempt={backoff_attempt}. "
-                    f"Retry after {throttle_delay_seconds}s at {retry_at.isoformat()} UTC."
-                )
-                return False
+                cached_count = _cached_observation_count(db, job.list_id)
+                if _should_defer_sync_to_cache(obs_list, cached_count):
+                    job.force_sync = False
+                    job.message = _append_job_note(
+                        job.message,
+                        _sync_defer_message(
+                            reason=f"iNaturalist throttling HTTP 429 backoff_attempt={backoff_attempt}",
+                            cached_count=cached_count,
+                            obs_list=obs_list,
+                        ),
+                    )
+                    return True
+                else:
+                    now = utc_now_naive()
+                    retry_at = now + timedelta(seconds=throttle_delay_seconds)
+                    job.status = "waiting_quota"
+                    job.phase = "plan"
+                    job.next_run_at = retry_at
+                    job.last_run_at = now
+                    job.message = (
+                        "Sync paused by iNaturalist throttling (HTTP 429). "
+                        f"backoff_attempt={backoff_attempt}. "
+                        f"Retry after {throttle_delay_seconds}s at {retry_at.isoformat()} UTC."
+                    )
+                    return False
             job.status = "failed"
             job.phase = "done"
             job.message = f"Sync failed before export: {exc}"

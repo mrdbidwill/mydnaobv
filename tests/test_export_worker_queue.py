@@ -32,6 +32,21 @@ def _mk_list(db, list_id: int, *, product_type: str = "county", is_public: bool 
     return row
 
 
+def _mk_observation(db, list_id: int, inat_id: int = 999, *, with_photo: bool = True) -> models.Observation:
+    row = models.Observation(
+        list_id=list_id,
+        inat_observation_id=inat_id,
+        inat_url=f"https://www.inaturalist.org/observations/{inat_id}",
+        scientific_name="Testus species",
+        photo_url="https://example.com/photo.jpg" if with_photo else None,
+        photo_license_code="cc-by" if with_photo else None,
+        photo_attribution="Tester" if with_photo else None,
+    )
+    db.add(row)
+    db.commit()
+    return row
+
+
 def test_pick_next_job_skips_fresh_running_jobs():
     db = _session()
     now = datetime.now(UTC).replace(tzinfo=None)
@@ -257,6 +272,54 @@ def test_phase_plan_waits_when_sync_slot_is_full(tmp_path, monkeypatch):
         db.close()
 
 
+def test_phase_plan_defers_sync_slot_when_cache_exists(tmp_path, monkeypatch):
+    db = _session()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    try:
+        _mk_list(db, 14, product_type="project", is_public=True)
+        _mk_observation(db, 14, 14001, with_photo=True)
+        job = models.ExportJob(
+            list_id=14,
+            status="queued",
+            phase="plan",
+            force_sync=True,
+            updated_at=now,
+            created_at=now,
+            next_run_at=now - timedelta(seconds=1),
+        )
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+
+        monkeypatch.setattr(
+            export_service,
+            "export_config",
+            replace(
+                export_service.export_config,
+                storage_dir=str(tmp_path),
+                sync_max_concurrent=1,
+                sync_slot_retry_seconds=90,
+                sync_defer_to_cache_products_csv="project",
+            ),
+        )
+
+        slot = export_service._try_acquire_sync_slot(1)
+        assert slot is not None
+        try:
+            progressed = export_service._phase_plan(db, job)
+            assert progressed is True
+            progressed = export_service._phase_plan(db, job)
+        finally:
+            slot.release()
+
+        assert progressed is True
+        assert job.force_sync is False
+        assert job.phase == "download"
+        assert "Sync deferred (sync slot busy)." in (job.message or "")
+    finally:
+        db.close()
+
+
 def test_sync_throttle_delay_seconds_uses_exponential_backoff(monkeypatch):
     request = httpx.Request("GET", "https://api.inaturalist.org/v1/observations?page=2")
     response = httpx.Response(429, request=request, headers={"Retry-After": "120"})
@@ -282,6 +345,58 @@ def test_sync_throttle_delay_seconds_uses_exponential_backoff(monkeypatch):
     assert delay_1 == 120
     assert attempt_2 == 2
     assert delay_2 == 240
+
+
+def test_phase_plan_defers_429_when_cache_exists(monkeypatch):
+    db = _session()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    try:
+        _mk_list(db, 15, product_type="project", is_public=True)
+        _mk_observation(db, 15, 15001, with_photo=True)
+        job = models.ExportJob(
+            list_id=15,
+            status="queued",
+            phase="plan",
+            force_sync=True,
+            updated_at=now,
+            created_at=now,
+            next_run_at=now - timedelta(seconds=1),
+            message="previous",
+        )
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+
+        request = httpx.Request("GET", "https://api.inaturalist.org/v1/observations?page=2")
+        response = httpx.Response(429, request=request, headers={"Retry-After": "1200"})
+        throttle_error = httpx.HTTPStatusError("normal_throttling", request=request, response=response)
+
+        monkeypatch.setattr(
+            export_service,
+            "sync_list_observations",
+            lambda _db, _list: (_ for _ in ()).throw(throttle_error),
+        )
+        monkeypatch.setattr(
+            export_service,
+            "export_config",
+            replace(
+                export_service.export_config,
+                sync_backoff_jitter_ratio=0.0,
+                sync_backoff_max_seconds=7200,
+                sync_max_concurrent=1,
+                sync_defer_to_cache_products_csv="project",
+            ),
+        )
+
+        progressed = export_service._phase_plan(db, job)
+        assert progressed is True
+        progressed = export_service._phase_plan(db, job)
+        assert progressed is True
+        assert job.force_sync is False
+        assert job.phase == "download"
+        assert "Sync deferred (iNaturalist throttling HTTP 429 backoff_attempt=1)." in (job.message or "")
+    finally:
+        db.close()
 
 
 def test_schedule_next_run_preserves_waiting_quota_retry_time():

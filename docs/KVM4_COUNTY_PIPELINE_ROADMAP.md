@@ -44,6 +44,14 @@ Reduce large-export turnaround time and move to a curated, prebuilt county-produ
     - `EXPORT_SYNC_BACKOFF_JITTER_RATIO`
 - Scope intentionally limited to sync-pressure control (no county inclusion/parity behavior changes).
 
+## 2026-05-11 Stage 2 Start Note
+- Began decoupling sync from export execution for throttled runs:
+  - when sync cannot proceed (slot contention or `429`) and cached observations already exist, configured product types can continue export from cached snapshot data.
+  - new control: `EXPORT_SYNC_DEFER_TO_CACHE_PRODUCTS` (default `project`).
+- Current scope:
+  - project products may proceed from cache while sync is deferred.
+  - county inclusion/parity logic unchanged; county invariants remain intact.
+
 ## Phase 1 (Now): KVM4 Readiness Without Architecture Rewrite
 - Keep the current queue/worker model.
 - Tune runtime throttles conservatively after KVM4 migration:

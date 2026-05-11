@@ -359,6 +359,16 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - deterministic sync `429` exponential backoff behavior.
 - County inclusion/parity invariants unchanged.
 
+## 2026-05-11 (Stage 2 start)
+- Started sync/export decoupling path for throttled project rebuilds (no DB migration):
+  - `plan` phase now supports cache-defer mode for configured product types (`EXPORT_SYNC_DEFER_TO_CACHE_PRODUCTS`, default `project`).
+  - when sync slot is busy or sync returns `429`, jobs with cached observations can drop `force_sync` for that run and proceed with export from cached snapshot data.
+  - jobs still keep sync retry behavior when cache-defer conditions are not met (no cached observations or product type not configured).
+- Added regression tests for cache-defer behavior:
+  - slot contention + cached observations => continue to export.
+  - `429` + cached observations => continue to export.
+- County inclusion/parity invariants unchanged.
+
 ## Routine Update Rule
 On each major decision or architecture change:
 1. Add one dated entry in this file.

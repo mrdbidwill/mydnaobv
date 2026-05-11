@@ -19,6 +19,7 @@ class ExportConfig:
     sync_slot_retry_seconds: int
     sync_backoff_max_seconds: int
     sync_backoff_jitter_ratio: float
+    sync_defer_to_cache_products_csv: str
     download_chunk_size: int
     download_byte_budget_mb: int
     image_cache_enabled: bool
@@ -105,6 +106,16 @@ class ExportConfig:
                 out.add(value)
         return out
 
+    @property
+    def sync_defer_to_cache_products(self) -> set[str]:
+        out: set[str] = set()
+        raw = str(self.sync_defer_to_cache_products_csv or "")
+        for token in raw.replace("\n", ",").split(","):
+            value = token.strip().lower()
+            if value:
+                out.add(value)
+        return out
+
 
 export_config = ExportConfig(
     enabled=settings.enable_pdf_exports,
@@ -118,6 +129,7 @@ export_config = ExportConfig(
     sync_slot_retry_seconds=settings.export_sync_slot_retry_seconds,
     sync_backoff_max_seconds=settings.export_sync_backoff_max_seconds,
     sync_backoff_jitter_ratio=settings.export_sync_backoff_jitter_ratio,
+    sync_defer_to_cache_products_csv=settings.export_sync_defer_to_cache_products,
     download_chunk_size=settings.export_download_chunk_size,
     download_byte_budget_mb=settings.export_download_byte_budget_mb,
     image_cache_enabled=settings.export_image_cache_enabled,

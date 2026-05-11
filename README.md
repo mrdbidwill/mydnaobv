@@ -258,6 +258,7 @@ Note:
   - `EXPORT_SYNC_SLOT_RETRY_SECONDS`
   - `EXPORT_SYNC_BACKOFF_MAX_SECONDS`
   - `EXPORT_SYNC_BACKOFF_JITTER_RATIO`
+  - `EXPORT_SYNC_DEFER_TO_CACHE_PRODUCTS` (default `project`)
 
 Dry-run orphan export/publish directory cleanup (folders left behind with no DB rows):
 
