@@ -262,6 +262,9 @@ Note:
   - `EXPORT_SYNC_BACKOFF_JITTER_RATIO`
   - `EXPORT_SYNC_DEFER_TO_CACHE_PRODUCTS` (default `project`)
   - `EXPORT_SYNC_DEFER_RETRY_MINUTES` (default `360`, auto-refresh retry cooldown after deferred-sync cache exports)
+- Storage-pressure guardrails are controlled by:
+  - `EXPORT_STORAGE_PRESSURE_MIN_FREE_GB` (default `8`)
+  - `EXPORT_STORAGE_PRESSURE_RETRY_SECONDS` (default `600`)
 
 Dry-run orphan export/publish directory cleanup (folders left behind with no DB rows):
 

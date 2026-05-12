@@ -363,6 +363,9 @@ def enqueue_due_public_refresh_jobs(db: Session, limit: int = 2) -> int:
     Runs in the worker loop to keep public refresh targets moving.
     """
     max_to_queue = max(1, min(limit, 25))
+    has_capacity, _ = _storage_has_capacity()
+    if not has_capacity:
+        return 0
     now = utc_now_naive()
     cutoff = now - timedelta(days=max(1, settings.public_refresh_interval_days))
 
@@ -459,6 +462,13 @@ def process_next_job(
     job = _pick_next_job(db, now, allow_force_sync_plan=allow_force_sync_plan)
     if not job:
         return None
+
+    has_capacity, reason = _storage_has_capacity()
+    if not has_capacity:
+        _pause_job_for_storage_pressure(job, now, reason=reason)
+        job.updated_at = utc_now_naive()
+        db.commit()
+        return job
 
     if job.status in PICKABLE_JOB_STATUSES:
         job.status = "running"
@@ -648,6 +658,46 @@ def _pick_next_job(
     if candidates:
         db.commit()
     return None
+
+
+def _storage_has_capacity() -> tuple[bool, str]:
+    min_free_gb = max(0, int(export_config.storage_pressure_min_free_gb))
+    if min_free_gb <= 0:
+        return True, ""
+
+    try:
+        usage = shutil.disk_usage(_storage_root())
+    except OSError as exc:
+        # Fail-open if disk stats are temporarily unavailable.
+        return True, f"disk usage unavailable: {exc}"
+
+    min_free_bytes = min_free_gb * 1024 * 1024 * 1024
+    free_bytes = int(usage.free)
+    if free_bytes >= min_free_bytes:
+        return True, ""
+
+    free_gb = free_bytes / (1024 * 1024 * 1024)
+    return (
+        False,
+        f"free disk {free_gb:.1f}GB below minimum {min_free_gb}GB",
+    )
+
+
+def _pause_job_for_storage_pressure(
+    job: models.ExportJob,
+    now: datetime,
+    *,
+    reason: str,
+) -> None:
+    retry_seconds = max(60, int(export_config.storage_pressure_retry_seconds))
+    retry_at = now + timedelta(seconds=retry_seconds)
+    job.status = "waiting_quota"
+    job.next_run_at = retry_at
+    job.last_run_at = now
+    job.message = (
+        "Paused by storage pressure. "
+        f"{reason}. Retry after {retry_seconds}s at {retry_at.isoformat()} UTC."
+    )
 
 
 def _requeue_stale_running_jobs(db: Session, now: datetime) -> int:

@@ -1,6 +1,6 @@
 # KVM4 + County Pipeline Roadmap
 
-Last updated: May 11, 2026
+Last updated: May 12, 2026
 
 ## Objective
 Reduce large-export turnaround time and move to a curated, prebuilt county-product model that protects shared VPS resources.
@@ -91,6 +91,17 @@ Reduce large-export turnaround time and move to a curated, prebuilt county-produ
 - Intended effect:
   - reduce sync-slot contention and plan-phase churn across backlog lanes.
   - keep export lanes saturated while iNaturalist sync is throttled.
+
+## 2026-05-12 Stage 4.3 Note
+- Added storage-pressure queue guardrails:
+  - auto-refresh enqueue pass now skips queueing when free-disk headroom is below configured minimum.
+  - picked jobs now pause into `waiting_quota` with retry scheduling when storage pressure is active.
+- New controls:
+  - `EXPORT_STORAGE_PRESSURE_MIN_FREE_GB` (default `8`)
+  - `EXPORT_STORAGE_PRESSURE_RETRY_SECONDS` (default `600`)
+- Intended effect:
+  - prevent repeated `No space left on device` failures by damping queue intake/work when disk headroom is low.
+  - preserve county/project parity behavior while operators recover disk capacity.
 
 ## Phase 1 (Now): KVM4 Readiness Without Architecture Rewrite
 - Keep the current queue/worker model.

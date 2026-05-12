@@ -419,6 +419,18 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - control lane still selects force-sync plan candidate.
 - County inclusion/parity invariants unchanged.
 
+## 2026-05-12 (Stage 4.3)
+- Added storage-pressure queue guardrails (no DB migration):
+  - new env/config knobs:
+    - `EXPORT_STORAGE_PRESSURE_MIN_FREE_GB` (default `8`)
+    - `EXPORT_STORAGE_PRESSURE_RETRY_SECONDS` (default `600`)
+  - public auto-refresh enqueue pass now skips queueing new jobs when free disk is below threshold.
+  - picked jobs now pause to `waiting_quota` with timed retry under storage pressure.
+- Added regression tests for:
+  - paused-job behavior in `process_next_job(...)` under low-disk condition.
+  - auto-refresh enqueue skip behavior under low-disk condition.
+- County inclusion/parity invariants unchanged.
+
 ## Routine Update Rule
 On each major decision or architecture change:
 1. Add one dated entry in this file.

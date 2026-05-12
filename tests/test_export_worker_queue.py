@@ -199,6 +199,7 @@ def test_process_next_job_rolls_back_and_marks_failed(monkeypatch):
             "export_config",
             replace(export_service.export_config, enabled=True),
         )
+        monkeypatch.setattr(export_service, "_storage_has_capacity", lambda: (True, ""))
         monkeypatch.setattr(
             export_service,
             "_process_phase",
@@ -215,7 +216,55 @@ def test_process_next_job_rolls_back_and_marks_failed(monkeypatch):
         db.close()
 
 
-def test_enqueue_due_public_refresh_jobs_includes_project_lists():
+def test_process_next_job_pauses_when_storage_pressure_low(monkeypatch):
+    db = _session()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    try:
+        _mk_list(db, 4)
+        job = models.ExportJob(
+            list_id=4,
+            status="queued",
+            phase="plan",
+            updated_at=now,
+            created_at=now,
+            next_run_at=now - timedelta(seconds=1),
+        )
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+
+        monkeypatch.setattr(
+            export_service,
+            "export_config",
+            replace(export_service.export_config, enabled=True),
+        )
+        monkeypatch.setattr(
+            export_service,
+            "_storage_has_capacity",
+            lambda: (False, "free disk 1.0GB below minimum 8GB"),
+        )
+        monkeypatch.setattr(
+            export_service,
+            "_process_phase",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                AssertionError("_process_phase should not run when storage is low")
+            ),
+        )
+
+        out = export_service.process_next_job(db)
+        assert out is not None
+        assert out.id == job.id
+        assert out.status == "waiting_quota"
+        assert out.phase == "plan"
+        assert out.next_run_at is not None
+        assert out.next_run_at > now
+        assert "Paused by storage pressure." in (out.message or "")
+        assert "free disk 1.0GB below minimum 8GB" in (out.message or "")
+    finally:
+        db.close()
+
+
+def test_enqueue_due_public_refresh_jobs_includes_project_lists(monkeypatch):
     db = _session()
     now = datetime.now(UTC).replace(tzinfo=None)
     try:
@@ -224,6 +273,7 @@ def test_enqueue_due_public_refresh_jobs_includes_project_lists():
         county.last_sync_at = now - timedelta(days=20)
         project.last_sync_at = now - timedelta(days=20)
         db.commit()
+        monkeypatch.setattr(export_service, "_storage_has_capacity", lambda: (True, ""))
 
         queued = export_service.enqueue_due_public_refresh_jobs(db, limit=10)
         assert queued == 2
@@ -237,6 +287,29 @@ def test_enqueue_due_public_refresh_jobs_includes_project_lists():
             (county.id, "auto-refresh", True),
             (project.id, "auto-refresh", True),
         ]
+    finally:
+        db.close()
+
+
+def test_enqueue_due_public_refresh_jobs_skips_when_storage_pressure_low(monkeypatch):
+    db = _session()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    try:
+        county = _mk_list(db, 40, product_type="county", is_public=True)
+        project = _mk_list(db, 41, product_type="project", is_public=True)
+        county.last_sync_at = now - timedelta(days=20)
+        project.last_sync_at = now - timedelta(days=20)
+        db.commit()
+
+        monkeypatch.setattr(
+            export_service,
+            "_storage_has_capacity",
+            lambda: (False, "free disk 1.0GB below minimum 8GB"),
+        )
+
+        queued = export_service.enqueue_due_public_refresh_jobs(db, limit=10)
+        assert queued == 0
+        assert db.query(models.ExportJob).count() == 0
     finally:
         db.close()
 
@@ -268,6 +341,7 @@ def test_enqueue_due_public_refresh_jobs_skips_recent_sync_defer_completion(monk
             "export_config",
             replace(export_service.export_config, sync_defer_retry_minutes=180),
         )
+        monkeypatch.setattr(export_service, "_storage_has_capacity", lambda: (True, ""))
 
         queued = export_service.enqueue_due_public_refresh_jobs(db, limit=10)
         assert queued == 0
@@ -312,6 +386,7 @@ def test_enqueue_due_public_refresh_jobs_retries_after_sync_defer_cooldown(monke
             "export_config",
             replace(export_service.export_config, sync_defer_retry_minutes=120),
         )
+        monkeypatch.setattr(export_service, "_storage_has_capacity", lambda: (True, ""))
 
         queued = export_service.enqueue_due_public_refresh_jobs(db, limit=10)
         assert queued == 1
@@ -357,6 +432,7 @@ def test_enqueue_due_public_refresh_jobs_skips_recent_unsynced_completion_withou
             "export_config",
             replace(export_service.export_config, sync_defer_retry_minutes=180),
         )
+        monkeypatch.setattr(export_service, "_storage_has_capacity", lambda: (True, ""))
 
         queued = export_service.enqueue_due_public_refresh_jobs(db, limit=10)
         assert queued == 0

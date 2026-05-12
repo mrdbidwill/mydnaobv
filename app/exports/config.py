@@ -21,6 +21,8 @@ class ExportConfig:
     sync_backoff_jitter_ratio: float
     sync_defer_to_cache_products_csv: str
     sync_defer_retry_minutes: int
+    storage_pressure_min_free_gb: int
+    storage_pressure_retry_seconds: int
     download_chunk_size: int
     download_byte_budget_mb: int
     image_cache_enabled: bool
@@ -132,6 +134,8 @@ export_config = ExportConfig(
     sync_backoff_jitter_ratio=settings.export_sync_backoff_jitter_ratio,
     sync_defer_to_cache_products_csv=settings.export_sync_defer_to_cache_products,
     sync_defer_retry_minutes=settings.export_sync_defer_retry_minutes,
+    storage_pressure_min_free_gb=settings.export_storage_pressure_min_free_gb,
+    storage_pressure_retry_seconds=settings.export_storage_pressure_retry_seconds,
     download_chunk_size=settings.export_download_chunk_size,
     download_byte_budget_mb=settings.export_download_byte_budget_mb,
     image_cache_enabled=settings.export_image_cache_enabled,
