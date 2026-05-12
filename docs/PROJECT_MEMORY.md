@@ -389,6 +389,15 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - always preflight `df -h /` before deploy; treat >90% disk usage as deploy-blocking until cleanup is completed.
 - County inclusion/parity invariants unchanged.
 
+## 2026-05-12
+- Worker reliability fix for transient DB SSL EOF during maintenance cleanup:
+  - `cleanup_expired_exports(...)` no longer issues a trailing `db.commit()` after long filesystem cleanup work.
+  - function now fetches `job_id/list_id`, then explicitly ends the read transaction (`db.rollback()`) before file deletion/published-job cleanup.
+  - intent: avoid holding idle DB transactions/connections during long I/O and failing on commit with `psycopg OperationalError: SSL SYSCALL error: EOF detected`.
+- Added regression test coverage:
+  - ensures cleanup path performs rollback and does not call commit.
+- County inclusion/parity invariants unchanged.
+
 ## Routine Update Rule
 On each major decision or architecture change:
 1. Add one dated entry in this file.

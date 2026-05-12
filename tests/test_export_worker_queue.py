@@ -607,3 +607,51 @@ def test_split_large_zip_creates_ordered_chunks(tmp_path):
     assert chunks[0].name.endswith(".part001")
     assert chunks[-1].name.endswith(".part004")
     assert sum(chunk.stat().st_size for chunk in chunks) == zip_path.stat().st_size
+
+
+def test_cleanup_expired_exports_rolls_back_before_file_cleanup(tmp_path, monkeypatch):
+    db = _session()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    try:
+        obs_list = _mk_list(db, 30, product_type="project", is_public=True)
+        job = models.ExportJob(
+            id=3000,
+            list_id=obs_list.id,
+            status="ready",
+            phase="done",
+            created_at=now - timedelta(hours=5),
+            finished_at=now - timedelta(hours=4),
+            updated_at=now - timedelta(hours=4),
+        )
+        db.add(job)
+        db.commit()
+
+        job_dir = tmp_path / "job_3000"
+        job_dir.mkdir(parents=True, exist_ok=True)
+        (job_dir / "dummy.txt").write_text("x", encoding="utf-8")
+
+        rollback_calls = {"count": 0}
+        original_rollback = db.rollback
+
+        def counting_rollback():
+            rollback_calls["count"] += 1
+            return original_rollback()
+
+        monkeypatch.setattr(db, "rollback", counting_rollback)
+
+        def fail_commit():
+            raise AssertionError("cleanup_expired_exports should not call commit")
+
+        monkeypatch.setattr(db, "commit", fail_commit)
+        monkeypatch.setattr(
+            export_service,
+            "export_config",
+            replace(export_service.export_config, storage_dir=str(tmp_path), retention_hours=1),
+        )
+
+        removed = export_service.cleanup_expired_exports(db)
+        assert removed == 1
+        assert rollback_calls["count"] >= 1
+        assert not job_dir.exists()
+    finally:
+        db.close()

@@ -509,19 +509,22 @@ def cleanup_expired_exports(db: Session) -> int:
     cutoff = now - timedelta(hours=max(1, export_config.retention_hours))
     jobs = (
         db.query(models.ExportJob)
+        .with_entities(models.ExportJob.id, models.ExportJob.list_id)
         .filter(models.ExportJob.finished_at.isnot(None), models.ExportJob.finished_at < cutoff)
         .all()
     )
 
+    # End the read transaction before potentially long filesystem cleanup work.
+    # This avoids holding an idle DB connection and failing on commit after EOF/timeouts.
+    db.rollback()
+
     removed = 0
-    for job in jobs:
-        folder = _job_dir(job.id)
+    for job_id, list_id in jobs:
+        folder = _job_dir(job_id)
         if folder.exists():
             shutil.rmtree(folder, ignore_errors=True)
-        cleanup_published_job(job.list_id, job.id)
+        cleanup_published_job(list_id, job_id)
         removed += 1
-    if removed:
-        db.commit()
     return removed
 
 

@@ -69,6 +69,13 @@ Reduce large-export turnaround time and move to a curated, prebuilt county-produ
   - keep disk usage below warning/critical thresholds in shared-VPS runbook.
   - treat export-retention cleanup as first-class backlog operation, not optional housekeeping.
 
+## 2026-05-12 Maintenance Reliability Note
+- Fixed cron-worker maintenance failure mode where DB connections could drop (`SSL SYSCALL EOF`) before a delayed commit in export cleanup.
+- Cleanup path now ends DB read transaction before long filesystem deletion and no longer commits unnecessarily afterward.
+- Result target:
+  - eliminate recurring cron traceback emails from maintenance-phase EOF on commit.
+  - keep backlog lanes running even during large cleanup windows.
+
 ## Phase 1 (Now): KVM4 Readiness Without Architecture Rewrite
 - Keep the current queue/worker model.
 - Tune runtime throttles conservatively after KVM4 migration:
