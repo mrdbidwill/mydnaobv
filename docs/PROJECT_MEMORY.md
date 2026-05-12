@@ -431,6 +431,14 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - auto-refresh enqueue skip behavior under low-disk condition.
 - County inclusion/parity invariants unchanged.
 
+## 2026-05-12 (Public refresh UX clarity)
+- Public refresh labels now surface throttle/defer context when refresh targets are overdue:
+  - if active refresh job is in `waiting_quota` with iNaturalist throttle messaging, page shows `next retry <timestamp UTC>`.
+  - if latest completed export used cache-defer (`Sync deferred (...)`), page shows explicit cached-update note instead of only an old due-target date.
+- Purpose:
+  - avoid confusing stale-looking `Refresh due (target <past-date>)` messaging while completed downloads remain available and sync retries continue.
+- No inclusion/parity rule changes; county scope + project membership + `DNA Barcode ITS` and index/page numbering parity remain unchanged.
+
 ## Routine Update Rule
 On each major decision or architecture change:
 1. Add one dated entry in this file.

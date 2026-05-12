@@ -44,6 +44,32 @@ def test_refresh_summary_not_due_for_recent_sync():
     assert payload["last_refreshed_label"] != "Not refreshed yet"
 
 
+def test_refresh_summary_due_with_active_throttle_retry_note():
+    stale = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=30)
+    active_job = SimpleNamespace(
+        status="waiting_quota",
+        next_run_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=30),
+        message="Sync paused by iNaturalist throttling (HTTP 429). backoff_attempt=2.",
+    )
+    payload = _refresh_summary(stale, active_refresh_job=active_job)
+    assert payload["is_due"] is True
+    assert "Refresh delayed by iNaturalist throttling" in payload["status_line"]
+    assert "next retry" in payload["status_line"]
+
+
+def test_refresh_summary_due_with_cached_defer_note():
+    stale = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=30)
+    latest_completed_job = SimpleNamespace(
+        message=(
+            "Sync deferred (iNaturalist throttling HTTP 429 backoff_attempt=1). "
+            "Proceeding with cached observations."
+        )
+    )
+    payload = _refresh_summary(stale, latest_completed_job=latest_completed_job)
+    assert payload["is_due"] is True
+    assert "cached observations" in payload["status_line"]
+
+
 def test_configured_public_states_parses_csv(monkeypatch):
     monkeypatch.setattr(main.settings, "public_state_codes", "AL, GA")
     assert main._configured_public_states() == {"AL", "GA"}

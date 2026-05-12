@@ -91,11 +91,18 @@
                   {{ row.last_refreshed_label }}
                   <div class="muted">
                     {% if row.refresh_due %}
-                      Refresh due (target {{ row.next_refresh_label }})
+                      {% if row.refresh_status_line %}
+                        Refresh due
+                      {% else %}
+                        Refresh due (target {{ row.next_refresh_label }})
+                      {% endif %}
                     {% else %}
                       Next refresh by {{ row.next_refresh_label }}
                     {% endif %}
                   </div>
+                  {% if row.refresh_status_line %}
+                    <div class="muted">{{ row.refresh_status_line }}</div>
+                  {% endif %}
                 </td>
                 <td>{{ row.status_label }}</td>
                 <td>
@@ -206,11 +213,18 @@
                   {{ row.last_refreshed_label }}
                   <div class="muted">
                     {% if row.refresh_due %}
-                      Refresh due (target {{ row.next_refresh_label }})
+                      {% if row.refresh_status_line %}
+                        Refresh due
+                      {% else %}
+                        Refresh due (target {{ row.next_refresh_label }})
+                      {% endif %}
                     {% else %}
                       Next refresh by {{ row.next_refresh_label }}
                     {% endif %}
                   </div>
+                  {% if row.refresh_status_line %}
+                    <div class="muted">{{ row.refresh_status_line }}</div>
+                  {% endif %}
                 </td>
                 <td>{{ row.status_label }}</td>
                 <td>

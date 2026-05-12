@@ -531,12 +531,25 @@ def _format_utc_date(value: datetime | None) -> str:
     return utc_value.strftime("%Y-%m-%d")
 
 
-def _refresh_summary(last_sync_at: datetime | None) -> dict[str, object]:
+def _format_utc_timestamp(value: datetime | None) -> str:
+    utc_value = as_utc(value)
+    if not utc_value:
+        return "Unknown"
+    return utc_value.strftime("%Y-%m-%d %H:%M UTC")
+
+
+def _refresh_summary(
+    last_sync_at: datetime | None,
+    *,
+    latest_completed_job: models.ExportJob | None = None,
+    active_refresh_job: models.ExportJob | None = None,
+) -> dict[str, object]:
     if not last_sync_at:
         return {
             "last_refreshed_label": "Not refreshed yet",
             "next_refresh_label": "Refresh pending",
             "is_due": True,
+            "status_line": "",
         }
 
     last_sync_utc = as_utc(last_sync_at)
@@ -546,14 +559,52 @@ def _refresh_summary(last_sync_at: datetime | None) -> dict[str, object]:
             "last_refreshed_label": "Not refreshed yet",
             "next_refresh_label": "Refresh pending",
             "is_due": True,
+            "status_line": "",
         }
 
     next_due = last_sync_utc + timedelta(days=PUBLIC_REFRESH_INTERVAL_DAYS)
+    is_due = now_utc >= next_due
+    status_line = ""
+
+    if active_refresh_job:
+        job_message = (active_refresh_job.message or "").strip()
+        if (
+            active_refresh_job.status == "waiting_quota"
+            and ("HTTP 429" in job_message or "throttling" in job_message.lower())
+        ):
+            status_line = (
+                "Refresh delayed by iNaturalist throttling; "
+                f"next retry {_format_utc_timestamp(active_refresh_job.next_run_at)}."
+            )
+        elif active_refresh_job.status in ("queued", "running"):
+            status_line = "Refresh update is in progress."
+
+    if not status_line and is_due and latest_completed_job:
+        latest_message = (latest_completed_job.message or "").strip()
+        if "Sync deferred (" in latest_message:
+            status_line = (
+                "Latest update used cached observations while iNaturalist sync is throttled; "
+                "fresh sync retries continue in the background."
+            )
+
     return {
         "last_refreshed_label": _format_utc_date(last_sync_utc),
         "next_refresh_label": _format_utc_date(next_due),
-        "is_due": now_utc >= next_due,
+        "is_due": is_due,
+        "status_line": status_line,
     }
+
+
+def _latest_active_refresh_job_for_list(db: Session, list_id: int) -> models.ExportJob | None:
+    return (
+        db.query(models.ExportJob)
+        .filter(
+            models.ExportJob.list_id == list_id,
+            models.ExportJob.status.in_(("queued", "running", "waiting_quota")),
+        )
+        .order_by(models.ExportJob.id.desc())
+        .first()
+    )
 
 
 def _state_label_map() -> dict[str, str]:
@@ -687,12 +738,18 @@ def load_public_county_rows(
                         "size_label": _format_size_label(chunk.size_bytes),
                     }
                 )
-        refresh_data = _refresh_summary(obs_list.last_sync_at)
+        active_refresh_job = _latest_active_refresh_job_for_list(db, obs_list.id)
+        refresh_data = _refresh_summary(
+            obs_list.last_sync_at,
+            latest_completed_job=latest_job,
+            active_refresh_job=active_refresh_job,
+        )
 
         catalog.append(
             {
                 "list": obs_list,
                 "latest_job": latest_job,
+                "active_refresh_job": active_refresh_job,
                 "county_artifact": county_artifact,
                 "index_artifact": index_artifact,
                 "genera_artifact": genera_artifact,
@@ -709,6 +766,7 @@ def load_public_county_rows(
                 "last_refreshed_label": refresh_data["last_refreshed_label"],
                 "next_refresh_label": refresh_data["next_refresh_label"],
                 "refresh_due": refresh_data["is_due"],
+                "refresh_status_line": refresh_data["status_line"],
             }
         )
 
@@ -786,13 +844,19 @@ def load_public_project_rows(db: Session) -> list[dict[str, object]]:
                         "size_label": _format_size_label(chunk.size_bytes),
                     }
                 )
-        refresh_data = _refresh_summary(obs_list.last_sync_at)
+        active_refresh_job = _latest_active_refresh_job_for_list(db, obs_list.id)
+        refresh_data = _refresh_summary(
+            obs_list.last_sync_at,
+            latest_completed_job=latest_ready,
+            active_refresh_job=active_refresh_job,
+        )
         out.append(
             {
                 "list": obs_list,
                 "display_title": _project_display_title(obs_list),
                 "project_reference": _project_reference(obs_list.inat_project_id),
                 "latest_job": latest_job,
+                "active_refresh_job": active_refresh_job,
                 "county_artifact": county_artifact,
                 "index_artifact": index_artifact,
                 "genera_artifact": genera_artifact,
@@ -809,6 +873,7 @@ def load_public_project_rows(db: Session) -> list[dict[str, object]]:
                 "last_refreshed_label": refresh_data["last_refreshed_label"],
                 "next_refresh_label": refresh_data["next_refresh_label"],
                 "refresh_due": refresh_data["is_due"],
+                "refresh_status_line": refresh_data["status_line"],
             }
         )
 
