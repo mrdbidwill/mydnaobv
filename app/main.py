@@ -586,6 +586,13 @@ def _refresh_summary(
                 "Latest update used cached observations while iNaturalist sync is throttled; "
                 "fresh sync retries continue in the background."
             )
+        else:
+            latest_completed_at = as_utc(latest_completed_job.finished_at) or as_utc(latest_completed_job.started_at)
+            if latest_completed_at and latest_completed_at > last_sync_utc:
+                status_line = (
+                    "Latest update completed from cached observations while fresh iNaturalist sync "
+                    "is still pending."
+                )
 
     return {
         "last_refreshed_label": _format_utc_date(last_sync_utc),

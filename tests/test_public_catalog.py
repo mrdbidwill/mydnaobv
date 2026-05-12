@@ -70,6 +70,18 @@ def test_refresh_summary_due_with_cached_defer_note():
     assert "cached observations" in payload["status_line"]
 
 
+def test_refresh_summary_due_with_inferred_cached_update_note():
+    stale = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=30)
+    latest_completed_job = SimpleNamespace(
+        message="Export complete: observations index PDF and ZIP with split county guide parts ready.",
+        finished_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1),
+        started_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1, minutes=10),
+    )
+    payload = _refresh_summary(stale, latest_completed_job=latest_completed_job)
+    assert payload["is_due"] is True
+    assert "completed from cached observations" in payload["status_line"]
+
+
 def test_configured_public_states_parses_csv(monkeypatch):
     monkeypatch.setattr(main.settings, "public_state_codes", "AL, GA")
     assert main._configured_public_states() == {"AL", "GA"}
