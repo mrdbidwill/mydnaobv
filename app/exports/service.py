@@ -447,12 +447,16 @@ def artifact_abspath(artifact: models.ExportArtifact) -> Path:
     return _storage_root() / artifact.relative_path
 
 
-def process_next_job(db: Session) -> models.ExportJob | None:
+def process_next_job(
+    db: Session,
+    *,
+    allow_force_sync_plan: bool = True,
+) -> models.ExportJob | None:
     if not export_config.enabled:
         return None
 
     now = utc_now_naive()
-    job = _pick_next_job(db, now)
+    job = _pick_next_job(db, now, allow_force_sync_plan=allow_force_sync_plan)
     if not job:
         return None
 
@@ -604,7 +608,12 @@ def run_scheduled_maintenance(db: Session) -> dict[str, int]:
     }
 
 
-def _pick_next_job(db: Session, now: datetime) -> models.ExportJob | None:
+def _pick_next_job(
+    db: Session,
+    now: datetime,
+    *,
+    allow_force_sync_plan: bool = True,
+) -> models.ExportJob | None:
     _requeue_stale_running_jobs(db, now)
 
     bucket_rank = case(
@@ -628,6 +637,8 @@ def _pick_next_job(db: Session, now: datetime) -> models.ExportJob | None:
     )
 
     for job in candidates:
+        if not allow_force_sync_plan and job.phase == "plan" and bool(job.force_sync):
+            continue
         if job.size_bucket == "L" and not export_config.is_large_window_open(now):
             job.next_run_at = export_config.next_large_window_start(now)
             job.updated_at = utc_now_naive()

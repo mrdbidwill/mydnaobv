@@ -81,6 +81,74 @@ def test_pick_next_job_skips_fresh_running_jobs():
         db.close()
 
 
+def test_pick_next_job_skips_force_sync_plan_when_not_control_lane():
+    db = _session()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    try:
+        _mk_list(db, 31, product_type="project", is_public=True)
+        sync_job = models.ExportJob(
+            list_id=31,
+            status="queued",
+            phase="plan",
+            force_sync=True,
+            updated_at=now,
+            created_at=now - timedelta(minutes=2),
+            next_run_at=now - timedelta(seconds=1),
+        )
+        render_job = models.ExportJob(
+            list_id=31,
+            status="queued",
+            phase="render",
+            force_sync=False,
+            updated_at=now,
+            created_at=now - timedelta(minutes=1),
+            next_run_at=now - timedelta(seconds=1),
+        )
+        db.add(sync_job)
+        db.add(render_job)
+        db.commit()
+
+        picked = export_service._pick_next_job(db, now, allow_force_sync_plan=False)
+        assert picked is not None
+        assert picked.id == render_job.id
+    finally:
+        db.close()
+
+
+def test_pick_next_job_allows_force_sync_plan_for_control_lane():
+    db = _session()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    try:
+        _mk_list(db, 32, product_type="project", is_public=True)
+        sync_job = models.ExportJob(
+            list_id=32,
+            status="queued",
+            phase="plan",
+            force_sync=True,
+            updated_at=now,
+            created_at=now - timedelta(minutes=2),
+            next_run_at=now - timedelta(seconds=1),
+        )
+        render_job = models.ExportJob(
+            list_id=32,
+            status="queued",
+            phase="render",
+            force_sync=False,
+            updated_at=now,
+            created_at=now - timedelta(minutes=1),
+            next_run_at=now - timedelta(seconds=1),
+        )
+        db.add(sync_job)
+        db.add(render_job)
+        db.commit()
+
+        picked = export_service._pick_next_job(db, now, allow_force_sync_plan=True)
+        assert picked is not None
+        assert picked.id == sync_job.id
+    finally:
+        db.close()
+
+
 def test_requeue_stale_running_jobs():
     db = _session()
     now = datetime.now(UTC).replace(tzinfo=None)

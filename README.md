@@ -254,6 +254,7 @@ cd /opt/mydnaobv/app
 Note:
 - `--once` now also performs scheduled maintenance (interval-based export cleanup + image-cache pruning) and auto-queues due public county/project refresh jobs.
 - In multi-lane cron mode, housekeeping/enqueue work is lock-gated to one lane at a time; export processing remains parallel across lanes.
+- In multi-lane cron mode, only the housekeeping/control lane attempts `force_sync` plan-phase jobs; other lanes prioritize render/download/finalize work.
 - Sync-pressure guardrails are controlled by:
   - `EXPORT_SYNC_MAX_CONCURRENT` (default `1`)
   - `EXPORT_SYNC_SLOT_RETRY_SECONDS`

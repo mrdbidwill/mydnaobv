@@ -48,15 +48,19 @@ def _release_housekeeping_lock(handle: TextIO | None) -> None:
 
 def run_once() -> int:
     housekeeping_lock = _try_acquire_housekeeping_lock()
+    is_control_lane = housekeeping_lock is not None
     db = SessionLocal()
     try:
-        if housekeeping_lock is not None:
+        if is_control_lane:
             run_scheduled_maintenance(db)
             enqueue_due_public_refresh_jobs(
                 db,
                 limit=max(1, settings.public_auto_refresh_enqueue_per_run),
             )
-        process_next_job(db)
+        process_next_job(
+            db,
+            allow_force_sync_plan=is_control_lane,
+        )
         process_pending_publish_jobs(
             db,
             limit=max(1, settings.export_publish_jobs_per_run),

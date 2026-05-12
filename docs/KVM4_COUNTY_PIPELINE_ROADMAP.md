@@ -84,6 +84,14 @@ Reduce large-export turnaround time and move to a curated, prebuilt county-produ
   - reduce duplicate maintenance/enqueue DB and filesystem pressure under 3-lane backlog mode.
   - preserve throughput for active export phases.
 
+## 2026-05-12 Stage 4.2 Note
+- Added control-lane sync isolation:
+  - only the control lane attempts `force_sync` plan-phase jobs.
+  - non-control lanes skip sync-plan candidates and keep progressing render/download/finalize work.
+- Intended effect:
+  - reduce sync-slot contention and plan-phase churn across backlog lanes.
+  - keep export lanes saturated while iNaturalist sync is throttled.
+
 ## Phase 1 (Now): KVM4 Readiness Without Architecture Rewrite
 - Keep the current queue/worker model.
 - Tune runtime throttles conservatively after KVM4 migration:

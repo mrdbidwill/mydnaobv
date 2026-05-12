@@ -409,6 +409,16 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - lock-held path runs housekeeping and releases lock.
 - County inclusion/parity invariants unchanged.
 
+## 2026-05-12 (Stage 4.2)
+- Control-lane sync isolation added for parallel workers:
+  - `process_next_job(...)` / `_pick_next_job(...)` now accept `allow_force_sync_plan` gate.
+  - only control lane (`housekeeping lock` holder) processes `force_sync` + `plan` jobs.
+  - non-control lanes skip sync-plan jobs and focus on download/render/finalize throughput.
+- Added regression tests for selection behavior:
+  - non-control lane skips force-sync plan candidate.
+  - control lane still selects force-sync plan candidate.
+- County inclusion/parity invariants unchanged.
+
 ## Routine Update Rule
 On each major decision or architecture change:
 1. Add one dated entry in this file.

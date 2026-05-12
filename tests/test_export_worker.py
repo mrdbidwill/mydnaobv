@@ -18,6 +18,7 @@ def test_run_once_skips_housekeeping_when_lock_not_acquired(monkeypatch):
         "publish": 0,
         "release": 0,
     }
+    process_allow_sync_values = []
     released_handles = []
 
     monkeypatch.setattr(worker, "SessionLocal", lambda: db)
@@ -41,7 +42,10 @@ def test_run_once_skips_housekeeping_when_lock_not_acquired(monkeypatch):
     monkeypatch.setattr(
         worker,
         "process_next_job",
-        lambda _db: calls.__setitem__("process", calls["process"] + 1),
+        lambda _db, **kwargs: (
+            process_allow_sync_values.append(bool(kwargs.get("allow_force_sync_plan"))),
+            calls.__setitem__("process", calls["process"] + 1),
+        )[-1],
     )
     monkeypatch.setattr(
         worker,
@@ -56,6 +60,7 @@ def test_run_once_skips_housekeeping_when_lock_not_acquired(monkeypatch):
     assert calls["publish"] == 1
     assert calls["release"] == 1
     assert released_handles == [None]
+    assert process_allow_sync_values == [False]
     assert db.closed is True
 
 
@@ -69,6 +74,7 @@ def test_run_once_runs_housekeeping_when_lock_acquired(monkeypatch):
         "publish": 0,
         "release": 0,
     }
+    process_allow_sync_values = []
     released_handles = []
 
     monkeypatch.setattr(worker, "SessionLocal", lambda: db)
@@ -92,7 +98,10 @@ def test_run_once_runs_housekeeping_when_lock_acquired(monkeypatch):
     monkeypatch.setattr(
         worker,
         "process_next_job",
-        lambda _db: calls.__setitem__("process", calls["process"] + 1),
+        lambda _db, **kwargs: (
+            process_allow_sync_values.append(bool(kwargs.get("allow_force_sync_plan"))),
+            calls.__setitem__("process", calls["process"] + 1),
+        )[-1],
     )
     monkeypatch.setattr(
         worker,
@@ -107,4 +116,5 @@ def test_run_once_runs_housekeeping_when_lock_acquired(monkeypatch):
     assert calls["publish"] == 1
     assert calls["release"] == 1
     assert released_handles == [lock_token]
+    assert process_allow_sync_values == [True]
     assert db.closed is True
