@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
+from pathlib import Path
+from typing import TextIO
 
 from app.core.config import settings
 from app.db import SessionLocal
@@ -14,14 +17,45 @@ from app.exports.service import (
 )
 
 
+def _housekeeping_lock_path() -> Path:
+    path = Path(settings.export_storage_dir) / "worker_housekeeping.lock"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _try_acquire_housekeeping_lock() -> TextIO | None:
+    handle = _housekeeping_lock_path().open("a+", encoding="utf-8")
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return handle
+    except (BlockingIOError, OSError):
+        handle.close()
+        return None
+
+
+def _release_housekeeping_lock(handle: TextIO | None) -> None:
+    if handle is None:
+        return
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    except Exception:
+        pass
+    try:
+        handle.close()
+    except Exception:
+        pass
+
+
 def run_once() -> int:
+    housekeeping_lock = _try_acquire_housekeeping_lock()
     db = SessionLocal()
     try:
-        run_scheduled_maintenance(db)
-        enqueue_due_public_refresh_jobs(
-            db,
-            limit=max(1, settings.public_auto_refresh_enqueue_per_run),
-        )
+        if housekeeping_lock is not None:
+            run_scheduled_maintenance(db)
+            enqueue_due_public_refresh_jobs(
+                db,
+                limit=max(1, settings.public_auto_refresh_enqueue_per_run),
+            )
         process_next_job(db)
         process_pending_publish_jobs(
             db,
@@ -29,6 +63,7 @@ def run_once() -> int:
         )
         return 0
     finally:
+        _release_housekeeping_lock(housekeeping_lock)
         db.close()
 
 

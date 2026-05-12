@@ -76,6 +76,14 @@ Reduce large-export turnaround time and move to a curated, prebuilt county-produ
   - eliminate recurring cron traceback emails from maintenance-phase EOF on commit.
   - keep backlog lanes running even during large cleanup windows.
 
+## 2026-05-12 Stage 4 Start Note
+- Began Phase 4 parallel-worker safety hardening:
+  - added single-lane housekeeping lock in worker runtime so maintenance + auto-refresh enqueue are executed by one lane at a time.
+  - kept export job processing parallel across lanes.
+- Intended effect:
+  - reduce duplicate maintenance/enqueue DB and filesystem pressure under 3-lane backlog mode.
+  - preserve throughput for active export phases.
+
 ## Phase 1 (Now): KVM4 Readiness Without Architecture Rewrite
 - Keep the current queue/worker model.
 - Tune runtime throttles conservatively after KVM4 migration:

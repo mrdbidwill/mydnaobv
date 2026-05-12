@@ -398,6 +398,17 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - ensures cleanup path performs rollback and does not call commit.
 - County inclusion/parity invariants unchanged.
 
+## 2026-05-12 (Stage 4 start)
+- Parallel-worker guardrail hardening:
+  - added worker housekeeping lock (`worker_housekeeping.lock`) so only one `--once` lane executes:
+    - scheduled maintenance (`run_scheduled_maintenance`)
+    - auto-refresh enqueue scan (`enqueue_due_public_refresh_jobs`)
+  - all lanes continue processing export jobs and publish pass, preserving throughput while reducing duplicate maintenance/enqueue pressure.
+- Added regression tests for worker lock behavior:
+  - no-lock path skips housekeeping and still processes work.
+  - lock-held path runs housekeeping and releases lock.
+- County inclusion/parity invariants unchanged.
+
 ## Routine Update Rule
 On each major decision or architecture change:
 1. Add one dated entry in this file.
