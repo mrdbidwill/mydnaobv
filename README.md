@@ -185,6 +185,12 @@ Large ZIP chunking option:
 EXPORT_ZIP_CHUNK_SIZE_MB=500
 ```
 
+Chunk-file note:
+- Files ending with `.zip.part001`, `.part002`, etc. are split binary chunks and do not open individually.
+- Download all parts first, then combine into one ZIP:
+  - macOS/Linux: `cat <name>.zip.part* > <name>.zip`
+  - Windows (cmd): `copy /b <name>.zip.part001+<name>.zip.part002+... <name>.zip`
+
 AdSense public-page gating:
 
 ```env

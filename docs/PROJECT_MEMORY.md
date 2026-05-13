@@ -439,6 +439,18 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - avoid confusing stale-looking `Refresh due (target <past-date>)` messaging while completed downloads remain available and sync retries continue.
 - No inclusion/parity rule changes; county scope + project membership + `DNA Barcode ITS` and index/page numbering parity remain unchanged.
 
+## 2026-05-13 (Download chunk UX + filename consistency)
+- Public large-ZIP part downloads now include explicit reassembly guidance in UI:
+  - chunk files (`.zip.part001`, `.part002`, ...) do not open individually.
+  - users should download all chunk files and combine into a single `.zip` before opening.
+- Export artifact filename conventions updated for newly built county/project outputs:
+  - switched suffix separators from underscore style to dash style:
+    - `*-observations-index.pdf`
+    - `*-all-observations.pdf`
+    - `*-genera-count.txt`
+    - `*-observation-export-parts.zip`
+- No inclusion/parity rule changes; county scope + project membership + `DNA Barcode ITS` and index/page numbering parity remain unchanged.
+
 ## Routine Update Rule
 On each major decision or architecture change:
 1. Add one dated entry in this file.

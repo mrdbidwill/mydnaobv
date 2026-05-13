@@ -1323,10 +1323,7 @@ def _phase_finalize(db: Session, job: models.ExportJob) -> bool:
 
     obs_list = db.query(models.ObservationList).filter(models.ObservationList.id == job.list_id).first()
     filename_prefix = _filename_prefix_for_list(obs_list, job.list_id)
-    index_pdf_name = f"{filename_prefix}_observations_index.pdf"
-    county_pdf_name = f"{filename_prefix}_all_observations.pdf"
-    genera_count_name = f"{filename_prefix}_genera_count.txt"
-    zip_name = f"{filename_prefix}_observation_export_parts.zip"
+    index_pdf_name, county_pdf_name, genera_count_name, zip_name = _artifact_filenames_for_prefix(filename_prefix)
     observations = (
         db.query(models.Observation)
         .filter(models.Observation.list_id == job.list_id)
@@ -1628,6 +1625,16 @@ def _append_job_note(message: str | None, note: str) -> str:
     if not current:
         return clean_note
     return f"{current} {clean_note}"
+
+
+def _artifact_filenames_for_prefix(filename_prefix: str) -> tuple[str, str, str, str]:
+    clean_prefix = (filename_prefix or "").strip("-_ ") or "list"
+    return (
+        f"{clean_prefix}-observations-index.pdf",
+        f"{clean_prefix}-all-observations.pdf",
+        f"{clean_prefix}-genera-count.txt",
+        f"{clean_prefix}-observation-export-parts.zip",
+    )
 
 
 def _sync_backoff_attempt_from_message(message: str | None) -> int:
@@ -2148,8 +2155,12 @@ def _build_readme_text(job: models.ExportJob) -> str:
         "2. Right-click the ZIP file.\n"
         "3. Click 'Extract All' (or 'Unzip').\n"
         "4. Open the new extracted folder.\n"
-        "5. Open *_observations_index.pdf for the linked observation list.\n"
-        "6. Open *_all_observations.pdf if present, or PART files in numeric order.\n"
+        "5. Open *-observations-index.pdf for the linked observation list.\n"
+        "6. Open *-all-observations.pdf if present.\n"
+        "7. If website download chunks end with .zip.part001/.part002:\n"
+        "   - download every part, then combine into one ZIP before opening.\n"
+        "   - macOS/Linux: cat <name>.zip.part* > <name>.zip\n"
+        "   - Windows (cmd): copy /b <name>.zip.part001+<name>.zip.part002+... <name>.zip\n"
         "\n"
         "Why there are multiple files:\n"
         "- Large exports are split into smaller PDFs to keep the server stable.\n"

@@ -131,6 +131,11 @@
                         <span class="muted">{{ chunk.size_label }}</span>
                         <br>
                       {% endfor %}
+                      <div class="muted" style="margin-top: 6px;">
+                        Part files do not open individually. Download all parts, then combine into one ZIP:
+                        <code>cat &lt;name&gt;.zip.part* &gt; &lt;name&gt;.zip</code> (macOS/Linux) or
+                        <code>copy /b &lt;name&gt;.zip.part001+&lt;name&gt;.zip.part002+... &lt;name&gt;.zip</code> (Windows).
+                      </div>
                     {% endif %}
                   {% else %}
                     <span class="muted">Not ready yet</span>
@@ -253,6 +258,11 @@
                         <span class="muted">{{ chunk.size_label }}</span>
                         <br>
                       {% endfor %}
+                      <div class="muted" style="margin-top: 6px;">
+                        Part files do not open individually. Download all parts, then combine into one ZIP:
+                        <code>cat &lt;name&gt;.zip.part* &gt; &lt;name&gt;.zip</code> (macOS/Linux) or
+                        <code>copy /b &lt;name&gt;.zip.part001+&lt;name&gt;.zip.part002+... &lt;name&gt;.zip</code> (Windows).
+                      </div>
                     {% endif %}
                   {% else %}
                     <span class="muted">Not ready yet</span>
