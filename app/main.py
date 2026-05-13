@@ -480,12 +480,8 @@ def _project_reference(project_id: str | None) -> dict[str, object] | None:
 def _artifact_public_url(list_id: int, artifact: models.ExportArtifact | None) -> str | None:
     if not artifact:
         return None
-    if artifact.kind == "zip_chunk":
-        return f"/public/lists/{list_id}/artifacts/{artifact.id}/download"
-    if latest_artifact_exists(list_id, artifact):
-        latest_url = published_latest_url(list_id, artifact)
-        if latest_url:
-            return latest_url
+    # Always route public downloads through the app endpoint so local-file
+    # fallback remains available when object-store "latest" links are stale.
     return f"/public/lists/{list_id}/artifacts/{artifact.id}/download"
 
 

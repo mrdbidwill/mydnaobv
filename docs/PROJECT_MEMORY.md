@@ -459,6 +459,15 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - keep a single clear download path in public catalog UX.
 - No inclusion/parity rule changes; county scope + project membership + `DNA Barcode ITS` and index/page numbering parity remain unchanged.
 
+## 2026-05-13 (Public download-link routing hardening)
+- Fixed homepage/catalog artifact-link generation to always use app-routed public download endpoints:
+  - `/public/lists/{list_id}/artifacts/{artifact_id}/download`
+- Removed direct `downloads.../latest/...` link emission from row generation to avoid user-facing `404` when object-store latest pointers drift or lag.
+- Result:
+  - public links now use route-level local-file first behavior and existing published-latest fallback logic.
+- Added regression test coverage for app-routed link behavior even when publish-state marker reports latest available.
+- No inclusion/parity rule changes; county scope + project membership + `DNA Barcode ITS` and index/page numbering parity remain unchanged.
+
 ## Routine Update Rule
 On each major decision or architecture change:
 1. Add one dated entry in this file.

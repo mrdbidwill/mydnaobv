@@ -31,6 +31,14 @@ def test_artifact_public_download_url_builds_download_query():
     assert url == "/public/lists/7/artifacts/20/download?download=1"
 
 
+def test_artifact_public_url_uses_app_route_even_when_latest_marker_exists(monkeypatch):
+    artifact = SimpleNamespace(id=20, kind="observations_index_pdf")
+    monkeypatch.setattr(main, "latest_artifact_exists", lambda _list_id, _artifact: True)
+    monkeypatch.setattr(main, "published_latest_url", lambda _list_id, _artifact: "https://downloads.example.org/x.pdf")
+    url = main._artifact_public_url(7, artifact)
+    assert url == "/public/lists/7/artifacts/20/download"
+
+
 def test_refresh_summary_due_when_missing_sync():
     payload = _refresh_summary(None)
     assert payload["is_due"] is True
