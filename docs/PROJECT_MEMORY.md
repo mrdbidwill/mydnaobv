@@ -468,7 +468,11 @@ Purpose: persistent decision/history log for future chat sessions and implementa
 - Route fallback hardening:
   - when local artifact file is unavailable, route now probes published `latest` URL availability before redirecting.
   - if `latest` URL is unavailable but published per-job URL is available, route redirects to the per-job URL.
+  - if both are unavailable, route checks published `latest/manifest.json` by artifact kind and can redirect to an available same-kind latest file (legacy filename compatibility).
   - prevents immediate redirect to known-missing object-store `latest` targets.
+- Cleanup/publish durability hardening:
+  - expired-export cleanup now preserves the latest completed `ready`/`partial_ready` job per list when that latest job is not yet marked as published.
+  - prevents retention cleanup from deleting local fallback files before publish can complete.
 - Added regression test coverage for app-routed link behavior even when publish-state marker reports latest available.
 - No inclusion/parity rule changes; county scope + project membership + `DNA Barcode ITS` and index/page numbering parity remain unchanged.
 

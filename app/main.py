@@ -510,6 +510,52 @@ def _fetch_published_genera_count_text(url: str) -> str:
     return data.decode("utf-8", errors="replace")
 
 
+def _fetch_published_latest_manifest(list_id: int) -> dict[str, object] | None:
+    base_url = (settings.export_publish_base_url or "").strip()
+    if not base_url:
+        return None
+    manifest_url = f"{base_url.rstrip('/')}/list_{list_id}/latest/manifest.json"
+    req = UrlRequest(manifest_url, headers={"User-Agent": "myDNAobv-public-download/1.0"})
+    try:
+        with urlopen(req, timeout=10) as response:
+            payload = response.read(2 * 1024 * 1024 + 1)
+    except (HTTPError, TimeoutError, URLError, OSError):
+        return None
+    if len(payload) > 2 * 1024 * 1024:
+        return None
+    try:
+        decoded = json.loads(payload.decode("utf-8", errors="replace"))
+    except Exception:
+        return None
+    if isinstance(decoded, dict):
+        return decoded
+    return None
+
+
+def _published_latest_manifest_fallback_url(list_id: int, artifact_kind: str) -> str | None:
+    manifest = _fetch_published_latest_manifest(list_id)
+    if not manifest:
+        return None
+    files = manifest.get("files")
+    if not isinstance(files, list):
+        return None
+
+    base_url = (settings.export_publish_base_url or "").strip().rstrip("/")
+    if not base_url:
+        return None
+
+    for row in files:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("kind") or "").strip() != artifact_kind:
+            continue
+        filename = str(row.get("filename") or "").strip()
+        if not filename:
+            continue
+        return f"{base_url}/list_{list_id}/latest/{filename}"
+    return None
+
+
 def _published_url_available(url: str) -> bool:
     req = UrlRequest(url, method="HEAD", headers={"User-Agent": "myDNAobv-public-download/1.0"})
     try:
@@ -1806,6 +1852,10 @@ def public_download_latest_artifact(
             job_url = published_job_url(list_id, latest_job.id, artifact)
             if job_url and _published_url_available(job_url):
                 published_url = job_url
+            else:
+                compat_url = _published_latest_manifest_fallback_url(list_id, artifact.kind)
+                if compat_url and _published_url_available(compat_url):
+                    published_url = compat_url
 
     if published_url:
         if download and artifact.kind == "genera_count":

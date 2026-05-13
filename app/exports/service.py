@@ -523,17 +523,29 @@ def cleanup_expired_exports(db: Session) -> int:
     cutoff = now - timedelta(hours=max(1, export_config.retention_hours))
     jobs = (
         db.query(models.ExportJob)
-        .with_entities(models.ExportJob.id, models.ExportJob.list_id)
+        .with_entities(models.ExportJob.id, models.ExportJob.list_id, models.ExportJob.status)
         .filter(models.ExportJob.finished_at.isnot(None), models.ExportJob.finished_at < cutoff)
         .all()
     )
+    list_ids = {int(list_id) for _, list_id, _ in jobs if list_id is not None}
+    latest_by_list = _latest_completed_jobs_for_lists(db, list_ids)
 
     # End the read transaction before potentially long filesystem cleanup work.
     # This avoids holding an idle DB connection and failing on commit after EOF/timeouts.
     db.rollback()
 
     removed = 0
-    for job_id, list_id in jobs:
+    for job_id, list_id, status in jobs:
+        latest_ready = latest_by_list.get(int(list_id)) if list_id is not None else None
+        if (
+            latest_ready
+            and int(latest_ready.id) == int(job_id)
+            and status in ("ready", "partial_ready")
+            and not is_latest_job_published(int(list_id), int(job_id))
+        ):
+            # Retain latest finished files until publish succeeds so public links
+            # can fall back to local files if object-store publish is delayed.
+            continue
         folder = _job_dir(job_id)
         if folder.exists():
             shutil.rmtree(folder, ignore_errors=True)

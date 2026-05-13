@@ -802,10 +802,96 @@ def test_cleanup_expired_exports_rolls_back_before_file_cleanup(tmp_path, monkey
             "export_config",
             replace(export_service.export_config, storage_dir=str(tmp_path), retention_hours=1),
         )
+        monkeypatch.setattr(export_service, "is_latest_job_published", lambda _list_id, _job_id: True)
 
         removed = export_service.cleanup_expired_exports(db)
         assert removed == 1
         assert rollback_calls["count"] >= 1
         assert not job_dir.exists()
+    finally:
+        db.close()
+
+
+def test_cleanup_expired_exports_keeps_latest_unpublished_ready_job(tmp_path, monkeypatch):
+    db = _session()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    try:
+        obs_list = _mk_list(db, 31, product_type="project", is_public=True)
+        job = models.ExportJob(
+            id=3100,
+            list_id=obs_list.id,
+            status="ready",
+            phase="done",
+            created_at=now - timedelta(hours=5),
+            finished_at=now - timedelta(hours=4),
+            updated_at=now - timedelta(hours=4),
+        )
+        db.add(job)
+        db.commit()
+
+        job_dir = tmp_path / "job_3100"
+        job_dir.mkdir(parents=True, exist_ok=True)
+        (job_dir / "dummy.txt").write_text("x", encoding="utf-8")
+
+        monkeypatch.setattr(
+            export_service,
+            "export_config",
+            replace(export_service.export_config, storage_dir=str(tmp_path), retention_hours=1),
+        )
+        monkeypatch.setattr(export_service, "is_latest_job_published", lambda _list_id, _job_id: False)
+
+        removed = export_service.cleanup_expired_exports(db)
+        assert removed == 0
+        assert job_dir.exists()
+    finally:
+        db.close()
+
+
+def test_cleanup_expired_exports_removes_non_latest_ready_job_even_if_unpublished(tmp_path, monkeypatch):
+    db = _session()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    try:
+        obs_list = _mk_list(db, 32, product_type="project", is_public=True)
+        older = models.ExportJob(
+            id=3200,
+            list_id=obs_list.id,
+            status="ready",
+            phase="done",
+            created_at=now - timedelta(hours=6),
+            finished_at=now - timedelta(hours=5),
+            updated_at=now - timedelta(hours=5),
+        )
+        latest = models.ExportJob(
+            id=3201,
+            list_id=obs_list.id,
+            status="ready",
+            phase="done",
+            created_at=now - timedelta(hours=4),
+            finished_at=now - timedelta(hours=3),
+            updated_at=now - timedelta(hours=3),
+        )
+        db.add(older)
+        db.add(latest)
+        db.commit()
+
+        older_dir = tmp_path / "job_3200"
+        older_dir.mkdir(parents=True, exist_ok=True)
+        (older_dir / "dummy.txt").write_text("x", encoding="utf-8")
+
+        latest_dir = tmp_path / "job_3201"
+        latest_dir.mkdir(parents=True, exist_ok=True)
+        (latest_dir / "dummy.txt").write_text("y", encoding="utf-8")
+
+        monkeypatch.setattr(
+            export_service,
+            "export_config",
+            replace(export_service.export_config, storage_dir=str(tmp_path), retention_hours=1),
+        )
+        monkeypatch.setattr(export_service, "is_latest_job_published", lambda _list_id, _job_id: False)
+
+        removed = export_service.cleanup_expired_exports(db)
+        assert removed == 1
+        assert not older_dir.exists()
+        assert latest_dir.exists()
     finally:
         db.close()
