@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import shutil
 from typing import Optional
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import Request as UrlRequest, urlopen
 from fastapi import FastAPI, Request, Form, Depends, Query, HTTPException, status
@@ -28,7 +28,13 @@ from app.exports.service import (
     list_jobs_for_list,
     latest_completed_job_for_list,
 )
-from app.exports.publish import has_latest_publish_marker, latest_artifact_exists, published_filename, published_latest_url
+from app.exports.publish import (
+    has_latest_publish_marker,
+    latest_artifact_exists,
+    published_filename,
+    published_job_url,
+    published_latest_url,
+)
 from app.exports.estimate import estimate_list_export_eta, estimate_precheck_from_observations
 from app.services.inat import fetch_observations_for_list
 from app.services.inat import estimate_total_observations
@@ -502,6 +508,26 @@ def _fetch_published_genera_count_text(url: str) -> str:
     if len(data) > GENERACOUNT_PROXY_MAX_BYTES:
         raise HTTPException(status_code=413, detail="File too large")
     return data.decode("utf-8", errors="replace")
+
+
+def _published_url_available(url: str) -> bool:
+    req = UrlRequest(url, method="HEAD", headers={"User-Agent": "myDNAobv-public-download/1.0"})
+    try:
+        with urlopen(req, timeout=10):
+            return True
+    except HTTPError as exc:
+        if exc.code != 405:
+            return False
+    except (TimeoutError, URLError, OSError):
+        return False
+
+    # Some object-store/CDN setups block HEAD; fallback to GET probe.
+    get_req = UrlRequest(url, headers={"User-Agent": "myDNAobv-public-download/1.0"})
+    try:
+        with urlopen(get_req, timeout=10):
+            return True
+    except (HTTPError, TimeoutError, URLError, OSError):
+        return False
 
 
 def _legacy_latest_redirect_allowed(list_id: int, artifact: models.ExportArtifact) -> bool:
@@ -1769,10 +1795,19 @@ def public_download_latest_artifact(
             )
         return FileResponse(path=str(artifact_path), filename=artifact_path.name)
 
-    published_url = published_latest_url(list_id, artifact)
-    if published_url and (
+    published_url = None
+    latest_url = published_latest_url(list_id, artifact)
+    if latest_url and (
         latest_artifact_exists(list_id, artifact) or _legacy_latest_redirect_allowed(list_id, artifact)
     ):
+        if _published_url_available(latest_url):
+            published_url = latest_url
+        else:
+            job_url = published_job_url(list_id, latest_job.id, artifact)
+            if job_url and _published_url_available(job_url):
+                published_url = job_url
+
+    if published_url:
         if download and artifact.kind == "genera_count":
             text_body = _fetch_published_genera_count_text(published_url)
             safe_name = quote(published_filename(artifact))

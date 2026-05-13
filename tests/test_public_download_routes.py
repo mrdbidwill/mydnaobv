@@ -64,6 +64,7 @@ def test_public_download_legacy_no_marker_redirects_to_latest(monkeypatch):
             "published_latest_url",
             lambda _list_id, _artifact: "https://downloads.example.org/list_1/latest/index.pdf?v=20",
         )
+        monkeypatch.setattr(main, "_published_url_available", lambda _url: True)
 
         response = main.public_download_latest_artifact(list_id=list_id, artifact_id=artifact_id, db=db)
         assert response.status_code == 307
@@ -145,6 +146,7 @@ def test_public_download_genera_count_attachment_proxies_latest_when_local_missi
             "published_latest_url",
             lambda _list_id, _artifact: "https://downloads.example.org/list_1/latest/genera.txt?v=20",
         )
+        monkeypatch.setattr(main, "_published_url_available", lambda _url: True)
         monkeypatch.setattr(main, "_fetch_published_genera_count_text", lambda _url: "1. Agaricus (2)\n")
 
         response = main.public_download_latest_artifact(
@@ -158,5 +160,53 @@ def test_public_download_genera_count_attachment_proxies_latest_when_local_missi
         assert response.status_code == 200
         assert disposition.startswith("attachment;")
         assert response.body.decode("utf-8") == "1. Agaricus (2)\n"
+    finally:
+        db.close()
+
+
+def test_public_download_falls_back_to_job_url_when_latest_missing(monkeypatch):
+    db = _session()
+    try:
+        list_id, artifact_id = _seed_public_artifact(db, kind="observations_index_pdf")
+
+        latest_url = "https://downloads.example.org/list_1/latest/index.pdf?v=20"
+        job_url = "https://downloads.example.org/list_1/job_10/index.pdf"
+
+        monkeypatch.setattr(main, "artifact_abspath", lambda _artifact: Path("/tmp/not-found-public-artifact"))
+        monkeypatch.setattr(main, "latest_artifact_exists", lambda _list_id, _artifact: True)
+        monkeypatch.setattr(main, "published_latest_url", lambda _list_id, _artifact: latest_url)
+        monkeypatch.setattr(main, "published_job_url", lambda _list_id, _job_id, _artifact: job_url)
+        monkeypatch.setattr(main, "_published_url_available", lambda url: url == job_url)
+
+        response = main.public_download_latest_artifact(list_id=list_id, artifact_id=artifact_id, db=db)
+        assert response.status_code == 307
+        assert response.headers.get("location") == job_url
+    finally:
+        db.close()
+
+
+def test_public_download_404_when_latest_and_job_urls_missing(monkeypatch):
+    db = _session()
+    try:
+        list_id, artifact_id = _seed_public_artifact(db, kind="observations_index_pdf")
+
+        monkeypatch.setattr(main, "artifact_abspath", lambda _artifact: Path("/tmp/not-found-public-artifact"))
+        monkeypatch.setattr(main, "latest_artifact_exists", lambda _list_id, _artifact: True)
+        monkeypatch.setattr(
+            main,
+            "published_latest_url",
+            lambda _list_id, _artifact: "https://downloads.example.org/list_1/latest/index.pdf?v=20",
+        )
+        monkeypatch.setattr(
+            main,
+            "published_job_url",
+            lambda _list_id, _job_id, _artifact: "https://downloads.example.org/list_1/job_10/index.pdf",
+        )
+        monkeypatch.setattr(main, "_published_url_available", lambda _url: False)
+
+        with pytest.raises(main.HTTPException) as exc:
+            main.public_download_latest_artifact(list_id=list_id, artifact_id=artifact_id, db=db)
+        assert exc.value.status_code == 404
+        assert exc.value.detail == "File not available"
     finally:
         db.close()

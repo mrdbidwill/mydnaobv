@@ -465,6 +465,10 @@ Purpose: persistent decision/history log for future chat sessions and implementa
 - Removed direct `downloads.../latest/...` link emission from row generation to avoid user-facing `404` when object-store latest pointers drift or lag.
 - Result:
   - public links now use route-level local-file first behavior and existing published-latest fallback logic.
+- Route fallback hardening:
+  - when local artifact file is unavailable, route now probes published `latest` URL availability before redirecting.
+  - if `latest` URL is unavailable but published per-job URL is available, route redirects to the per-job URL.
+  - prevents immediate redirect to known-missing object-store `latest` targets.
 - Added regression test coverage for app-routed link behavior even when publish-state marker reports latest available.
 - No inclusion/parity rule changes; county scope + project membership + `DNA Barcode ITS` and index/page numbering parity remain unchanged.
 
