@@ -124,19 +124,6 @@
                         <div class="muted">{{ row.county_download_meta.tier_label }}</div>
                       {% endif %}
                     {% endif %}
-                    {% if row.zip_chunk_downloads and row.zip_chunk_downloads|length > 0 %}
-                      <div class="muted" style="margin-top: 8px;">If full ZIP is too large, download by parts:</div>
-                      {% for chunk in row.zip_chunk_downloads %}
-                        <a class="btn secondary" href="{{ chunk.url }}" target="_blank" rel="noreferrer" style="margin-top: 6px; margin-right: 6px;">{{ chunk.label }}</a>
-                        <span class="muted">{{ chunk.size_label }}</span>
-                        <br>
-                      {% endfor %}
-                      <div class="muted" style="margin-top: 6px;">
-                        Part files do not open individually. Download all parts, then combine into one ZIP:
-                        <code>cat &lt;name&gt;.zip.part* &gt; &lt;name&gt;.zip</code> (macOS/Linux) or
-                        <code>copy /b &lt;name&gt;.zip.part001+&lt;name&gt;.zip.part002+... &lt;name&gt;.zip</code> (Windows).
-                      </div>
-                    {% endif %}
                   {% else %}
                     <span class="muted">Not ready yet</span>
                   {% endif %}
@@ -250,19 +237,6 @@
                       {% if row.county_download_meta.tier_label %}
                         <div class="muted">{{ row.county_download_meta.tier_label }}</div>
                       {% endif %}
-                    {% endif %}
-                    {% if row.zip_chunk_downloads and row.zip_chunk_downloads|length > 0 %}
-                      <div class="muted" style="margin-top: 8px;">If full ZIP is too large, download by parts:</div>
-                      {% for chunk in row.zip_chunk_downloads %}
-                        <a class="btn secondary" href="{{ chunk.url }}" target="_blank" rel="noreferrer" style="margin-top: 6px; margin-right: 6px;">{{ chunk.label }}</a>
-                        <span class="muted">{{ chunk.size_label }}</span>
-                        <br>
-                      {% endfor %}
-                      <div class="muted" style="margin-top: 6px;">
-                        Part files do not open individually. Download all parts, then combine into one ZIP:
-                        <code>cat &lt;name&gt;.zip.part* &gt; &lt;name&gt;.zip</code> (macOS/Linux) or
-                        <code>copy /b &lt;name&gt;.zip.part001+&lt;name&gt;.zip.part002+... &lt;name&gt;.zip</code> (Windows).
-                      </div>
                     {% endif %}
                   {% else %}
                     <span class="muted">Not ready yet</span>

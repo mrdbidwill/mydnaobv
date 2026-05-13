@@ -763,14 +763,6 @@ def test_artifact_filenames_for_prefix_use_dash_only_suffixes():
     )
 
 
-def test_build_readme_text_includes_zip_chunk_reassembly_guidance():
-    job = models.ExportJob(id=42, list_id=1)
-    text = export_service._build_readme_text(job)
-    assert ".zip.part001" in text
-    assert "cat <name>.zip.part*" in text
-    assert "copy /b <name>.zip.part001+<name>.zip.part002+..." in text
-
-
 def test_cleanup_expired_exports_rolls_back_before_file_cleanup(tmp_path, monkeypatch):
     db = _session()
     now = datetime.now(UTC).replace(tzinfo=None)

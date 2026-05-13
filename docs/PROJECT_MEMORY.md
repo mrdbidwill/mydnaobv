@@ -451,6 +451,14 @@ Purpose: persistent decision/history log for future chat sessions and implementa
     - `*-observation-export-parts.zip`
 - No inclusion/parity rule changes; county scope + project membership + `DNA Barcode ITS` and index/page numbering parity remain unchanged.
 
+## 2026-05-13 (Part-download option removed from public UI)
+- Removed public ZIP chunk part-download links from county/project download tables on homepage.
+- Kept existing large-file size guidance labels (`Large download...`, `Very large download...`) for full ZIP links.
+- Rationale:
+  - reduce end-user confusion from `.zip.part###` workflow.
+  - keep a single clear download path in public catalog UX.
+- No inclusion/parity rule changes; county scope + project membership + `DNA Barcode ITS` and index/page numbering parity remain unchanged.
+
 ## Routine Update Rule
 On each major decision or architecture change:
 1. Add one dated entry in this file.
