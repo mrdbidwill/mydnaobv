@@ -1868,6 +1868,89 @@ def public_download_latest_artifact(
     raise HTTPException(status_code=404, detail="File not available")
 
 
+@app.get("/admin/queue-status")
+def admin_queue_status(
+    db: Session = Depends(get_db),
+    _: bool = Depends(require_admin),
+):
+    """Return a JSON snapshot of export queue health for operational monitoring."""
+    from sqlalchemy import text as sa_text
+
+    # Status counts across all jobs
+    status_rows = (
+        db.query(models.ExportJob.status, func.count(models.ExportJob.id))
+        .group_by(models.ExportJob.status)
+        .all()
+    )
+    by_status = {row[0]: row[1] for row in status_rows}
+
+    # Oldest waiting_quota next_run_at
+    oldest_waiting = (
+        db.query(models.ExportJob.next_run_at)
+        .filter(models.ExportJob.status == "waiting_quota")
+        .order_by(models.ExportJob.next_run_at.asc().nullsfirst())
+        .limit(1)
+        .scalar()
+    )
+
+    # Most recently completed job
+    last_completed = (
+        db.query(models.ExportJob.finished_at, models.ExportJob.list_id, models.ExportJob.id)
+        .filter(models.ExportJob.status.in_(("ready", "partial_ready")))
+        .order_by(models.ExportJob.finished_at.desc().nullslast())
+        .limit(1)
+        .first()
+    )
+
+    # Disk free on export storage dir
+    disk_free_gb: float | None = None
+    try:
+        usage = shutil.disk_usage(settings.export_storage_dir)
+        disk_free_gb = round(usage.free / (1024 ** 3), 2)
+    except OSError:
+        pass
+
+    # Oldest active queued job (age of queue backlog)
+    oldest_queued_at = (
+        db.query(func.min(models.ExportJob.created_at))
+        .filter(models.ExportJob.status.in_(("queued", "waiting_quota")))
+        .scalar()
+    )
+
+    # Count of lists pending first-ever export
+    never_exported = (
+        db.query(func.count(models.ObservationList.id))
+        .filter(
+            models.ObservationList.is_public_download.is_(True),
+            ~models.ObservationList.id.in_(
+                db.query(models.ExportJob.list_id)
+                .filter(models.ExportJob.status.in_(("ready", "partial_ready")))
+                .distinct()
+            ),
+        )
+        .scalar()
+        or 0
+    )
+
+    return {
+        "by_status": by_status,
+        "total_active": sum(by_status.get(s, 0) for s in ("queued", "running", "waiting_quota")),
+        "oldest_waiting_quota_next_run": oldest_waiting.isoformat() if oldest_waiting else None,
+        "oldest_queued_created_at": oldest_queued_at.isoformat() if oldest_queued_at else None,
+        "last_completed_job": {
+            "id": last_completed[2],
+            "list_id": last_completed[1],
+            "finished_at": last_completed[0].isoformat() if last_completed[0] else None,
+        } if last_completed else None,
+        "public_lists_never_exported": never_exported,
+        "disk_free_gb": disk_free_gb,
+        "export_run_timeout_seconds": settings.export_run_timeout_seconds,
+        "sync_max_concurrent": settings.export_sync_max_concurrent,
+        "refresh_interval_days": settings.public_refresh_interval_days,
+        "defer_to_cache_products": settings.export_sync_defer_to_cache_products,
+    }
+
+
 @app.get("/admin")
 def admin_page(
     request: Request,

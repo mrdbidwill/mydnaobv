@@ -486,6 +486,44 @@ Purpose: persistent decision/history log for future chat sessions and implementa
   - messaging now keeps users informed that downloads remain available and background retries continue.
 - No inclusion/parity rule changes; county scope + project membership + `DNA Barcode ITS` and index/page numbering parity remain unchanged.
 
+## 2026-05-14 (Pipeline throughput hardening — Stage 4.2 revert + defer-to-cache expansion)
+
+### Root-cause analysis
+After a full codebase review, three interlocking problems were identified that prevented export jobs from completing:
+
+1. **Stage 4.2 control-lane gate (commit `1c0ec6d`) starved force-sync jobs.**
+   - Every auto-refresh job is `force_sync=True`. The gate blocked ALL non-control-lane workers from picking up force-sync jobs in the plan phase.
+   - With 3 parallel workers (backlog push cron), only 1 could process auto-refresh work; the other 2 spun uselessly.
+   - The sync-slot semaphore (Stage 1) already limits concurrent iNaturalist syncs to 1; the additional control-lane gate was redundant and harmful.
+
+2. **County lists had no defer-to-cache fallback on 429.**
+   - `EXPORT_SYNC_DEFER_TO_CACHE_PRODUCTS` defaulted to `"project"` only.
+   - When county list syncs hit iNaturalist HTTP 429, they went to `waiting_quota` with up to 6-hour exponential backoff, causing a permanent spiral.
+   - Adding county to the defer set lets throttled county jobs continue with cached observations (noting the deferral in the job message) instead of stalling for hours.
+
+3. **7-day refresh interval generates excessive iNaturalist API pressure.**
+   - 67+ Alabama county lists + project lists at weekly refresh = many dozens of sync calls per week.
+   - This volume directly caused the 429 throttling. Bi-weekly (14-day) interval is sufficient for county fungal DNA barcode lists, which change slowly.
+
+### Changes made (no DB migration required)
+- **Removed `allow_force_sync_plan` gate** from `process_next_job`, `_pick_next_job`, and `_select_pickable_candidate` in `app/exports/service.py`.
+  - All worker lanes can now pick force-sync jobs. Sync serialization still enforced by the 1-slot file lock (`EXPORT_SYNC_MAX_CONCURRENT`).
+- **Removed `allow_force_sync_plan=is_control_lane`** from `run_once()` in `app/exports/worker.py`.
+  - Housekeeping lock still controls which single worker runs cleanup/auto-refresh-enqueue; it no longer restricts job selection.
+- **Changed `EXPORT_SYNC_DEFER_TO_CACHE_PRODUCTS` default** from `"project"` to `"county,project"` in `app/core/config.py`.
+  - County jobs hitting a busy sync slot or 429 throttle now proceed from cached observations rather than entering waiting_quota.
+- **Changed `PUBLIC_REFRESH_INTERVAL_DAYS` default** from `7` to `14` in `app/core/config.py`.
+  - Halves the steady-state iNaturalist API load. Can be overridden in `.env` for any list type.
+- **Added `/admin/queue-status` JSON endpoint** in `app/main.py` (admin auth required).
+  - Returns `by_status` counts, oldest `waiting_quota` next_run, last completed job, disk free GB, and key config values.
+  - Eliminates the need to SSH into production and run manual DB queries to understand pipeline health.
+
+### Operational notes
+- On deploy, jobs currently in `waiting_quota` will be eligible again at their `next_run_at`. No manual intervention needed.
+- Check `/admin/queue-status` immediately after deploy to confirm jobs are moving.
+- If `disk_free_gb` is below `export_storage_pressure_min_free_gb` (default 8 GB), all jobs will still pause. Verify disk before deploy.
+- No inclusion/parity rule changes; county scope + project membership + `DNA Barcode ITS` and index/page numbering parity remain unchanged.
+
 ## Routine Update Rule
 On each major decision or architecture change:
 1. Add one dated entry in this file.

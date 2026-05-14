@@ -452,14 +452,12 @@ def artifact_abspath(artifact: models.ExportArtifact) -> Path:
 
 def process_next_job(
     db: Session,
-    *,
-    allow_force_sync_plan: bool = True,
 ) -> models.ExportJob | None:
     if not export_config.enabled:
         return None
 
     now = utc_now_naive()
-    job = _pick_next_job(db, now, allow_force_sync_plan=allow_force_sync_plan)
+    job = _pick_next_job(db, now)
     if not job:
         return None
 
@@ -633,8 +631,6 @@ def run_scheduled_maintenance(db: Session) -> dict[str, int]:
 def _pick_next_job(
     db: Session,
     now: datetime,
-    *,
-    allow_force_sync_plan: bool = True,
 ) -> models.ExportJob | None:
     _requeue_stale_running_jobs(db, now)
 
@@ -645,22 +641,14 @@ def _pick_next_job(
             now,
             list_ids=prioritized_list_ids,
         )
-        prioritized_pick = _select_pickable_candidate(
-            prioritized_candidates,
-            now,
-            allow_force_sync_plan=allow_force_sync_plan,
-        )
+        prioritized_pick = _select_pickable_candidate(prioritized_candidates, now)
         if prioritized_pick is not None:
             return prioritized_pick
         if prioritized_candidates:
             db.commit()
 
     candidates = _query_pickable_candidates(db, now)
-    picked = _select_pickable_candidate(
-        candidates,
-        now,
-        allow_force_sync_plan=allow_force_sync_plan,
-    )
+    picked = _select_pickable_candidate(candidates, now)
     if picked is not None:
         return picked
 
@@ -702,12 +690,8 @@ def _query_pickable_candidates(
 def _select_pickable_candidate(
     candidates: list[models.ExportJob],
     now: datetime,
-    *,
-    allow_force_sync_plan: bool,
 ) -> models.ExportJob | None:
     for job in candidates:
-        if not allow_force_sync_plan and job.phase == "plan" and bool(job.force_sync):
-            continue
         if job.size_bucket == "L" and not export_config.is_large_window_open(now):
             job.next_run_at = export_config.next_large_window_start(now)
             job.updated_at = utc_now_naive()

@@ -57,10 +57,7 @@ def run_once() -> int:
                 db,
                 limit=max(1, settings.public_auto_refresh_enqueue_per_run),
             )
-        process_next_job(
-            db,
-            allow_force_sync_plan=is_control_lane,
-        )
+        process_next_job(db)
         process_pending_publish_jobs(
             db,
             limit=max(1, settings.export_publish_jobs_per_run),
