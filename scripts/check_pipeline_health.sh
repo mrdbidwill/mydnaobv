@@ -29,10 +29,10 @@ SPOT_CHECK_COUNT="${SPOT_CHECK_COUNT:-3}"
 
 OK=0; WARNINGS=0; FAILURES=0
 
-ok()   { printf '  [OK]   %s\n' "$*"; }
-warn() { printf '  [WARN] %s\n' "$*"; WARNINGS=$((WARNINGS + 1)); }
-fail() { printf '  [FAIL] %s\n' "$*"; FAILURES=$((FAILURES + 1)); }
-info() { printf '         %s\n' "$*"; }
+ok()   { printf '%s\n' "  [OK]   $*"; }
+warn() { printf '%s\n' "  [WARN] $*"; WARNINGS=$((WARNINGS + 1)); }
+fail() { printf '%s\n' "  [FAIL] $*"; FAILURES=$((FAILURES + 1)); }
+info() { printf '%s\n' "         $*"; }
 
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -103,7 +103,7 @@ printf 'Base URL : %s\n' "${BASE_URL}"
 printf 'Time     : %s\n\n' "$(date -u '+%Y-%m-%d %H:%M UTC')"
 
 # ── 1. Queue status ───────────────────────────────────────────────────────────
-printf '-- Queue Status --\n'
+echo "-- Queue Status --"
 STATUS_JSON="$(api_get /admin/queue-status)" || {
   fail "Could not reach /admin/queue-status (check URL and credentials)"
   printf '\nFailed: %d  Warnings: %d\n' "${FAILURES}" "${WARNINGS}"
@@ -145,7 +145,7 @@ else
 fi
 
 # ── 2. Disk space ─────────────────────────────────────────────────────────────
-printf '\n-- Disk Space --\n'
+printf "\n"; echo "-- Disk Space --"
 DISK_FREE="$(python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(d.get('disk_free_gb') or '')" <<< "${STATUS_JSON}")"
 if [[ -n "${DISK_FREE}" ]]; then
   if python3 -c "exit(0 if float('${DISK_FREE}') < ${FAIL_DISK_FREE_GB} else 1)" 2>/dev/null; then
@@ -160,7 +160,7 @@ else
 fi
 
 # ── 3. List health ────────────────────────────────────────────────────────────
-printf '\n-- List Freshness --\n'
+printf "\n"; echo "-- List Freshness --"
 HEALTH_JSON="$(api_get /admin/list-health)" || {
   warn "Could not reach /admin/list-health"
   HEALTH_JSON="{}"
@@ -206,7 +206,7 @@ for r in d.get('overdue_idle', [])[:10]:
 fi
 
 # ── 4. Worker activity ────────────────────────────────────────────────────────
-printf '\n-- Worker Activity --\n'
+printf "\n"; echo "-- Worker Activity --"
 LAST_RUN="$(python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(d.get('last_worker_run') or '')" <<< "${STATUS_JSON}")"
 if [[ -n "${LAST_RUN}" ]]; then
   ok "Last worker run: ${LAST_RUN}"
@@ -215,7 +215,7 @@ else
 fi
 
 # ── 5. Key config ─────────────────────────────────────────────────────────────
-printf '\n-- Active Config --\n'
+printf "\n"; echo "-- Active Config --"
 python3 -c "
 import json, sys
 d = json.loads(sys.stdin.read())
@@ -226,7 +226,7 @@ for k, v in cfg.items():
 
 # ── 6. Spot-check live download links ─────────────────────────────────────────
 if [[ "${SPOT_CHECK_COUNT}" -gt 0 ]]; then
-  printf '\n-- Live Download Spot Check (%d links) --\n' "${SPOT_CHECK_COUNT}"
+  printf '\n'; echo "-- Live Download Spot Check (${SPOT_CHECK_COUNT} links) --"
   SPOT_LINKS="$(python3 -c "
 import json, sys
 d = json.loads(sys.stdin.read())
@@ -276,7 +276,7 @@ for a in arts:
 fi
 
 # ── Result ────────────────────────────────────────────────────────────────────
-printf '\n========================================\n'
+printf "\n========================================\n"
 printf 'Result: %d failure(s), %d warning(s)\n' "${FAILURES}" "${WARNINGS}"
 
 if [[ "${FAILURES}" -gt 0 ]]; then
