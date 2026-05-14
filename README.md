@@ -262,6 +262,7 @@ Note:
   - `EXPORT_SYNC_BACKOFF_JITTER_RATIO`
   - `EXPORT_SYNC_DEFER_TO_CACHE_PRODUCTS` (default `project`)
   - `EXPORT_SYNC_DEFER_RETRY_MINUTES` (default `360`, auto-refresh retry cooldown after deferred-sync cache exports)
+  - `EXPORT_PRIORITY_LIST_IDS` (optional comma-separated list IDs to prioritize during temporary focused runs)
 - Storage-pressure guardrails are controlled by:
   - `EXPORT_STORAGE_PRESSURE_MIN_FREE_GB` (default `8`)
   - `EXPORT_STORAGE_PRESSURE_RETRY_SECONDS` (default `600`)

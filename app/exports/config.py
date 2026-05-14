@@ -21,6 +21,7 @@ class ExportConfig:
     sync_backoff_jitter_ratio: float
     sync_defer_to_cache_products_csv: str
     sync_defer_retry_minutes: int
+    priority_list_ids_csv: str
     storage_pressure_min_free_gb: int
     storage_pressure_retry_seconds: int
     download_chunk_size: int
@@ -119,6 +120,25 @@ class ExportConfig:
                 out.add(value)
         return out
 
+    @property
+    def priority_list_ids(self) -> tuple[int, ...]:
+        out: list[int] = []
+        seen: set[int] = set()
+        raw = str(self.priority_list_ids_csv or "")
+        for token in raw.replace("\n", ",").split(","):
+            value = token.strip()
+            if not value:
+                continue
+            try:
+                list_id = int(value)
+            except ValueError:
+                continue
+            if list_id <= 0 or list_id in seen:
+                continue
+            seen.add(list_id)
+            out.append(list_id)
+        return tuple(out)
+
 
 export_config = ExportConfig(
     enabled=settings.enable_pdf_exports,
@@ -134,6 +154,7 @@ export_config = ExportConfig(
     sync_backoff_jitter_ratio=settings.export_sync_backoff_jitter_ratio,
     sync_defer_to_cache_products_csv=settings.export_sync_defer_to_cache_products,
     sync_defer_retry_minutes=settings.export_sync_defer_retry_minutes,
+    priority_list_ids_csv=settings.export_priority_list_ids,
     storage_pressure_min_free_gb=settings.export_storage_pressure_min_free_gb,
     storage_pressure_retry_seconds=settings.export_storage_pressure_retry_seconds,
     download_chunk_size=settings.export_download_chunk_size,

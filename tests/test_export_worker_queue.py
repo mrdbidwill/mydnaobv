@@ -149,6 +149,86 @@ def test_pick_next_job_allows_force_sync_plan_for_control_lane():
         db.close()
 
 
+def test_pick_next_job_prioritizes_configured_list_ids(monkeypatch):
+    db = _session()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    try:
+        _mk_list(db, 41, product_type="project", is_public=True)
+        _mk_list(db, 42, product_type="project", is_public=True)
+        non_priority = models.ExportJob(
+            list_id=41,
+            status="queued",
+            phase="render",
+            force_sync=False,
+            updated_at=now,
+            created_at=now - timedelta(minutes=2),
+            next_run_at=now - timedelta(seconds=1),
+        )
+        priority = models.ExportJob(
+            list_id=42,
+            status="queued",
+            phase="render",
+            force_sync=False,
+            updated_at=now,
+            created_at=now - timedelta(minutes=1),
+            next_run_at=now - timedelta(seconds=1),
+        )
+        db.add(non_priority)
+        db.add(priority)
+        db.commit()
+
+        monkeypatch.setattr(
+            export_service,
+            "export_config",
+            replace(export_service.export_config, priority_list_ids_csv="42"),
+        )
+        picked = export_service._pick_next_job(db, now, allow_force_sync_plan=True)
+        assert picked is not None
+        assert picked.id == priority.id
+    finally:
+        db.close()
+
+
+def test_pick_next_job_priority_falls_back_when_priority_sync_is_control_only(monkeypatch):
+    db = _session()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    try:
+        _mk_list(db, 43, product_type="project", is_public=True)
+        _mk_list(db, 44, product_type="project", is_public=True)
+        priority_sync = models.ExportJob(
+            list_id=43,
+            status="queued",
+            phase="plan",
+            force_sync=True,
+            updated_at=now,
+            created_at=now - timedelta(minutes=2),
+            next_run_at=now - timedelta(seconds=1),
+        )
+        fallback_render = models.ExportJob(
+            list_id=44,
+            status="queued",
+            phase="render",
+            force_sync=False,
+            updated_at=now,
+            created_at=now - timedelta(minutes=1),
+            next_run_at=now - timedelta(seconds=1),
+        )
+        db.add(priority_sync)
+        db.add(fallback_render)
+        db.commit()
+
+        monkeypatch.setattr(
+            export_service,
+            "export_config",
+            replace(export_service.export_config, priority_list_ids_csv="43"),
+        )
+        picked = export_service._pick_next_job(db, now, allow_force_sync_plan=False)
+        assert picked is not None
+        assert picked.id == fallback_render.id
+    finally:
+        db.close()
+
+
 def test_requeue_stale_running_jobs():
     db = _session()
     now = datetime.now(UTC).replace(tzinfo=None)

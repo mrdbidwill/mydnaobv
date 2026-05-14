@@ -476,6 +476,16 @@ Purpose: persistent decision/history log for future chat sessions and implementa
 - Added regression test coverage for app-routed link behavior even when publish-state marker reports latest available.
 - No inclusion/parity rule changes; county scope + project membership + `DNA Barcode ITS` and index/page numbering parity remain unchanged.
 
+## 2026-05-14
+- Added temporary focused-run control for export queue selection (no DB migration):
+  - new env/config knob: `EXPORT_PRIORITY_LIST_IDS` (comma-separated list IDs).
+  - when set, pickable jobs for listed IDs are selected before other lists; normal queue selection remains fallback.
+  - intended use: short-lived throughput timing/evaluation runs on large jobs.
+- Public refresh status copy simplified for end users:
+  - removed technical `iNaturalist throttling` / explicit retry timestamp wording from public status line.
+  - messaging now keeps users informed that downloads remain available and background retries continue.
+- No inclusion/parity rule changes; county scope + project membership + `DNA Barcode ITS` and index/page numbering parity remain unchanged.
+
 ## Routine Update Rule
 On each major decision or architecture change:
 1. Add one dated entry in this file.

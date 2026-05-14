@@ -641,8 +641,8 @@ def _refresh_summary(
             and ("HTTP 429" in job_message or "throttling" in job_message.lower())
         ):
             status_line = (
-                "Refresh delayed by iNaturalist throttling; "
-                f"next retry {_format_utc_timestamp(active_refresh_job.next_run_at)}."
+                "Refresh is delayed; latest downloads remain available while "
+                "background retries continue."
             )
         elif active_refresh_job.status in ("queued", "running"):
             status_line = "Refresh update is in progress."
@@ -651,14 +651,14 @@ def _refresh_summary(
         latest_message = (latest_completed_job.message or "").strip()
         if "Sync deferred (" in latest_message:
             status_line = (
-                "Latest update used cached observations while iNaturalist sync is throttled; "
-                "fresh sync retries continue in the background."
+                "Latest update used cached observations; "
+                "a fresh refresh is still running in the background."
             )
         else:
             latest_completed_at = as_utc(latest_completed_job.finished_at) or as_utc(latest_completed_job.started_at)
             if latest_completed_at and latest_completed_at > last_sync_utc:
                 status_line = (
-                    "Latest update completed from cached observations while fresh iNaturalist sync "
+                    "Latest update completed from cached observations while a fresh refresh "
                     "is still pending."
                 )
 

@@ -61,8 +61,8 @@ def test_refresh_summary_due_with_active_throttle_retry_note():
     )
     payload = _refresh_summary(stale, active_refresh_job=active_job)
     assert payload["is_due"] is True
-    assert "Refresh delayed by iNaturalist throttling" in payload["status_line"]
-    assert "next retry" in payload["status_line"]
+    assert "Refresh is delayed" in payload["status_line"]
+    assert "next retry" not in payload["status_line"]
 
 
 def test_refresh_summary_due_with_cached_defer_note():

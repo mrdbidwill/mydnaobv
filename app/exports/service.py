@@ -638,6 +638,43 @@ def _pick_next_job(
 ) -> models.ExportJob | None:
     _requeue_stale_running_jobs(db, now)
 
+    prioritized_list_ids = export_config.priority_list_ids
+    if prioritized_list_ids:
+        prioritized_candidates = _query_pickable_candidates(
+            db,
+            now,
+            list_ids=prioritized_list_ids,
+        )
+        prioritized_pick = _select_pickable_candidate(
+            prioritized_candidates,
+            now,
+            allow_force_sync_plan=allow_force_sync_plan,
+        )
+        if prioritized_pick is not None:
+            return prioritized_pick
+        if prioritized_candidates:
+            db.commit()
+
+    candidates = _query_pickable_candidates(db, now)
+    picked = _select_pickable_candidate(
+        candidates,
+        now,
+        allow_force_sync_plan=allow_force_sync_plan,
+    )
+    if picked is not None:
+        return picked
+
+    if candidates:
+        db.commit()
+    return None
+
+
+def _query_pickable_candidates(
+    db: Session,
+    now: datetime,
+    *,
+    list_ids: tuple[int, ...] | None = None,
+) -> list[models.ExportJob]:
     bucket_rank = case(
         (models.ExportJob.size_bucket == "XS", 0),
         (models.ExportJob.size_bucket == "S", 1),
@@ -645,19 +682,29 @@ def _pick_next_job(
         (models.ExportJob.size_bucket == "L", 3),
         else_=0,
     )
-
-    candidates = (
+    query = (
         db.query(models.ExportJob)
         .filter(
             models.ExportJob.status.in_(PICKABLE_JOB_STATUSES),
             (models.ExportJob.next_run_at.is_(None) | (models.ExportJob.next_run_at <= now)),
         )
-        .order_by(bucket_rank.asc(), models.ExportJob.created_at.asc())
+    )
+    if list_ids:
+        query = query.filter(models.ExportJob.list_id.in_(list_ids))
+    return (
+        query.order_by(bucket_rank.asc(), models.ExportJob.created_at.asc())
         .with_for_update(skip_locked=True)
         .limit(25)
         .all()
     )
 
+
+def _select_pickable_candidate(
+    candidates: list[models.ExportJob],
+    now: datetime,
+    *,
+    allow_force_sync_plan: bool,
+) -> models.ExportJob | None:
     for job in candidates:
         if not allow_force_sync_plan and job.phase == "plan" and bool(job.force_sync):
             continue
@@ -666,9 +713,6 @@ def _pick_next_job(
             job.updated_at = utc_now_naive()
             continue
         return job
-
-    if candidates:
-        db.commit()
     return None
 
 

@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     export_sync_backoff_jitter_ratio: float = Field(default=0.15, alias="EXPORT_SYNC_BACKOFF_JITTER_RATIO")
     export_sync_defer_to_cache_products: str = Field(default="project", alias="EXPORT_SYNC_DEFER_TO_CACHE_PRODUCTS")
     export_sync_defer_retry_minutes: int = Field(default=360, alias="EXPORT_SYNC_DEFER_RETRY_MINUTES")
+    export_priority_list_ids: str = Field(default="", alias="EXPORT_PRIORITY_LIST_IDS")
     export_storage_pressure_min_free_gb: int = Field(default=8, alias="EXPORT_STORAGE_PRESSURE_MIN_FREE_GB")
     export_storage_pressure_retry_seconds: int = Field(default=600, alias="EXPORT_STORAGE_PRESSURE_RETRY_SECONDS")
     export_download_chunk_size: int = Field(default=8, alias="EXPORT_DOWNLOAD_CHUNK_SIZE")
