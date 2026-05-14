@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import UTC, datetime
 import fcntl
 from pathlib import Path
 from typing import TextIO
@@ -15,6 +16,22 @@ from app.exports.service import (
     process_next_job,
     run_scheduled_maintenance,
 )
+
+_LOG_MAX_LINES = 500  # keep the run log bounded; trim to this many when it grows larger
+
+
+def _append_worker_run_log(line: str) -> None:
+    """Append one line to the worker run log; trim oldest entries when the file grows too large."""
+    log_path = Path(settings.export_storage_dir) / "worker_runs.log"
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        existing = log_path.read_text(encoding="utf-8").splitlines() if log_path.exists() else []
+        existing.append(line)
+        if len(existing) > _LOG_MAX_LINES:
+            existing = existing[-_LOG_MAX_LINES:]
+        log_path.write_text("\n".join(existing) + "\n", encoding="utf-8")
+    except OSError:
+        pass
 
 
 def _housekeeping_lock_path() -> Path:
@@ -50,6 +67,8 @@ def run_once() -> int:
     housekeeping_lock = _try_acquire_housekeeping_lock()
     is_control_lane = housekeeping_lock is not None
     db = SessionLocal()
+    job_summary = "no_job"
+    published_count = 0
     try:
         if is_control_lane:
             run_scheduled_maintenance(db)
@@ -57,15 +76,25 @@ def run_once() -> int:
                 db,
                 limit=max(1, settings.public_auto_refresh_enqueue_per_run),
             )
-        process_next_job(db)
-        process_pending_publish_jobs(
+        job = process_next_job(db)
+        if job is not None:
+            job_summary = f"job={job.id} list={job.list_id} status={job.status} phase={job.phase}"
+        published_count = process_pending_publish_jobs(
             db,
             limit=max(1, settings.export_publish_jobs_per_run),
         )
         return 0
+    except Exception as exc:
+        job_summary = f"error: {exc}"
+        return 1
     finally:
         _release_housekeeping_lock(housekeeping_lock)
         db.close()
+        ts = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        lane = "control" if is_control_lane else "worker"
+        _append_worker_run_log(
+            f"{ts} [{lane}] {job_summary} published={published_count}"
+        )
 
 
 def run_cleanup() -> int:

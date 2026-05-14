@@ -1873,8 +1873,18 @@ def admin_queue_status(
     db: Session = Depends(get_db),
     _: bool = Depends(require_admin),
 ):
-    """Return a JSON snapshot of export queue health for operational monitoring."""
-    from sqlalchemy import text as sa_text
+    """
+    JSON snapshot of export queue health for operational monitoring.
+
+    Key fields to watch:
+    - total_active: should be > 0 while the cron is running normally
+    - oldest_waiting_quota_next_run: if many hours ago, jobs may be stuck
+    - list_health.overdue: number of public lists past their refresh window with no active job
+    - disk_free_gb: alert if this drops below 10
+    - last_completed_job.finished_at: should be within the last few hours during active runs
+    """
+    now = datetime.now(UTC).replace(tzinfo=None)
+    refresh_cutoff = now - timedelta(days=max(1, settings.public_refresh_interval_days))
 
     # Status counts across all jobs
     status_rows = (
@@ -1917,22 +1927,86 @@ def admin_queue_status(
         .scalar()
     )
 
-    # Count of lists pending first-ever export
-    never_exported = (
-        db.query(func.count(models.ObservationList.id))
+    # Lists that currently have an active job (queued/running/waiting_quota)
+    active_list_ids = {
+        row[0]
+        for row in db.query(models.ExportJob.list_id)
+        .filter(models.ExportJob.status.in_(("queued", "running", "waiting_quota")))
+        .distinct()
+        .all()
+        if row[0] is not None
+    }
+
+    # Public lists: freshness breakdown
+    public_lists = (
+        db.query(models.ObservationList)
         .filter(
             models.ObservationList.is_public_download.is_(True),
-            ~models.ObservationList.id.in_(
-                db.query(models.ExportJob.list_id)
-                .filter(models.ExportJob.status.in_(("ready", "partial_ready")))
-                .distinct()
-            ),
+            models.ObservationList.product_type.in_(("county", "project")),
         )
-        .scalar()
-        or 0
+        .all()
     )
 
+    # Latest completed job per public list
+    public_list_ids = {int(ol.id) for ol in public_lists if ol.id is not None}
+    latest_jobs_subq = (
+        db.query(
+            models.ExportJob.list_id.label("list_id"),
+            func.max(models.ExportJob.id).label("job_id"),
+        )
+        .filter(
+            models.ExportJob.list_id.in_(public_list_ids),
+            models.ExportJob.status.in_(("ready", "partial_ready")),
+        )
+        .group_by(models.ExportJob.list_id)
+        .subquery()
+    )
+    latest_jobs = {
+        int(j.list_id): j
+        for j in db.query(models.ExportJob)
+        .join(latest_jobs_subq, models.ExportJob.id == latest_jobs_subq.c.job_id)
+        .all()
+        if j.list_id is not None
+    }
+
+    never_exported_count = 0
+    fresh_count = 0
+    overdue_count = 0
+    overdue_active_count = 0  # overdue but already queued/running
+    oldest_export_dt: datetime | None = None
+
+    for ol in public_lists:
+        list_id = int(ol.id)
+        job = latest_jobs.get(list_id)
+        if job is None:
+            never_exported_count += 1
+            continue
+        last_sync = job.finished_at
+        if last_sync and last_sync.tzinfo is not None:
+            last_sync = last_sync.astimezone(UTC).replace(tzinfo=None)
+        if last_sync is None or last_sync <= refresh_cutoff:
+            if list_id in active_list_ids:
+                overdue_active_count += 1
+            else:
+                overdue_count += 1
+        else:
+            fresh_count += 1
+        if last_sync is not None:
+            if oldest_export_dt is None or last_sync < oldest_export_dt:
+                oldest_export_dt = last_sync
+
+    # Worker activity: check the run log if it exists
+    worker_log_path = Path(settings.export_storage_dir) / "worker_runs.log"
+    last_worker_run: str | None = None
+    try:
+        if worker_log_path.exists():
+            lines = worker_log_path.read_text(encoding="utf-8").strip().splitlines()
+            last_worker_run = lines[-1] if lines else None
+    except OSError:
+        pass
+
     return {
+        "as_of": now.isoformat(),
         "by_status": by_status,
         "total_active": sum(by_status.get(s, 0) for s in ("queued", "running", "waiting_quota")),
         "oldest_waiting_quota_next_run": oldest_waiting.isoformat() if oldest_waiting else None,
@@ -1942,12 +2016,152 @@ def admin_queue_status(
             "list_id": last_completed[1],
             "finished_at": last_completed[0].isoformat() if last_completed[0] else None,
         } if last_completed else None,
-        "public_lists_never_exported": never_exported,
+        "list_health": {
+            "total_public": len(public_lists),
+            "fresh": fresh_count,
+            "overdue_queued": overdue_active_count,
+            "overdue_idle": overdue_count,
+            "never_exported": never_exported_count,
+            "oldest_export_at": oldest_export_dt.isoformat() if oldest_export_dt else None,
+        },
         "disk_free_gb": disk_free_gb,
-        "export_run_timeout_seconds": settings.export_run_timeout_seconds,
-        "sync_max_concurrent": settings.export_sync_max_concurrent,
+        "last_worker_run": last_worker_run,
+        "config": {
+            "export_run_timeout_seconds": settings.export_run_timeout_seconds,
+            "sync_max_concurrent": settings.export_sync_max_concurrent,
+            "refresh_interval_days": settings.public_refresh_interval_days,
+            "request_interval_seconds": settings.export_request_interval_seconds,
+            "defer_to_cache_products": settings.export_sync_defer_to_cache_products,
+            "storage_pressure_min_free_gb": settings.export_storage_pressure_min_free_gb,
+        },
+    }
+
+
+@app.get("/admin/list-health")
+def admin_list_health(
+    db: Session = Depends(get_db),
+    _: bool = Depends(require_admin),
+):
+    """
+    Per-list export freshness for all public county and project lists.
+    Returns one row per list showing last export date, status, and whether it is overdue.
+    Use this to find specific counties that have not been updated recently.
+    """
+    now = datetime.now(UTC).replace(tzinfo=None)
+    refresh_interval = timedelta(days=max(1, settings.public_refresh_interval_days))
+    refresh_cutoff = now - refresh_interval
+
+    public_lists = (
+        db.query(models.ObservationList)
+        .filter(
+            models.ObservationList.is_public_download.is_(True),
+            models.ObservationList.product_type.in_(("county", "project")),
+        )
+        .order_by(
+            models.ObservationList.product_type.asc(),
+            models.ObservationList.state_code.asc().nullslast(),
+            models.ObservationList.county_name.asc().nullslast(),
+            models.ObservationList.title.asc(),
+        )
+        .all()
+    )
+
+    public_list_ids = {int(ol.id) for ol in public_lists if ol.id is not None}
+
+    # Latest completed job per list
+    latest_jobs_subq = (
+        db.query(
+            models.ExportJob.list_id.label("list_id"),
+            func.max(models.ExportJob.id).label("job_id"),
+        )
+        .filter(
+            models.ExportJob.list_id.in_(public_list_ids),
+            models.ExportJob.status.in_(("ready", "partial_ready")),
+        )
+        .group_by(models.ExportJob.list_id)
+        .subquery()
+    )
+    latest_jobs = {
+        int(j.list_id): j
+        for j in db.query(models.ExportJob)
+        .join(latest_jobs_subq, models.ExportJob.id == latest_jobs_subq.c.job_id)
+        .all()
+        if j.list_id is not None
+    }
+
+    # Active job per list (queued/running/waiting_quota)
+    active_jobs_by_list: dict[int, models.ExportJob] = {}
+    for j in (
+        db.query(models.ExportJob)
+        .filter(
+            models.ExportJob.list_id.in_(public_list_ids),
+            models.ExportJob.status.in_(("queued", "running", "waiting_quota")),
+        )
+        .order_by(models.ExportJob.created_at.asc())
+        .all()
+    ):
+        if j.list_id is not None and int(j.list_id) not in active_jobs_by_list:
+            active_jobs_by_list[int(j.list_id)] = j
+
+    rows = []
+    for ol in public_lists:
+        list_id = int(ol.id)
+        job = latest_jobs.get(list_id)
+        active = active_jobs_by_list.get(list_id)
+
+        last_exported_at: str | None = None
+        last_export_status: str | None = None
+        days_since_export: float | None = None
+        is_overdue = False
+
+        if job is not None:
+            finished = job.finished_at
+            if finished and finished.tzinfo is not None:
+                finished = finished.astimezone(UTC).replace(tzinfo=None)
+            if finished is not None:
+                last_exported_at = finished.isoformat()
+                days_since_export = round((now - finished).total_seconds() / 86400, 1)
+                is_overdue = finished <= refresh_cutoff
+            last_export_status = job.status
+
+        active_info = None
+        if active is not None:
+            active_info = {
+                "job_id": active.id,
+                "status": active.status,
+                "phase": active.phase,
+                "next_run_at": active.next_run_at.isoformat() if active.next_run_at else None,
+            }
+
+        rows.append({
+            "list_id": list_id,
+            "title": ol.title,
+            "product_type": ol.product_type,
+            "county": ol.county_name,
+            "state": ol.state_code,
+            "last_exported_at": last_exported_at,
+            "last_export_status": last_export_status,
+            "days_since_export": days_since_export,
+            "is_overdue": is_overdue,
+            "active_job": active_info,
+        })
+
+    overdue = [r for r in rows if r["is_overdue"] and r["active_job"] is None]
+    never = [r for r in rows if r["last_exported_at"] is None]
+
+    return {
+        "as_of": now.isoformat(),
         "refresh_interval_days": settings.public_refresh_interval_days,
-        "defer_to_cache_products": settings.export_sync_defer_to_cache_products,
+        "summary": {
+            "total": len(rows),
+            "fresh": len([r for r in rows if not r["is_overdue"] and r["last_exported_at"]]),
+            "overdue_idle": len(overdue),
+            "overdue_queued": len([r for r in rows if r["is_overdue"] and r["active_job"]]),
+            "never_exported": len(never),
+        },
+        "overdue_idle": overdue,
+        "never_exported": never,
+        "all": rows,
     }
 
 
