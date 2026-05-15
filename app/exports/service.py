@@ -518,11 +518,13 @@ def process_next_job(
 
 def cleanup_expired_exports(db: Session) -> int:
     now = utc_now_naive()
-    cutoff = now - timedelta(hours=max(1, export_config.retention_hours))
+    retention_cutoff = now - timedelta(hours=max(1, export_config.retention_hours))
+
+    # Pass 1: remove all jobs that have aged past the full retention window.
     jobs = (
         db.query(models.ExportJob)
         .with_entities(models.ExportJob.id, models.ExportJob.list_id, models.ExportJob.status)
-        .filter(models.ExportJob.finished_at.isnot(None), models.ExportJob.finished_at < cutoff)
+        .filter(models.ExportJob.finished_at.isnot(None), models.ExportJob.finished_at < retention_cutoff)
         .all()
     )
     list_ids = {int(list_id) for _, list_id, _ in jobs if list_id is not None}
@@ -549,6 +551,36 @@ def cleanup_expired_exports(db: Session) -> int:
             shutil.rmtree(folder, ignore_errors=True)
         cleanup_published_job(list_id, job_id)
         removed += 1
+
+    # Pass 2: eagerly remove LOCAL directories for jobs that have already been
+    # uploaded to R2, even if they haven't aged past the full retention window.
+    # This prevents disk exhaustion when many large jobs complete in quick succession.
+    # Only the local directory is removed; R2 artifacts are preserved.
+    published_cutoff = now - timedelta(hours=max(1, export_config.published_retention_hours))
+    recently_finished = (
+        db.query(models.ExportJob)
+        .with_entities(models.ExportJob.id, models.ExportJob.list_id, models.ExportJob.status)
+        .filter(
+            models.ExportJob.finished_at.isnot(None),
+            models.ExportJob.finished_at >= retention_cutoff,  # not already handled in pass 1
+            models.ExportJob.finished_at < published_cutoff,
+            models.ExportJob.status.in_(("ready", "partial_ready")),
+        )
+        .all()
+    )
+    db.rollback()
+
+    for job_id, list_id, status in recently_finished:
+        if list_id is None:
+            continue
+        if not is_latest_job_published(int(list_id), int(job_id)):
+            # Not yet on R2 — retain local copy as fallback until full retention expires.
+            continue
+        folder = _job_dir(job_id)
+        if folder.exists():
+            shutil.rmtree(folder, ignore_errors=True)
+            removed += 1
+
     return removed
 
 

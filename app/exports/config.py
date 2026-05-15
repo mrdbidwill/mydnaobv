@@ -11,6 +11,7 @@ class ExportConfig:
     enabled: bool
     storage_dir: str
     retention_hours: int
+    published_retention_hours: int
     run_timeout_seconds: int
     part_size: int
     max_part_size_single_photo: int
@@ -144,6 +145,7 @@ export_config = ExportConfig(
     enabled=settings.enable_pdf_exports,
     storage_dir=settings.export_storage_dir,
     retention_hours=settings.export_retention_hours,
+    published_retention_hours=settings.export_published_retention_hours,
     run_timeout_seconds=settings.export_run_timeout_seconds,
     part_size=settings.export_part_size,
     max_part_size_single_photo=settings.export_max_part_size_single_photo,

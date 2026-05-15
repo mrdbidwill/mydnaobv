@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     enable_pdf_exports: bool = Field(default=False, alias="ENABLE_PDF_EXPORTS")
     export_storage_dir: str = Field(default="/tmp/mydnaobv_exports", alias="EXPORT_STORAGE_DIR")
     export_retention_hours: int = Field(default=48, alias="EXPORT_RETENTION_HOURS")
+    export_published_retention_hours: int = Field(default=4, alias="EXPORT_PUBLISHED_RETENTION_HOURS")
     export_run_timeout_seconds: int = Field(default=35, alias="EXPORT_RUN_TIMEOUT_SECONDS")
     export_part_size: int = Field(default=100, alias="EXPORT_PART_SIZE")
     export_max_part_size_single_photo: int = Field(default=400, alias="EXPORT_MAX_PART_SIZE_SINGLE_PHOTO")
