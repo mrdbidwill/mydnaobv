@@ -527,8 +527,9 @@ DEPLOY_PHASE="crontab_install"
 # Only adds it; never removes or overwrites other entries.
 if ! crontab -l 2>/dev/null | grep -q 'mydnaobv_publish.lock'; then
   log "Adding dedicated publish cron entry"
-  (crontab -l 2>/dev/null || true; printf '*/10 * * * * cd %s && flock -n /var/lock/mydnaobv_publish.lock timeout 3600s nice -n 15 ionice -c2 -n7 %s/%s/bin/python3 -m app.exports.worker --publish >> %s/exports/publish.log 2>&1\n' \
-    "${APP_DIR}" "${APP_DIR}" "${VENV_DIR}" "${APP_DIR}") | crontab -
+  exports_dir="${EXPORT_STORAGE_DIR:-/opt/mydnaobv/exports}"
+  (crontab -l 2>/dev/null || true; printf '*/10 * * * * cd %s && flock -n /var/lock/mydnaobv_publish.lock timeout 3600s nice -n 15 ionice -c2 -n7 %s/%s/bin/python3 -m app.exports.worker --publish >> %s/publish.log 2>&1\n' \
+    "${APP_DIR}" "${APP_DIR}" "${VENV_DIR}" "${exports_dir}") | crontab -
   log "Publish cron entry added (every 10 min, 1-hour timeout)"
 else
   log "Publish cron entry already present"
@@ -538,8 +539,9 @@ DEPLOY_PHASE="publish_trigger"
 # Kick off one publish pass in the background so the upload backlog starts
 # clearing immediately without waiting up to 10 minutes for the first cron fire.
 log "Triggering background R2 publish sweep"
+_exports_dir="${EXPORT_STORAGE_DIR:-/opt/mydnaobv/exports}"
 nohup "${APP_DIR}/${VENV_DIR}/bin/python3" -m app.exports.worker --publish \
-  >> "${APP_DIR}/exports/publish.log" 2>&1 &
+  >> "${_exports_dir}/publish.log" 2>&1 &
 disown 2>/dev/null || true
 log "Background publish started"
 

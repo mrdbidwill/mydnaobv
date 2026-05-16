@@ -621,6 +621,12 @@ def process_pending_publish_jobs(db: Session, limit: int | None = None) -> int:
         if not artifacts:
             continue
 
+        # Skip jobs whose local artifact files are gone (e.g. removed during a
+        # disk-pressure cleanup before publish ran). These can never be uploaded
+        # and would otherwise consume the per-run publish limit forever.
+        if not any((storage_root / a.relative_path).exists() for a in artifacts):
+            continue
+
         publish_warning = publish_job_artifacts(job, artifacts, storage_root)
         if publish_warning:
             job.message = _append_job_note(job.message, f"Publish note: {publish_warning}")
