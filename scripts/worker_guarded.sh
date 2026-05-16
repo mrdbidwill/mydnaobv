@@ -42,8 +42,8 @@ fi
 # --- CPU load check ---
 cpus=$(nproc 2>/dev/null || grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo 2)
 load_1m=$(awk '{print $1}' /proc/loadavg 2>/dev/null || echo 0)
-should_skip=$(awk -v load="${load_1m}" -v cpus="${cpus}" -v factor="${MAX_LOAD_FACTOR}" \
-    'BEGIN { print (load / cpus >= factor) ? 1 : 0 }')
+should_skip=$(awk -v sys_load="${load_1m}" -v cpus="${cpus}" -v factor="${MAX_LOAD_FACTOR}" \
+    'BEGIN { print (sys_load / cpus >= factor) ? 1 : 0 }')
 if [ "${should_skip}" = "1" ]; then
     _log "SKIP load ${load_1m} / ${cpus} vCPUs (factor ${MAX_LOAD_FACTOR})"
     exit 0
