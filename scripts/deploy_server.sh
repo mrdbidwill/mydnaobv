@@ -522,6 +522,27 @@ DEPLOY_PHASE="post_restart_smoke"
 CURRENT_SHORT="$(git rev-parse --short HEAD)"
 run_post_deploy_smoke "${CURRENT_SHORT}"
 
+DEPLOY_PHASE="crontab_install"
+# Ensure the dedicated R2 publish cron entry is present.
+# Only adds it; never removes or overwrites other entries.
+if ! crontab -l 2>/dev/null | grep -q 'mydnaobv_publish.lock'; then
+  log "Adding dedicated publish cron entry"
+  (crontab -l 2>/dev/null || true; printf '*/10 * * * * cd %s && flock -n /var/lock/mydnaobv_publish.lock timeout 3600s nice -n 15 ionice -c2 -n7 %s/%s/bin/python3 -m app.exports.worker --publish >> %s/exports/publish.log 2>&1\n' \
+    "${APP_DIR}" "${APP_DIR}" "${VENV_DIR}" "${APP_DIR}") | crontab -
+  log "Publish cron entry added (every 10 min, 1-hour timeout)"
+else
+  log "Publish cron entry already present"
+fi
+
+DEPLOY_PHASE="publish_trigger"
+# Kick off one publish pass in the background so the upload backlog starts
+# clearing immediately without waiting up to 10 minutes for the first cron fire.
+log "Triggering background R2 publish sweep"
+nohup "${APP_DIR}/${VENV_DIR}/bin/python3" -m app.exports.worker --publish \
+  >> "${APP_DIR}/exports/publish.log" 2>&1 &
+disown 2>/dev/null || true
+log "Background publish started"
+
 DEPLOY_PHASE="complete"
 if [[ "${DEPLOY_ALERT_ON_SUCCESS}" == "1" ]]; then
   notify_alert "Deploy succeeded on ${SERVICE_NAME} at commit ${CURRENT_SHORT}."
