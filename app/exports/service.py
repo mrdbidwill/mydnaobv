@@ -606,7 +606,7 @@ def process_pending_publish_jobs(db: Session, limit: int | None = None) -> int:
             models.ObservationList.is_public_download.is_(True),
             models.ObservationList.product_type.in_(("county", "project")),
         )
-        .order_by(models.ExportJob.finished_at.asc().nullslast(), models.ExportJob.id.asc())
+        .order_by(models.ExportJob.finished_at.desc().nullsfirst(), models.ExportJob.id.desc())
         .limit(200)
         .all()
     )
