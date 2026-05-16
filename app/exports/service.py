@@ -552,9 +552,10 @@ def cleanup_expired_exports(db: Session) -> int:
         cleanup_published_job(list_id, job_id)
         removed += 1
 
-    # Pass 2: eagerly remove LOCAL directories for jobs that have already been
-    # uploaded to R2, even if they haven't aged past the full retention window.
-    # This prevents disk exhaustion when many large jobs complete in quick succession.
+    # Pass 2: eagerly remove LOCAL directories for jobs whose list already has a
+    # published version in R2, even if the specific job hasn't aged past the full
+    # retention window. Checks the LATEST job for the list — if that's published,
+    # every older local copy for the same list is redundant (R2 has the newest version).
     # Only the local directory is removed; R2 artifacts are preserved.
     published_cutoff = now - timedelta(hours=max(1, export_config.published_retention_hours))
     recently_finished = (
@@ -568,18 +569,26 @@ def cleanup_expired_exports(db: Session) -> int:
         )
         .all()
     )
-    db.rollback()
+    if recently_finished:
+        p2_list_ids = {int(list_id) for _, list_id, _ in recently_finished if list_id is not None}
+        p2_latest_by_list = _latest_completed_jobs_for_lists(db, p2_list_ids)
+        db.rollback()
 
-    for job_id, list_id, status in recently_finished:
-        if list_id is None:
-            continue
-        if not is_latest_job_published(int(list_id), int(job_id)):
-            # Not yet on R2 — retain local copy as fallback until full retention expires.
-            continue
-        folder = _job_dir(job_id)
-        if folder.exists():
-            shutil.rmtree(folder, ignore_errors=True)
-            removed += 1
+        for job_id, list_id, status in recently_finished:
+            if list_id is None:
+                continue
+            latest_ready = p2_latest_by_list.get(int(list_id))
+            if latest_ready is None:
+                continue
+            # If the latest completed job for this list is published in R2, every
+            # local directory for the same list is redundant — R2 has the current version.
+            if is_latest_job_published(int(list_id), int(latest_ready.id)):
+                folder = _job_dir(job_id)
+                if folder.exists():
+                    shutil.rmtree(folder, ignore_errors=True)
+                    removed += 1
+    else:
+        db.rollback()
 
     return removed
 
