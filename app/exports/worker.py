@@ -107,14 +107,39 @@ def run_cleanup() -> int:
         db.close()
 
 
+def run_publish() -> int:
+    """Upload completed job artifacts to R2 without doing any job processing.
+
+    Intended for a dedicated cron entry with a generous timeout so large uploads
+    (multi-GB ZIPs) are not killed mid-transfer by the job-processing worker timeout.
+    """
+    db = SessionLocal()
+    ts = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        published_count = process_pending_publish_jobs(
+            db,
+            limit=max(1, settings.export_publish_jobs_per_run),
+        )
+        _append_worker_run_log(f"{ts} [publish] published={published_count}")
+        return 0
+    except Exception as exc:
+        _append_worker_run_log(f"{ts} [publish] error: {exc}")
+        return 1
+    finally:
+        db.close()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="myDNAobv PDF export worker")
     parser.add_argument("--once", action="store_true", help="Process one eligible job once")
     parser.add_argument("--cleanup", action="store_true", help="Delete expired export artifacts")
+    parser.add_argument("--publish", action="store_true", help="Upload completed job artifacts to R2")
     args = parser.parse_args()
 
     if args.cleanup:
         return run_cleanup()
+    if args.publish:
+        return run_publish()
     if args.once:
         return run_once()
 

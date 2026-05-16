@@ -64,6 +64,10 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 */2 23,0-6 * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_export_night_a.lock timeout 900s nice -n 8 ionice -c2 -n6 scripts/worker_guarded.sh .venv/bin/python -m app.exports.worker --once
 */2 23,0-6 * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_export_night_b.lock timeout 900s nice -n 8 ionice -c2 -n6 scripts/worker_guarded.sh .venv/bin/python -m app.exports.worker --once
 
+# Dedicated R2 publish: separate from job processing so large uploads get their own time budget.
+# Runs every 10 minutes with a 1-hour timeout and its own lock — never competes with job workers.
+*/10 * * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_publish.lock timeout 3600s nice -n 15 ionice -c2 -n7 .venv/bin/python3 -m app.exports.worker --publish >> /opt/mydnaobv/exports/publish.log 2>&1
+
 # Hourly cleanup (keeps retention-based disk use in check).
 47 * * * * cd /opt/mydnaobv/app && .venv/bin/python3 -m app.exports.worker --cleanup >> /opt/mydnaobv/exports/cleanup_hourly.log 2>&1
 
@@ -111,6 +115,10 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 */2 7-22 * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_export_day.lock timeout 600s nice -n 12 ionice -c2 -n7 scripts/worker_guarded.sh .venv/bin/python -m app.exports.worker --once
 */2 23,0-6 * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_export_night_a.lock timeout 900s nice -n 8 ionice -c2 -n6 scripts/worker_guarded.sh .venv/bin/python -m app.exports.worker --once
 */2 23,0-6 * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_export_night_b.lock timeout 900s nice -n 8 ionice -c2 -n6 scripts/worker_guarded.sh .venv/bin/python -m app.exports.worker --once
+
+# Dedicated R2 publish: separate from job processing so large uploads get their own time budget.
+# Runs every 10 minutes with a 1-hour timeout and its own lock — never competes with job workers.
+*/10 * * * * cd /opt/mydnaobv/app && flock -n /var/lock/mydnaobv_publish.lock timeout 3600s nice -n 15 ionice -c2 -n7 .venv/bin/python3 -m app.exports.worker --publish >> /opt/mydnaobv/exports/publish.log 2>&1
 
 # Hourly cleanup (keeps retention-based disk use in check).
 47 * * * * cd /opt/mydnaobv/app && .venv/bin/python3 -m app.exports.worker --cleanup >> /opt/mydnaobv/exports/cleanup_hourly.log 2>&1
