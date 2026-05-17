@@ -12,6 +12,13 @@
 
 set -euo pipefail
 
+# Load deploy.env for credentials/URL defaults (same file used by deploy scripts).
+_DEPLOY_ENV_FILE="${DEPLOY_ENV_FILE:-$HOME/.config/mydnaobv/deploy.env}"
+if [[ -f "${_DEPLOY_ENV_FILE}" ]]; then
+  # shellcheck source=/dev/null
+  source "${_DEPLOY_ENV_FILE}"
+fi
+
 BASE_URL="${BASE_URL:-https://dna.mrdbid.com}"
 ADMIN_USER="${ADMIN_USER:-admin}"
 ADMIN_PASS="${ADMIN_PASS:-}"
