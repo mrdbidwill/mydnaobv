@@ -115,9 +115,11 @@ def favicon() -> FileResponse:
 
 
 def _adsense_enabled_for_runtime() -> bool:
-    if "adsense_enabled" in settings.model_fields_set:
-        return bool(settings.adsense_enabled)
-    return (settings.env or "").strip().lower() == "production"
+    # AdSense disabled — set ADSENSE_ENABLED=true to re-enable
+    return False
+    # if "adsense_enabled" in settings.model_fields_set:
+    #     return bool(settings.adsense_enabled)
+    # return (settings.env or "").strip().lower() == "production"
 
 
 def _adsense_publisher_id() -> str | None:
