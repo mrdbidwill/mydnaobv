@@ -398,14 +398,20 @@ def _save_publish_state(list_id: int, payload: dict[str, object]) -> None:
 def _mark_latest_job_published(list_id: int, job_id: int, filenames: list[str] | None = None) -> None:
     now_iso = datetime.now(UTC).isoformat()
     state = _load_publish_state(list_id)
-    latest_job_id = int(state.get("latest_job_id") or 0)
-    if int(job_id) < latest_job_id:
+    previous_job_id = int(state.get("latest_job_id") or 0)
+    if int(job_id) < previous_job_id:
         return
     clean_filenames = sorted({str(name).strip() for name in (filenames or []) if str(name).strip()})
     state["latest_job_id"] = int(job_id)
     state["published_at_utc"] = now_iso
     state["latest_filenames"] = clean_filenames
     _save_publish_state(list_id, state)
+    # Best-effort: delete the previous job's versioned R2 prefix now that a newer publish is live.
+    if _publish_backend() == BACKEND_S3 and 0 < previous_job_id < int(job_id):
+        try:
+            _delete_s3_prefix(_object_key(f"list_{list_id}/job_{previous_job_id}/"))
+        except Exception:
+            pass
 
 
 def _publish_backend() -> str:
