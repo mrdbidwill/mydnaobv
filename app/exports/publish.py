@@ -243,12 +243,16 @@ def _publish_job_artifacts_s3(
 
             job_key = _object_key(f"list_{job.list_id}/job_{job.id}/{filename}")
             latest_key = _object_key(f"list_{job.list_id}/latest/{filename}")
-            client.upload_file(
-                str(src),
-                bucket,
-                job_key,
-                ExtraArgs={"CacheControl": CACHE_CONTROL_IMMUTABLE},
-            )
+            if not _s3_object_exists(client, bucket, job_key):
+                client.upload_file(
+                    str(src),
+                    bucket,
+                    job_key,
+                    ExtraArgs={
+                        "CacheControl": CACHE_CONTROL_IMMUTABLE,
+                        "Tagging": "artifact-type=versioned-job",
+                    },
+                )
             client.upload_file(
                 str(src),
                 bucket,
@@ -278,13 +282,16 @@ def _publish_job_artifacts_s3(
             "files": published_rows,
         }
         payload = json.dumps(manifest, indent=2).encode("utf-8")
-        client.put_object(
-            Bucket=bucket,
-            Key=_object_key(f"list_{job.list_id}/job_{job.id}/manifest.json"),
-            Body=payload,
-            ContentType="application/json",
-            CacheControl=CACHE_CONTROL_IMMUTABLE,
-        )
+        job_manifest_key = _object_key(f"list_{job.list_id}/job_{job.id}/manifest.json")
+        if not _s3_object_exists(client, bucket, job_manifest_key):
+            client.put_object(
+                Bucket=bucket,
+                Key=job_manifest_key,
+                Body=payload,
+                ContentType="application/json",
+                CacheControl=CACHE_CONTROL_IMMUTABLE,
+                Tagging="artifact-type=versioned-job",
+            )
         client.put_object(
             Bucket=bucket,
             Key=_object_key(f"list_{job.list_id}/latest/manifest.json"),
@@ -301,6 +308,54 @@ def _publish_job_artifacts_s3(
         missing_text = ", ".join(sorted(set(missing_files)))
         return f"publish completed with missing files: {missing_text}"
     return None
+
+
+def configure_r2_lifecycle(retention_days: int = 90) -> None:
+    """Set an R2 bucket lifecycle rule to expire versioned job artifacts.
+
+    Run once as a setup step (idempotent — safe to re-run).  Artifacts uploaded
+    by this module are tagged ``artifact-type=versioned-job`` so the rule only
+    targets the per-job/ copies, not the live latest/ copies.
+
+    Example::
+
+        python scripts/configure_r2_lifecycle.py
+        # or from a Python shell:
+        from app.exports.publish import configure_r2_lifecycle
+        configure_r2_lifecycle(retention_days=90)
+    """
+    config_error = _s3_publish_config_error()
+    if config_error:
+        raise RuntimeError(config_error)
+    client = _s3_client()
+    bucket = str(export_config.publish_bucket or "")
+    client.put_bucket_lifecycle_configuration(
+        Bucket=bucket,
+        LifecycleConfiguration={
+            "Rules": [
+                {
+                    "ID": "expire-versioned-job-artifacts",
+                    "Status": "Enabled",
+                    "Filter": {"Tag": {"Key": "artifact-type", "Value": "versioned-job"}},
+                    "Expiration": {"Days": retention_days},
+                }
+            ]
+        },
+    )
+
+
+def _s3_object_exists(client: Any, bucket: str, key: str) -> bool:
+    """Return True if *key* already exists in *bucket* (HEAD request = Class B op)."""
+    try:
+        client.head_object(Bucket=bucket, Key=key)
+        return True
+    except Exception as exc:
+        response = getattr(exc, "response", None)
+        if isinstance(response, dict):
+            code = response.get("Error", {}).get("Code", "")
+            if code in ("404", "NoSuchKey"):
+                return False
+        raise
 
 
 def _publish_root() -> Path | None:
