@@ -28,6 +28,7 @@ class ObservationList(Base):
     place_query: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     inat_dna_field_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     taxon_filter: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    export_mode: Mapped[str] = mapped_column(String(32), default="full", server_default="full")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
     last_sync_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 

@@ -889,7 +889,8 @@ def load_public_project_rows(db: Session) -> list[dict[str, object]]:
                 _artifacts_by_kind(artifacts, "zip_chunk"),
                 key=lambda item: (item.part_number or 0, item.id),
             )
-            if county_artifact and index_artifact:
+            is_index_only = getattr(obs_list, "export_mode", "full") == "index_only"
+            if (county_artifact and index_artifact) or (is_index_only and index_artifact):
                 status_label = "Ready"
             elif county_artifact:
                 status_label = "Project file ready"
@@ -2289,28 +2290,11 @@ def admin_page(
 
 @app.post("/admin/projects/county-seed")
 def admin_seed_project_counties(
-    inat_project_id: str = Form(...),
     state_code: str = Form(...),
     description_prefix: str = Form(default=""),
     db: Session = Depends(get_db),
     _: bool = Depends(require_admin),
 ):
-    project_id, project_error = parse_project_filter(inat_project_id)
-    if project_error:
-        return RedirectResponse(url=f"/admin?error={quote(project_error)}", status_code=303)
-    if not project_id:
-        return RedirectResponse(
-            url="/admin?error=Please+provide+an+iNaturalist+project+ID+or+slug.",
-            status_code=303,
-        )
-    try:
-        canonical_project_id, _, project_title = resolve_project_filter(project_id)
-    except Exception as exc:
-        return RedirectResponse(
-            url=f"/admin?error={quote(str(exc))}",
-            status_code=303,
-        )
-
     normalized_state = normalize_state_code(state_code)
     if not normalized_state:
         return RedirectResponse(url="/admin?error=Please+select+a+valid+US+state.", status_code=303)
@@ -2335,7 +2319,6 @@ def admin_seed_project_counties(
             .filter(
                 models.ObservationList.product_type == "county",
                 models.ObservationList.state_code == normalized_state,
-                models.ObservationList.inat_project_id == canonical_project_id,
                 models.ObservationList.place_query == row.place_query,
             )
             .first()
@@ -2344,14 +2327,12 @@ def admin_seed_project_counties(
             skipped_existing += 1
             continue
 
-        title = f"{row.county_name}-{normalized_state} — {canonical_project_id}"
+        title = f"{row.county_name}-{normalized_state}"
         description_parts = [
             "Auto-generated county list.",
-            f"Project: {canonical_project_id}.",
             f"Place: {row.place_query}.",
+            "Queries all AMS projects for DNA Barcode ITS observations.",
         ]
-        if project_title:
-            description_parts.append(f"Project title: {project_title}.")
         if description_prefix_clean:
             description_parts.insert(0, description_prefix_clean)
 
@@ -2360,7 +2341,7 @@ def admin_seed_project_counties(
             description=" ".join(description_parts),
             inat_user_id=None,
             inat_username=None,
-            inat_project_id=canonical_project_id,
+            inat_project_id=None,
             product_type="county",
             state_code=normalized_state,
             county_name=row.county_name,
@@ -2380,7 +2361,6 @@ def admin_seed_project_counties(
         .filter(
             models.ObservationList.product_type == "county",
             models.ObservationList.state_code == normalized_state,
-            models.ObservationList.inat_project_id == canonical_project_id,
         )
         .all()
     )
@@ -2398,7 +2378,7 @@ def admin_seed_project_counties(
             skipped_queue_existing += 1
 
     notice = (
-        f"County seeding complete for {normalized_state} and project {canonical_project_id}: "
+        f"County seeding complete for {normalized_state}: "
         f"created {created}, skipped existing {skipped_existing}, total counties {len(county_rows)}. "
         f"Build queue: queued {queued}, already active/up-to-date {skipped_queue_existing}."
     )
@@ -2511,7 +2491,6 @@ def admin_seed_and_build_projects(
 @app.post("/admin/states/build")
 def admin_build_state_counties(
     state_code: str = Form(...),
-    inat_project_id: str = Form(default=""),
     db: Session = Depends(get_db),
     _: bool = Depends(require_admin),
 ):
@@ -2519,21 +2498,14 @@ def admin_build_state_counties(
     if not normalized_state:
         return RedirectResponse(url="/admin?error=Please+select+a+valid+US+state.", status_code=303)
 
-    project_id = (inat_project_id or "").strip()
-    canonical_project_id: str | None = None
-    if project_id:
-        try:
-            canonical_project_id, _, _ = resolve_project_filter(project_id)
-        except Exception as exc:
-            return RedirectResponse(url=f"/admin?error={quote(str(exc))}", status_code=303)
-
-    query = db.query(models.ObservationList).filter(
-        models.ObservationList.product_type == "county",
-        models.ObservationList.state_code == normalized_state,
+    targets = (
+        db.query(models.ObservationList)
+        .filter(
+            models.ObservationList.product_type == "county",
+            models.ObservationList.state_code == normalized_state,
+        )
+        .all()
     )
-    if canonical_project_id:
-        query = query.filter(models.ObservationList.inat_project_id == canonical_project_id)
-    targets = query.all()
 
     if not targets:
         return RedirectResponse(

@@ -18,12 +18,8 @@
 
     <div class="card">
       <h3>Seed And Build Counties</h3>
-      <p class="muted">Creates any missing county lists for one state + one project label, then queues full sync and PDF rebuild jobs. County sync queries all configured sequencing projects and de-duplicates by iNaturalist observation ID.</p>
+      <p class="muted">Creates any missing county lists for the selected state, then queues full sync and PDF rebuild jobs. County syncs query all configured AMS projects and de-duplicate by iNaturalist observation ID.</p>
       <form method="post" action="/admin/projects/county-seed" class="grid">
-        <label>
-          iNaturalist project ID or slug
-          <input class="input" type="text" name="inat_project_id" value="{{ default_project_id }}" placeholder="e.g., fungi-of-alabama-ams-fundis-local-project" required />
-        </label>
         <label>
           State
           <select class="input" name="state_code">
@@ -58,7 +54,7 @@
 
     <div class="card">
       <h3>Process State Counties</h3>
-      <p class="muted">Queues fresh full sync + PDF rebuild jobs for existing county lists in the selected state (optionally filtered by stored project label).</p>
+      <p class="muted">Queues fresh full sync + PDF rebuild jobs for all existing county lists in the selected state.</p>
       <form method="post" action="/admin/states/build" class="grid">
         <label>
           State
@@ -67,10 +63,6 @@
               <option value="{{ code }}" {% if code == (state_code if state_code else default_state_code) %}selected{% endif %}>{{ label }} ({{ code }})</option>
             {% endfor %}
           </select>
-        </label>
-        <label>
-          Optional project ID or slug filter
-          <input class="input" type="text" name="inat_project_id" value="{{ default_project_id }}" placeholder="Leave blank for all projects in this state" />
         </label>
         <button class="btn" type="submit">Process state</button>
       </form>
@@ -111,7 +103,6 @@
           <thead>
             <tr>
               <th>County</th>
-              <th>Project</th>
               <th>Last Sync</th>
               <th>Latest Build</th>
               <th>Public</th>
@@ -126,7 +117,6 @@
                   <a href="/lists/{{ list.id }}">{{ list.county_name if list.county_name else list.title }}</a>
                   <div class="muted">{{ list.state_code if list.state_code else "" }}{% if list.place_query %} · {{ list.place_query }}{% endif %}</div>
                 </td>
-                <td>{{ list.inat_project_id if list.inat_project_id else "" }}</td>
                 <td>{{ list.last_sync_at if list.last_sync_at else "Not synced" }}</td>
                 <td>
                   {% if latest_job %}

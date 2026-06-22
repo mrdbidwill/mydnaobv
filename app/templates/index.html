@@ -70,7 +70,6 @@
           <thead>
             <tr>
               <th>County</th>
-              <th>Project</th>
               <th>Refresh</th>
               <th>Status</th>
               <th>Observation List</th>
@@ -86,7 +85,6 @@
                   {{ list.county_name if list.county_name else list.title }}
                   <div class="muted">{{ list.state_code if list.state_code else "" }}</div>
                 </td>
-                <td>{{ list.inat_project_id if list.inat_project_id else "" }}</td>
                 <td>
                   {{ row.last_refreshed_label }}
                   <div class="muted">

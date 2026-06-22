@@ -988,6 +988,24 @@ def _phase_plan(db: Session, job: models.ExportJob) -> bool:
         .all()
     )
     observations.sort(key=_observation_genus_sort_key)
+
+    # For index-only lists, skip image processing entirely and go straight to finalize.
+    _export_mode = (
+        db.query(models.ObservationList.export_mode)
+        .filter(models.ObservationList.id == job.list_id)
+        .scalar()
+        or "full"
+    )
+    if _export_mode == "index_only":
+        job.eligible_items = 0
+        job.total_items = 0
+        job.size_bucket = export_config.classify_bucket(0)
+        job.part_size = _recommended_part_size()
+        job.phase = "finalize"
+        job.next_run_at = utc_now_naive()
+        job.message = "Index-only export: generating observation index and genera count only."
+        return True
+
     observation_index_by_id = {obs.id: idx for idx, obs in enumerate(observations, start=1)}
     observation_ids = [obs.id for obs in observations]
     photos_by_observation: dict[int, list[models.ObservationPhoto]] = {}
@@ -1510,6 +1528,17 @@ def _phase_finalize(db: Session, job: models.ExportJob) -> bool:
 
     merged_created = False
     used_placeholder_county_guide = False
+
+    # For index-only lists, skip county guide PDF and ZIP entirely.
+    if getattr(obs_list, "export_mode", "full") == "index_only":
+        job.phase = "done"
+        job.status = "ready"
+        job.finished_at = utc_now_naive()
+        job.message = "Export complete: observation index PDF and genera count ready."
+        if publish_enabled():
+            job.message = _append_job_note(job.message, "Publish queued.")
+        return True
+
     if not parts:
         merged_path = docs_dir / county_pdf_name
         render_empty_county_guide_pdf(

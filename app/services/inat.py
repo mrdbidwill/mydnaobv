@@ -97,9 +97,8 @@ def _split_project_filter_values(raw: Optional[str]) -> list[str]:
 
 def _project_filters_for_list(obs_list: models.ObservationList) -> list[str]:
     if (obs_list.product_type or "").strip().lower() == "county":
-        configured = _split_project_filter_values(settings.inat_county_project_ids)
-        if configured:
-            return configured
+        # Counties query by place_id + DNA field only — no project filter.
+        return []
     return _split_project_filter_values(obs_list.inat_project_id)
 
 
@@ -671,8 +670,9 @@ def fetch_observations_for_list(obs_list: models.ObservationList) -> Iterable[In
         project_filters = _project_filters_for_list(obs_list)
         resolved_user_id: Optional[int] = obs_list.inat_user_id
 
-        if resolved_user_id is None and not normalized_username and not project_filters:
-            raise ValueError("Provide an iNaturalist user ID, username, or project ID/slug.")
+        has_place = obs_list.inat_place_id is not None or bool((obs_list.place_query or "").strip())
+        if resolved_user_id is None and not normalized_username and not project_filters and not has_place:
+            raise ValueError("Provide an iNaturalist user ID, username, project ID/slug, or place.")
 
         if resolved_user_id is not None:
             detail = _fetch_user_detail_by_id(client, base, int(resolved_user_id))
