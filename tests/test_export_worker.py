@@ -116,5 +116,7 @@ def test_run_once_runs_housekeeping_when_lock_acquired(monkeypatch):
     assert calls["publish"] == 1
     assert calls["release"] == 1
     assert released_handles == [lock_token]
-    assert process_allow_sync_values == [True]
+    # Stage 4.2 control-lane gate was reverted (commit 2f49b3f); allow_force_sync_plan is no
+    # longer passed — all lanes process any job type, with sync serialized by the slot lock.
+    assert process_allow_sync_values == [False]
     assert db.closed is True

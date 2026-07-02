@@ -25,10 +25,10 @@ def test_split_project_filter_values_dedupes_and_ignores_blanks():
     ]
 
 
-def test_project_filters_for_county_prefers_configured_set(monkeypatch):
-    monkeypatch.setattr(inat.settings, "inat_county_project_ids", "124358,184305,132913,251751")
+def test_project_filters_for_county_returns_empty():
+    # Counties query by place_id + DNA field only — no project filter (commit 0463b56).
     obs_list = SimpleNamespace(product_type="county", inat_project_id="184305")
-    assert inat._project_filters_for_list(obs_list) == ["124358", "184305", "132913", "251751"]
+    assert inat._project_filters_for_list(obs_list) == []
 
 
 def test_project_filters_for_non_county_use_list_value():

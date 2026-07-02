@@ -1846,8 +1846,14 @@ def public_download_latest_artifact(
 
     published_url = None
     latest_url = published_latest_url(list_id, artifact)
+    # For zip_chunk artifacts, require confirmed publish state before redirecting (chunk ordering
+    # is fragile if the latest pointer lags).  For all other artifact kinds, always probe the
+    # published URL — this handles the window between a job completing "ready" and the publish
+    # pass updating the local state file, which otherwise causes spurious "File not available".
     if latest_url and (
-        latest_artifact_exists(list_id, artifact) or _legacy_latest_redirect_allowed(list_id, artifact)
+        artifact.kind != "zip_chunk"
+        or latest_artifact_exists(list_id, artifact)
+        or _legacy_latest_redirect_allowed(list_id, artifact)
     ):
         if _published_url_available(latest_url):
             published_url = latest_url

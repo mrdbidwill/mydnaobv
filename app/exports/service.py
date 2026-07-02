@@ -1451,7 +1451,10 @@ def _phase_finalize(db: Session, job: models.ExportJob) -> bool:
     missing_observations = [obs for obs in observations if obs.id not in rendered_observation_ids]
     placeholder_pages_added = 0
 
-    if missing_observations:
+    # index_only exports intentionally skip all image downloading — no county guide pages needed.
+    _is_index_only = getattr(obs_list, "export_mode", "full") == "index_only"
+
+    if missing_observations and not _is_index_only:
         next_part = (
             (db.query(func.max(models.ExportArtifact.part_number))
              .filter(models.ExportArtifact.job_id == job.id, models.ExportArtifact.kind == "part_pdf")
@@ -1530,7 +1533,7 @@ def _phase_finalize(db: Session, job: models.ExportJob) -> bool:
     used_placeholder_county_guide = False
 
     # For index-only lists, skip county guide PDF and ZIP entirely.
-    if getattr(obs_list, "export_mode", "full") == "index_only":
+    if _is_index_only:
         job.phase = "done"
         job.status = "ready"
         job.finished_at = utc_now_naive()

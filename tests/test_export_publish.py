@@ -77,10 +77,16 @@ def test_publish_job_artifacts_s3_uploads_expected_keys(tmp_path, monkeypatch):
             self.upload_calls: list[tuple[str, str, str, dict | None]] = []
             self.put_calls: list[tuple[str, str, bytes, str | None]] = []
 
+        def head_object(self, Bucket, Key):
+            # Simulate object not found so the upload proceeds.
+            exc = Exception("404")
+            exc.response = {"Error": {"Code": "404"}}
+            raise exc
+
         def upload_file(self, filename, bucket, key, ExtraArgs=None):
             self.upload_calls.append((filename, bucket, key, ExtraArgs))
 
-        def put_object(self, Bucket, Key, Body, ContentType, CacheControl=None):
+        def put_object(self, Bucket, Key, Body, ContentType, CacheControl=None, Tagging=None):
             assert ContentType == "application/json"
             self.put_calls.append((Bucket, Key, Body, CacheControl))
 
@@ -123,7 +129,7 @@ def test_publish_job_artifacts_s3_uploads_expected_keys(tmp_path, monkeypatch):
             str(source_dir / "all_observations.pdf"),
             "dna-downloads",
             "mydnaobv/list_7/job_2/all_observations.pdf",
-            {"CacheControl": publish_module.CACHE_CONTROL_IMMUTABLE},
+            {"CacheControl": publish_module.CACHE_CONTROL_IMMUTABLE, "Tagging": "artifact-type=versioned-job"},
         ),
         (
             str(source_dir / "all_observations.pdf"),

@@ -71,12 +71,13 @@ def _restore_fields_set(original: set[str]) -> None:
     main.settings.model_fields_set.update(original)
 
 
-def test_adsense_enabled_defaults_true_in_production_when_unset(monkeypatch):
+def test_adsense_enabled_always_false(monkeypatch):
+    # AdSense was disabled (commit 8faec21); _adsense_enabled_for_runtime always returns False.
     original = set(main.settings.model_fields_set)
     try:
         main.settings.model_fields_set.discard("adsense_enabled")
         monkeypatch.setattr(main.settings, "env", "production")
-        assert main._adsense_enabled_for_runtime() is True
+        assert main._adsense_enabled_for_runtime() is False
     finally:
         _restore_fields_set(original)
 
